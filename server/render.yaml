@@ -1,0 +1,17 @@
+# Déploiement gratuit du serveur de relais sur Render (https://render.com).
+# 1) Pousse ce dépôt sur GitHub.
+# 2) Sur Render: New > Blueprint, pointe vers ce dépôt.
+# 3) Render lit ce fichier et crée le service. Tu obtiens une URL https://...onrender.com
+#    -> dans le jeu, utilise wss://...onrender.com (wss, pas https).
+services:
+  - type: web
+    name: bigmario-relay
+    runtime: node
+    rootDir: server
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "20"

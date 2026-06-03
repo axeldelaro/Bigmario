@@ -1,0 +1,327 @@
+// entities.js — joueur, ennemis, objets, projectiles, particules
+import {
+  TILE, GRAVITY, MAX_FALL, RUN_ACCEL, RUN_MAX, SPRINT_MAX, FRICTION, AIR_ACCEL,
+  JUMP_VY, JUMP_CUT, COYOTE, JUMP_BUFFER, clamp, sign, aabb, rand,
+} from './core.js';
+import { SFX } from './audio.js';
+
+let ART = null;
+export function setArt(a) { ART = a; }
+
+// ---------------------------------------------------------------------------
+export class Particle {
+  constructor(x, y, vx, vy, col, life = 0.6, size = 2, grav = 600) {
+    Object.assign(this, { x, y, vx, vy, col, life, max: life, size, grav, dead: false });
+  }
+  update(dt) {
+    this.vy += this.grav * dt; this.x += this.vx * dt; this.y += this.vy * dt;
+    this.life -= dt; if (this.life <= 0) this.dead = true;
+  }
+  draw(c, cam) {
+    c.globalAlpha = Math.max(0, this.life / this.max);
+    c.fillStyle = this.col;
+    c.fillRect(Math.round(this.x - cam.x), Math.round(this.y - cam.y), this.size, this.size);
+    c.globalAlpha = 1;
+  }
+}
+
+export class FloatText {
+  constructor(x, y, text, col = '#fff') { Object.assign(this, { x, y, text, col, life: 0.9, dead: false }); }
+  update(dt) { this.y -= 24 * dt; this.life -= dt; if (this.life <= 0) this.dead = true; }
+  draw(c, cam) {
+    c.globalAlpha = clamp(this.life * 1.4, 0, 1);
+    c.fillStyle = '#000'; c.font = '8px monospace'; c.textAlign = 'center';
+    c.fillText(this.text, Math.round(this.x - cam.x) + 1, Math.round(this.y - cam.y) + 1);
+    c.fillStyle = this.col; c.fillText(this.text, Math.round(this.x - cam.x), Math.round(this.y - cam.y));
+    c.globalAlpha = 1; c.textAlign = 'left';
+  }
+}
+
+// ---------------------------------------------------------------------------
+export class Coin {
+  constructor(tx, ty) { this.x = tx * TILE + 3; this.y = ty * TILE + 2; this.w = 10; this.h = 12; this.t = 0; this.dead = false; }
+  update(dt) { this.t += dt; }
+  draw(c, cam) {
+    const img = (Math.floor(this.t * 8) % 4 < 2) ? ART.coin.a : ART.coin.b;
+    c.drawImage(img, Math.round(this.x - cam.x) - 2, Math.round(this.y - cam.y) - 1);
+  }
+}
+
+// Objet qui jaillit d'un bloc et se déplace
+export class PowerUp {
+  constructor(x, y, kind) {
+    this.x = x; this.y = y; this.w = 14; this.h = 14;
+    this.kind = kind; // mushroom | flower | star
+    this.vx = kind === 'flower' ? 0 : 40; this.vy = -120; this.emerge = 12; this.dead = false;
+    this.t = 0;
+  }
+  update(dt, level) {
+    this.t += dt;
+    if (this.emerge > 0) { const d = Math.min(this.emerge, 24 * dt); this.y -= d; this.emerge -= d; return; }
+    if (this.kind === 'flower') return; // fixe
+    this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+    const r = level.moveAndCollide(this, dt);
+    if (r.hitX) this.vx = -this.vx;
+    if (this.kind === 'star' && r.onGround) this.vy = -240; // étoile rebondit
+  }
+  draw(c, cam) {
+    const img = this.kind === 'mushroom' ? ART.item.mushroom : this.kind === 'flower' ? ART.item.flower : ART.item.star;
+    c.drawImage(img, Math.round(this.x - cam.x) - 1, Math.round(this.y - cam.y) - 2);
+  }
+}
+
+export class Fireball {
+  constructor(x, y, dir, owner = 0) {
+    this.x = x; this.y = y; this.w = 6; this.h = 6; this.vx = 220 * dir; this.vy = 60;
+    this.owner = owner; this.dead = false; this.bounces = 0; this.t = 0;
+  }
+  update(dt, level) {
+    this.t += dt;
+    this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+    const r = level.moveAndCollide(this, dt);
+    if (r.onGround) { this.vy = -180; this.bounces++; }
+    if (r.hitX || r.ceiling) this.dead = true;
+    if (this.t > 3) this.dead = true;
+  }
+  draw(c, cam) {
+    c.save();
+    c.translate(Math.round(this.x - cam.x) + 3, Math.round(this.y - cam.y) + 3);
+    c.rotate(this.t * 18);
+    c.drawImage(ART.fireball, -3, -3); c.restore();
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ENNEMIS
+export class Enemy {
+  constructor(x, y, type) {
+    this.type = type; this.x = x; this.y = y; this.w = 14; this.h = 14;
+    this.vx = -34; this.vy = 0; this.dir = -1; this.t = 0; this.dead = false; this.removed = false;
+    this.state = 'walk'; this.stateT = 0; this.gravity = true;
+    if (type === 'fly') { this.gravity = false; this.baseY = y; this.w = 16; this.h = 14; }
+    if (type === 'shell') { this.h = 14; }
+  }
+  // appelé quand stompé par le dessus
+  stomp() {
+    if (this.type === 'goon') { this.state = 'flat'; this.stateT = 0; this.vx = 0; this.flat = true; SFX.stomp(); return { killed: true, bounce: true }; }
+    if (this.type === 'fly') { this.type = 'goon'; this.gravity = true; this.vx = -34; SFX.stomp(); return { killed: false, bounce: true }; }
+    if (this.type === 'shell') {
+      if (this.state !== 'shell') { this.state = 'shell'; this.vx = 0; this.stateT = 0; SFX.stomp(); return { killed: false, bounce: true }; }
+      // déjà en carapace: relancer ou stopper
+      if (Math.abs(this.vx) > 10) { this.vx = 0; SFX.stomp(); }
+      else { this.vx = 150 * 1; } // sera ajusté par direction du joueur dans la scène
+      return { killed: false, bounce: true, shell: true };
+    }
+    return { killed: true, bounce: true };
+  }
+  // touché par un projectile / étoile / carapace
+  kill(dir = 1) { this.state = 'dead'; this.dead = true; this.vy = -200; this.vx = 40 * dir; this.flipDie = true; }
+
+  update(dt, level, scene) {
+    this.t += dt; this.stateT += dt;
+    if (this.dead) { // chute de mort
+      this.vy += GRAVITY * dt; this.x += this.vx * dt; this.y += this.vy * dt;
+      if (this.y > level.pixelH + 40) this.removed = true; return;
+    }
+    if (this.state === 'flat') { if (this.stateT > 0.4) this.removed = true; return; }
+
+    if (this.type === 'fly') {
+      this.x += this.vx * dt;
+      this.y = this.baseY + Math.sin(this.t * 3) * 18;
+      // demi-tour si mur
+      if (level.solidAt(this.x + (this.vx>0?this.w+1:-1), this.y + this.h/2)) { this.vx = -this.vx; this.dir = -this.dir; }
+      if (this.x < 0) { this.x = 0; this.vx = Math.abs(this.vx); }
+      if (this.x > level.pixelW - this.w) { this.vx = -Math.abs(this.vx); }
+      return;
+    }
+
+    if (this.gravity) this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+    const speed = this.state === 'shell' ? this.vx : this.vx;
+    const r = level.moveAndCollide(this, dt);
+    if (r.hitX) { this.vx = -this.vx; this.dir = -this.dir; }
+    // éviter de tomber des bords (sauf carapace lancée)
+    if (r.onGround && !(this.state === 'shell' && Math.abs(this.vx) > 10)) {
+      const aheadX = this.vx > 0 ? this.x + this.w + 1 : this.x - 1;
+      if (!level.solidAt(aheadX, this.y + this.h + 1)) { this.vx = -this.vx; this.dir = -this.dir; }
+    }
+    if (this.x < 0) { this.x = 0; this.vx = Math.abs(this.vx); this.dir = 1; }
+    if (this.x > level.pixelW - this.w) { this.x = level.pixelW - this.w; this.vx = -Math.abs(this.vx); this.dir = -1; }
+    if (this.y > level.pixelH + 40) this.removed = true;
+  }
+
+  draw(c, cam) {
+    const x = Math.round(this.x - cam.x) - 1, y = Math.round(this.y - cam.y) - 2;
+    let img;
+    if (this.type === 'fly') img = (Math.floor(this.t * 12) % 2) ? ART.fly.a : ART.fly.b;
+    else if (this.type === 'shell') img = this.state === 'shell' ? ART.shell.hide : ART.shell.a;
+    else if (this.state === 'flat') img = ART.goon.flat;
+    else img = (Math.floor(this.t * 8) % 2) ? ART.goon.a : ART.goon.b;
+    if (this.dead && this.flipDie) {
+      c.save(); c.translate(x + 8, y + 8); c.scale(1, -1); c.drawImage(img, -8, -8); c.restore();
+    } else c.drawImage(img, x, y);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// JOUEUR
+export class Player {
+  constructor(x, y, opts = {}) {
+    this.x = x; this.y = y; this.w = 12; this.h = 14;
+    this.vx = 0; this.vy = 0;
+    this.dir = 1; this.power = 'small'; // small | big | fire
+    this.onGround = false; this.coyote = 0; this.jumpBuf = 0; this.holdJump = false;
+    this.invuln = 0; this.star = 0; this.dead = false; this.win = false;
+    this.ducking = false; this.t = 0; this.walkT = 0;
+    this.fireCd = 0; this.lives = opts.lives ?? 3; this.coins = 0; this.score = 0;
+    this.skin = opts.skin || 'p1'; this.id = opts.id || 0;
+    this.spawn = { x, y };
+    this.bounce = 0; // anim écrasement saut
+    this.enterPipe = 0;
+  }
+
+  get big() { return this.power !== 'small'; }
+  setSize(big) {
+    const wasBig = this.h > 14;
+    this.h = big ? 26 : 14;
+    if (big && !wasBig) this.y -= 12;
+    if (!big && wasBig) this.y += 12;
+  }
+
+  grow(kind, scene) {
+    if (kind === 'mushroom') { if (this.power === 'small') { this.power = 'big'; this.setSize(true); SFX.power(); } else this.addScore(1000, scene); }
+    else if (kind === 'flower') { this.power = 'fire'; this.setSize(true); SFX.power(); }
+    else if (kind === 'star') { this.star = 9; SFX.power(); }
+    this.invuln = Math.max(this.invuln, 0.2);
+  }
+
+  addScore(n, scene) { this.score += n; if (scene) scene.addFloat(this.x, this.y - 6, '+' + n); }
+  addCoin(scene) { this.coins++; this.addScore(200, scene); if (this.coins >= 100) { this.coins = 0; this.lives++; SFX.win(); } }
+
+  hurt(scene) {
+    if (this.invuln > 0 || this.star > 0 || this.dead) return false;
+    if (this.power === 'fire' || this.power === 'big') {
+      this.power = 'small'; this.setSize(false); this.invuln = 1.6; SFX.hurt();
+      return false;
+    }
+    this.die(scene); return true;
+  }
+
+  die(scene) {
+    if (this.dead) return;
+    this.dead = true; this.vy = -360; this.vx = 0; this.deathT = 0; SFX.die();
+    if (scene) scene.onPlayerDeath?.(this);
+  }
+
+  jump() {
+    this.vy = JUMP_VY * (this.big ? 1.06 : 1);
+    this.onGround = false; this.coyote = 0; this.jumpBuf = 0; this.holdJump = true;
+    this.bounce = 1; (this.big ? SFX.bigjump : SFX.jump)();
+  }
+
+  shoot(scene) {
+    if (this.power !== 'fire' || this.fireCd > 0) return;
+    if (scene.countFireballs?.(this.id) >= 2) return;
+    this.fireCd = 0.28;
+    const fb = new Fireball(this.x + (this.dir > 0 ? this.w : -4), this.y + this.h / 2, this.dir, this.id);
+    scene.spawnFireball(fb); SFX.fire();
+  }
+
+  // input: {left,right,jump(held),jumpPressed,fire(pressed),down}
+  update(dt, level, scene, input) {
+    this.t += dt;
+    if (this.dead) {
+      this.deathT += dt; this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+      this.y += this.vy * dt; return;
+    }
+    if (this.win) { // marche victorieuse
+      this.vx = 40; this.x += this.vx * dt;
+      this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+      level.moveAndCollide(this, dt);
+      this.walkT += dt * 6; return;
+    }
+
+    this.fireCd = Math.max(0, this.fireCd - dt);
+    if (this.invuln > 0) this.invuln -= dt;
+    if (this.star > 0) this.star -= dt;
+
+    const sprint = false; // course liée au tir? on garde simple: vitesse selon maintien fire
+    const wantRun = input.run;
+    const maxSpeed = wantRun ? SPRINT_MAX : RUN_MAX;
+    this.ducking = this.big && input.down && this.onGround;
+
+    let ax = 0;
+    if (!this.ducking) {
+      if (input.left) { ax -= (this.onGround ? RUN_ACCEL : AIR_ACCEL); this.dir = -1; }
+      if (input.right) { ax += (this.onGround ? RUN_ACCEL : AIR_ACCEL); this.dir = 1; }
+    }
+    if (ax !== 0) this.vx += ax * dt;
+    else if (this.onGround) { // friction
+      const f = FRICTION * dt; if (Math.abs(this.vx) <= f) this.vx = 0; else this.vx -= f * sign(this.vx);
+    }
+    this.vx = clamp(this.vx, -maxSpeed, maxSpeed);
+
+    // saut (coyote + buffer)
+    this.coyote = this.onGround ? COYOTE : Math.max(0, this.coyote - dt);
+    if (input.jumpPressed) this.jumpBuf = JUMP_BUFFER; else this.jumpBuf = Math.max(0, this.jumpBuf - dt);
+    if (this.jumpBuf > 0 && this.coyote > 0) this.jump();
+    if (!input.jump && this.vy < 0 && this.holdJump) { this.vy *= JUMP_CUT; this.holdJump = false; }
+    if (!input.jump) this.holdJump = false;
+
+    // tir
+    if (input.firePressed) this.shoot(scene);
+
+    // gravité
+    this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+
+    const r = level.moveAndCollide(this, dt, { dropThrough: input.down && input.jumpPressed });
+    this.onGround = r.onGround;
+    if (r.ceiling && r.ceilTile) {
+      const ev = level.hitBlock(r.ceilTile.tx, r.ceilTile.ty);
+      if (ev) scene.onBlockHit?.(ev, this);
+    }
+    if (this.bounce > 0) this.bounce = Math.max(0, this.bounce - dt * 5);
+
+    // animation marche
+    if (this.onGround && Math.abs(this.vx) > 6) this.walkT += dt * (Math.abs(this.vx) / 22);
+    else this.walkT = 0;
+
+    // dangers (pics) + chute dans le vide
+    if (level.hazardAt(this)) this.hurt(scene);
+    if (this.y > level.pixelH + 30) this.die(scene);
+
+    // arrivée
+    if (level.goal && this.x + this.w >= level.goal.tx * TILE + 4 && !this.win) {
+      scene.onReachGoal?.(this);
+    }
+  }
+
+  draw(c, cam) {
+    if (this.invuln > 0 && Math.floor(this.t * 20) % 2 && !this.dead) return; // clignote
+    const x = Math.round(this.x - cam.x) - 2;
+    const y = Math.round(this.y - cam.y) - (this.big ? 12 : 1);
+    const moving = Math.abs(this.vx) > 6;
+    const set = this.power === 'fire'
+      ? { idle: this.big ? ART.hero.fireBigIdle : ART.hero.fireSmallIdle, walk: this.big ? ART.hero.fireBigWalk : ART.hero.fireSmallWalk, jump: ART.hero.fireJump }
+      : { idle: this.big ? ART.hero.bigIdle : ART.hero.smallIdle, walk: this.big ? ART.hero.bigWalk : ART.hero.smallWalk, jump: ART.hero.jump };
+    let img;
+    if (this.ducking) img = ART.hero.duck;
+    else if (!this.onGround && !this.dead) img = set.jump;
+    else if (moving) img = (Math.floor(this.walkT) % 2) ? set.walk : set.idle;
+    else img = set.idle;
+
+    c.save();
+    if (this.star > 0) { // halo d'invincibilité
+      const hue = (this.t * 600) % 360; c.globalAlpha = 0.9;
+      c.shadowColor = `hsl(${hue},90%,60%)`; c.shadowBlur = 8;
+    }
+    const drawX = x, drawY = y;
+    if (this.dir < 0) { c.translate(drawX + 8, 0); c.scale(-1, 1); c.translate(-(drawX + 8), 0); }
+    // squash & stretch léger au saut
+    c.drawImage(img, drawX, drawY);
+    c.restore();
+    if (this.skin === 'p2') {
+      // marqueur joueur 2 (petit triangle)
+      c.fillStyle = '#37c24a'; c.fillRect(Math.round(this.x - cam.x) + 2, y - 5, 6, 2);
+    }
+  }
+}
