@@ -6,6 +6,7 @@ import { Player, Enemy, Boss, Coin, Gem, MovingPlatform, EnemyShot, PowerUp, Fir
 import { SFX, playMusic } from './audio.js';
 import { WORLDS } from './levels.js';
 import { fmtTime } from './leaderboard.js';
+import { GhostRecorder, GhostPlayer, GhostStore } from './ghost.js';
 
 export class GameScene {
   constructor(game, worldIdx = 0, levelIdx = 0, carry = null, opts = {}) {
@@ -13,6 +14,12 @@ export class GameScene {
     this.worldIdx = worldIdx; this.levelIdx = levelIdx;
     this.speedrun = !!opts.speedrun;
     this.runMs = 0; this.runFinished = false;
+    this.recorder = this.speedrun ? new GhostRecorder() : null;
+    this.ghost = null;
+    if (this.speedrun) {
+      const data = GhostStore.load(`${worldIdx}-${levelIdx}`);
+      if (data) { const g = new GhostPlayer(data); if (g.valid) this.ghost = g; }
+    }
     this.cam = { x: 0, y: 0 };
     this.particles = []; this.floats = []; this.fireballs = []; this.hazards = [];
     this.state = 'intro'; // intro | play | dying | levelclear | gameover
@@ -49,6 +56,7 @@ export class GameScene {
     this.player.score = this.carry.score; this.player.coins = this.carry.coins;
     this.timeLeft = def.time; this.timeAcc = 0;
     this.runMs = 0; this.runFinished = false;
+    if (this.recorder) this.recorder.reset();
     this.cam.x = clamp(ps.x - VIEW_W * 0.42, 0, Math.max(0, this.level.pixelW - VIEW_W));
     this.cam.y = 0;
     this.state = 'intro'; this.stateT = 0; this.pendingClear = 0;
@@ -96,7 +104,8 @@ export class GameScene {
   finishRun() {
     if (this.runFinished) return;
     this.runFinished = true;
-    this.game.onSpeedrunFinish?.(this.worldIdx, this.levelIdx, this.runMs);
+    const ghostData = this.recorder ? this.recorder.data() : null;
+    this.game.onSpeedrunFinish?.(this.worldIdx, this.levelIdx, this.runMs, ghostData);
   }
 
   saveGems() {
@@ -126,6 +135,7 @@ export class GameScene {
 
     if (this.state === 'play') {
       this.runMs += dt * 1000;
+      if (this.recorder) this.recorder.update(dt, this.player, this.runMs);
       this.timeAcc += dt;
       if (this.timeAcc >= 1) { this.timeAcc -= 1; this.timeLeft--; if (this.timeLeft <= 0) { this.timeLeft = 0; this.player.die(this); } }
     }
@@ -312,6 +322,7 @@ export class GameScene {
     if (this.boss) this.boss.draw(c, this.cam);
     for (const hz of this.hazards) hz.draw(c, this.cam);
     for (const fb of this.fireballs) fb.draw(c, this.cam);
+    if (this.ghost) this.drawGhost(c);
     if (!this.player.dead || this.player.deathT < 9) this.player.draw(c, this.cam);
     for (const p of this.particles) p.draw(c, this.cam);
     for (const f of this.floats) f.draw(c, this.cam);
@@ -331,7 +342,30 @@ export class GameScene {
     c.font = '13px monospace'; c.textAlign = 'center';
     c.fillStyle = '#000'; c.fillText(t, VIEW_W / 2 + 1, 27);
     c.fillStyle = this.state === 'levelclear' ? '#46d8ff' : '#fff'; c.fillText(t, VIEW_W / 2, 26);
+    if (this.ghost) { c.fillStyle = '#b9a8e6'; c.font = '7px monospace'; c.fillText('👻 fantôme', VIEW_W / 2, 36); }
     c.textAlign = 'left';
+  }
+
+  drawGhost(c) {
+    const pose = this.ghost.poseAt(this.runMs);
+    if (!pose) return;
+    const A = this.game.art.hero;
+    const big = pose.power >= 1;
+    const set = pose.power === 2
+      ? { idle: big ? A.fireBigIdle : A.fireSmallIdle, walk: big ? A.fireBigWalk : A.fireSmallWalk, jump: A.fireJump }
+      : { idle: big ? A.bigIdle : A.smallIdle, walk: big ? A.bigWalk : A.smallWalk, jump: A.jump };
+    let img;
+    if (pose.air) img = set.jump;
+    else if (pose.moving) img = (Math.floor(this.runMs / 120) % 2) ? set.walk : set.idle;
+    else img = set.idle;
+    const x = Math.round(pose.x - this.cam.x) - 2;
+    const y = Math.round(pose.y - this.cam.y) - (big ? 12 : 1);
+    c.save();
+    c.globalAlpha = 0.4;
+    if (pose.dir < 0) { c.translate(x + 8, 0); c.scale(-1, 1); c.translate(-(x + 8), 0); }
+    c.drawImage(img, x, y);
+    c.restore();
+    c.globalAlpha = 1;
   }
 
   drawHUD(c) {

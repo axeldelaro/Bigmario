@@ -4,6 +4,7 @@ import { WORLDS } from './levels.js';
 import { Save } from './core.js';
 import { SFX } from './audio.js';
 import { Leaderboard, fmtTime } from './leaderboard.js';
+import { GhostStore } from './ghost.js';
 
 const COLS = 4;
 const THEME_COL = { overworld: '#3fa24a', underground: '#3a5a8a', castle: '#8a6a6a' };
@@ -140,9 +141,10 @@ export class MapScene {
     const gems = this.game.getGems(gemKey);
     c.fillStyle = '#46d8ff'; c.fillText('◆ ' + gems + '/3', x + 6, y + 21);
     if (this.mode === 'speedrun') {
-      const pb = Leaderboard.getLocalBest(`${sel.w}-${sel.l}`);
+      const levelId = `${sel.w}-${sel.l}`;
+      const pb = Leaderboard.getLocalBest(levelId);
       c.textAlign = 'right'; c.fillStyle = '#ffd23b';
-      c.fillText('PB ' + fmtTime(pb), x + w - 6, y + 21);
+      c.fillText((GhostStore.has(levelId) ? '👻 ' : '') + 'PB ' + fmtTime(pb), x + w - 6, y + 21);
       c.textAlign = 'left';
     }
   }

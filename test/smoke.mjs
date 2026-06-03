@@ -141,5 +141,21 @@ runScene((g) => new MapScene(g, 'speedrun'), 'MAP speedrun', 600);
 runScene((g) => new GameScene(g, 0, 0, null, { speedrun: true }), 'SPEEDRUN 1-1', 1500);
 runScene((g) => new GameScene(g, 2, 2, null, { speedrun: true }), 'SPEEDRUN 3-3 boss', 1500);
 
+// Fantôme: enregistrer -> sauver -> rejouer
+import { GhostRecorder, GhostPlayer, GhostStore } from '../js/ghost.js';
+{
+  const rec = new GhostRecorder();
+  const fakePlayer = { x: 0, y: 100, vx: 50, dir: 1, onGround: true, power: 'big', big: true };
+  for (let t = 0; t < 200; t++) { fakePlayer.x += 1; rec.update(1 / 120, fakePlayer, t * (1000 / 120)); }
+  const data = rec.data();
+  GhostStore.save('0-0', data);
+  const g = new GhostPlayer(GhostStore.load('0-0'));
+  const pose = g.poseAt(300);
+  console.log(`GHOST: ${g.n} samples, valid=${g.valid}, poseAt(300ms)=`, pose ? `x=${pose.x|0} dir=${pose.dir} power=${pose.power}` : 'null');
+  if (!g.valid || !pose) { console.error('GHOST FAIL'); errors++; }
+  // rejouer un speedrun avec fantôme chargé (exerce drawGhost)
+  runScene((gg) => new GameScene(gg, 0, 0, null, { speedrun: true }), 'SPEEDRUN 1-1 +ghost', 800);
+}
+
 console.log(errors === 0 ? '\n✅ SMOKE TEST PASSED (no runtime errors)' : `\n❌ ${errors} error(s)`);
 process.exit(errors === 0 ? 0 : 1);

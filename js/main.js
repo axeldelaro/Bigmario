@@ -10,6 +10,7 @@ import { MapScene } from './scene_map.js';
 import { WORLDS, ARENAS } from './levels.js';
 import { NetClient } from './net.js';
 import { Leaderboard, fmtTime } from './leaderboard.js';
+import { GhostStore } from './ghost.js';
 
 const canvas = document.getElementById('screen');
 const ctx = canvas.getContext('2d');
@@ -148,17 +149,18 @@ class Game {
   }
 
   // Appelé par GameScene quand un contre-la-montre est terminé
-  onSpeedrunFinish(worldIdx, levelIdx, ms) {
+  onSpeedrunFinish(worldIdx, levelIdx, ms, ghostData) {
     this.mode = 'menu'; // gèle la scène (reste affichée en fond)
     const levelId = `${worldIdx}-${levelIdx}`;
     const improved = Leaderboard.setLocalBest(levelId, ms);
+    if (improved && ghostData && ghostData.f && ghostData.f.length) GhostStore.save(levelId, ghostData);
     const pb = Leaderboard.getLocalBest(levelId);
     const name = Save.get('playerName', '');
     const online = !!Leaderboard.apiBase();
     const p = this.panel(`
       <div class="title"><span class="big" style="font-size:26px;color:#46d8ff">TEMPS</span></div>
       <p style="font-size:22px;font-weight:900;margin:6px 0">${fmtTime(ms)}</p>
-      <p class="hint">${improved ? '🏆 Nouveau record perso !' : 'Record perso : ' + fmtTime(pb)}</p>
+      <p class="hint">${improved ? '🏆 Nouveau record perso ! 👻 fantôme enregistré' : 'Record perso : ' + fmtTime(pb)}</p>
       ${online ? `<div class="field"><label>TON PSEUDO (classement en ligne)</label><input id="pname" maxlength="12" value="${name}" placeholder="JOUEUR"></div>
       <div class="row" style="margin-top:8px"><button class="btn" id="submit">📤 Envoyer mon temps</button></div>` :
         `<p class="hint">Configure un serveur (Versus en ligne) pour activer le classement en ligne.</p>`}
