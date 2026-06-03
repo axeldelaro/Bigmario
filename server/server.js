@@ -16,12 +16,16 @@ const rooms = new Map(); // roomId -> [ws, ws]
 // ---- Classement (contre-la-montre) ----
 const SCORES_FILE = path.join(__dirname, 'scores.json');
 const GHOSTS_FILE = path.join(__dirname, 'ghosts.json');
+const SHARES_FILE = path.join(__dirname, 'shares.json');
 const MAX_PER_LEVEL = 50;
 const MAX_GHOST_POINTS = 12000; // ~4000 échantillons (x,y,pose)
+const MAX_SHARES = 1000;
 let scores = {}; // levelId -> [{name, ms, ts}]
 let ghosts = {}; // levelId -> {name, ms, data:{dt,f}}  (fantôme du record)
+let shares = {}; // code -> {payload, ts}  (replays partagés par code)
 try { scores = JSON.parse(fs.readFileSync(SCORES_FILE, 'utf8')); } catch { scores = {}; }
 try { ghosts = JSON.parse(fs.readFileSync(GHOSTS_FILE, 'utf8')); } catch { ghosts = {}; }
+try { shares = JSON.parse(fs.readFileSync(SHARES_FILE, 'utf8')); } catch { shares = {}; }
 let saveTimer = null;
 function persist() {
   if (saveTimer) return;
@@ -29,7 +33,13 @@ function persist() {
     saveTimer = null;
     fs.writeFile(SCORES_FILE, JSON.stringify(scores), () => {});
     fs.writeFile(GHOSTS_FILE, JSON.stringify(ghosts), () => {});
+    fs.writeFile(SHARES_FILE, JSON.stringify(shares), () => {});
   }, 1000);
+}
+function makeCode() {
+  const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sans I,O,0,1 ambigus
+  let c; do { c = ''; for (let i = 0; i < 6; i++) c += A[(Math.random() * A.length) | 0]; } while (shares[c]);
+  return c;
 }
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -59,6 +69,38 @@ const server = http.createServer((req, res) => {
     const g = ghosts[level];
     if (!g) return sendJSON(res, 200, { ghost: null });
     return sendJSON(res, 200, { ghost: g.data, name: g.name, ms: g.ms });
+  }
+
+  // Partage d'un replay par code court
+  if (url.pathname === '/api/share' && req.method === 'GET') {
+    const code = String(url.searchParams.get('code') || '').toUpperCase().slice(0, 8);
+    const s = shares[code];
+    return sendJSON(res, 200, { share: s ? s.payload : null });
+  }
+  if (url.pathname === '/api/share' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 2e5) req.destroy(); });
+    req.on('end', () => {
+      let m; try { m = JSON.parse(body); } catch { return sendJSON(res, 400, { error: 'bad json' }); }
+      if (!validGhost(m.ghost)) return sendJSON(res, 400, { error: 'invalid ghost' });
+      const payload = {
+        kind: m.kind === 'arena' ? 'arena' : 'level',
+        w: m.w | 0, l: m.l | 0, arena: m.arena | 0,
+        name: String(m.name || 'JOUEUR').slice(0, 12),
+        ms: Math.round(Number(m.ms) || 0),
+        ghost: { dt: Math.round(m.ghost.dt), f: m.ghost.f },
+      };
+      // limite mémoire: purge des plus anciens
+      const keys = Object.keys(shares);
+      if (keys.length >= MAX_SHARES) {
+        keys.sort((a, b) => shares[a].ts - shares[b].ts).slice(0, keys.length - MAX_SHARES + 1).forEach((k) => delete shares[k]);
+      }
+      const code = makeCode();
+      shares[code] = { payload, ts: Date.now() };
+      persist();
+      return sendJSON(res, 200, { ok: true, code });
+    });
+    return;
   }
 
   if (url.pathname === '/api/scores' && req.method === 'POST') {

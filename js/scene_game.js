@@ -96,9 +96,10 @@ export class GameScene {
     SFX.win(); playMusic('overworld');
     player.addScore(Math.floor(this.timeLeft) * 10, this);
     this.saveGems();
+    this.game.stat?.('clear', `${this.worldIdx}-${this.levelIdx}`);
     if (this.speedrun) this.finishRun();
   }
-  onBossDefeated() { if (this.pendingClear <= 0) this.pendingClear = 1.6; this.addShake(8); }
+  onBossDefeated() { if (this.pendingClear <= 0) this.pendingClear = 1.6; this.addShake(8); this.game.stat?.('boss'); }
   onPlayerDeath() { if (this.state === 'play') { this.state = 'dying'; this.stateT = 0; this.freeze = 0.12; this.addShake(5); } }
 
   finishRun() {
@@ -159,6 +160,7 @@ export class GameScene {
       if (aabb(this.player, gm)) {
         gm.dead = true; const tx = Math.floor((gm.x) / TILE), ty = Math.floor((gm.y) / TILE);
         this.collectedGems.add(tx + ',' + ty); this.player.addScore(1000, this);
+        this.game.stat?.('gems', 1);
         SFX.gem(); this.addFloat(gm.x, gm.y - 6, '◆', '#46d8ff'); this.burst(gm.x + 6, gm.y + 6, '#46d8ff', 10);
       }
     }
@@ -215,6 +217,7 @@ export class GameScene {
   bossClear() {
     this.state = 'levelclear'; this.stateT = 0; SFX.win(); playMusic('overworld');
     this.player.addScore(5000 + Math.floor(this.timeLeft) * 10, this); this.saveGems();
+    this.game.stat?.('clear', `${this.worldIdx}-${this.levelIdx}`);
     if (this.speedrun) this.finishRun();
   }
 

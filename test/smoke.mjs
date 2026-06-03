@@ -65,6 +65,9 @@ import { setArt } from '../js/entities.js';
 import { GameScene } from '../js/scene_game.js';
 import { VersusScene } from '../js/scene_versus.js';
 import { MapScene } from '../js/scene_map.js';
+import { ReplayScene } from '../js/scene_replay.js';
+import { parTimes, medalFor } from '../js/medals.js';
+import { ACHIEVEMENTS, unlockedCount, markSet } from '../js/achievements.js';
 import { WORLDS } from '../js/levels.js';
 
 const art = buildArt();
@@ -100,6 +103,8 @@ function fakeGame(input) {
     getGems(k) { return gemStore[k] || 0; }, setGems(k, n) { gemStore[k] = n; },
     startSolo() { this._solo = true; }, startSpeedrun() { this._sr = true; },
     returnToMenu() { this._menu = true; }, onSpeedrunFinish() { this._fin = true; },
+    watchReplay() { this._rep = true; }, endReplay() { this._endrep = true; },
+    stat() {},
     _go: false, _gc: false, _ev: false,
   };
 }
@@ -174,6 +179,26 @@ import { GhostRecorder, GhostPlayer, GhostStore } from '../js/ghost.js';
   runScene((g) => new VersusScene(g, { mode: 'rival', arenaIdx: 0 }), 'VERSUS rival (ghost)', 1500);
   // rival sans fantôme -> repli IA (arène 1)
   runScene((g) => new VersusScene(g, { mode: 'rival', arenaIdx: 1 }), 'VERSUS rival (fallback IA)', 1200);
+
+  // Replay viewer (niveau + arène)
+  {
+    const game = fakeGame(makeInput(moveScript));
+    const rs = new ReplayScene(game, { kind: 'level', w: 0, l: 0, name: 'TEST', ms: 30000, ghost: GhostStore.load('0-0') });
+    for (let i = 0; i < 800; i++) { game.input.update(); rs.update(1 / 120); if (i % 2 === 0) rs.draw(ctxStub); }
+    console.log('REPLAY level ran, t=', rs.t | 0);
+    const ra = new ReplayScene(game, { kind: 'arena', arena: 0, name: 'R', ms: 20000, ghost: GhostStore.load('vghost.0') });
+    for (let i = 0; i < 400; i++) { game.input.update(); ra.update(1 / 120); ra.draw(ctxStub); }
+    console.log('REPLAY arena ran, t=', ra.t | 0);
+  }
+  // Médailles + succès
+  {
+    const par = parTimes(WORLDS[0].levels[0]);
+    const m = medalFor(par.gold - 1, par);
+    console.log('MEDALS: gold@', par.gold, '-> medal=', m);
+    if (m !== 'gold') { console.error('MEDAL FAIL'); errors++; }
+    markSet('cleared', '0-0');
+    console.log('ACHIEVEMENTS:', unlockedCount(), '/', ACHIEVEMENTS.length, 'unlocked');
+  }
 }
 
 console.log(errors === 0 ? '\n✅ SMOKE TEST PASSED (no runtime errors)' : `\n❌ ${errors} error(s)`);

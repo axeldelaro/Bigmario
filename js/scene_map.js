@@ -5,6 +5,7 @@ import { Save } from './core.js';
 import { SFX } from './audio.js';
 import { Leaderboard, fmtTime } from './leaderboard.js';
 import { GhostStore } from './ghost.js';
+import { parTimes, medalFor, MEDAL_EMOJI } from './medals.js';
 
 const COLS = 4;
 const THEME_COL = { overworld: '#3fa24a', underground: '#3a5a8a', castle: '#8a6a6a' };
@@ -143,8 +144,9 @@ export class MapScene {
     if (this.mode === 'speedrun') {
       const levelId = `${sel.w}-${sel.l}`;
       const pb = Leaderboard.getLocalBest(levelId);
+      const medal = medalFor(pb, parTimes(sel.def));
       c.textAlign = 'right'; c.fillStyle = '#ffd23b';
-      c.fillText((GhostStore.has(levelId) ? '👻 ' : '') + 'PB ' + fmtTime(pb), x + w - 6, y + 21);
+      c.fillText((medal ? MEDAL_EMOJI[medal] + ' ' : '') + (GhostStore.has(levelId) ? '👻 ' : '') + 'PB ' + fmtTime(pb), x + w - 6, y + 21);
       c.textAlign = 'left';
     }
   }

@@ -257,6 +257,11 @@ export class VersusScene {
     SFX.win();
     // sauvegarde le déplacement du joueur comme fantôme rival pour cette arène
     if (this.rec) { const d = this.rec.data(); if (d.f.length >= 60) GhostStore.save(`vghost.${this.arenaIdx}`, d); }
+    // succès: victoire du joueur humain
+    const humanWon = this.mode === 'online' ? (winner === this.localId)
+      : (this.mode === 'bot' || this.mode === 'rival') ? (winner === 0)
+      : (winner >= 0);
+    if (humanWon) this.game.stat?.('vwin');
     if (this.mode === 'online' && this.localId === 0) this.net.relay({ t: 'end', winner });
   }
   endByPeer() { this.finish(this.localId); }
