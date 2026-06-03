@@ -6,8 +6,10 @@ import { setArt } from './entities.js';
 import { resumeAudio, toggleMute, isMuted, playMusic, stopMusic, SFX } from './audio.js';
 import { GameScene } from './scene_game.js';
 import { VersusScene } from './scene_versus.js';
+import { MapScene } from './scene_map.js';
 import { WORLDS, ARENAS } from './levels.js';
 import { NetClient } from './net.js';
+import { Leaderboard, fmtTime } from './leaderboard.js';
 
 const canvas = document.getElementById('screen');
 const ctx = canvas.getContext('2d');
@@ -17,14 +19,16 @@ const touchLayer = document.getElementById('touch');
 const rotateHint = document.getElementById('rotate-hint');
 
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 class Game {
   constructor() {
     this.input = new Input();
     this.art = buildArt(); setArt(this.art);
+    this.canvas = canvas;
     this.scene = null;
     this.paused = false;
-    this.mode = 'menu'; // menu | game | versus
+    this.mode = 'menu'; // menu | game | versus | map
     this.net = null;
     this.resize();
     addEventListener('resize', () => this.resize());
@@ -111,6 +115,16 @@ class Game {
     this.scene = new VersusScene(this, { mode: 'bot', arenaIdx });
     this.checkOrientation();
   }
+  showMap(mode = 'solo') {
+    this.clearUI(); this.mode = 'map'; this.paused = false; resumeAudio();
+    this.scene = new MapScene(this, mode); playMusic('overworld');
+    this.checkOrientation();
+  }
+  startSpeedrun(worldIdx = 0, levelIdx = 0) {
+    this.clearUI(); this.mode = 'game'; this.paused = false;
+    this.scene = new GameScene(this, worldIdx, levelIdx, null, { speedrun: true });
+    this.checkOrientation();
+  }
   startVersusOnline(net, localId, arenaIdx) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
     this.net = net;
@@ -126,14 +140,63 @@ class Game {
   bestScore(s) { if (s > Save.get('best', 0)) Save.set('best', s); }
   endVersus() { if (this.net) { this.net.close(); this.net = null; } this.returnToMenu(); }
   returnToMenu() {
-    this.paused = false; this.mode = 'menu'; this.scene = null;
+    this.paused = false; this.mode = 'menu';
+    this.scene?.dispose?.(); this.scene = null;
     if (this.net) { this.net.close(); this.net = null; }
     stopMusic(); this.checkOrientation(); this.showTitle();
     if (this._pauseKeyHandler) { removeEventListener('keydown', this._pauseKeyHandler); this._pauseKeyHandler = null; }
   }
 
+  // Appelé par GameScene quand un contre-la-montre est terminé
+  onSpeedrunFinish(worldIdx, levelIdx, ms) {
+    this.mode = 'menu'; // gèle la scène (reste affichée en fond)
+    const levelId = `${worldIdx}-${levelIdx}`;
+    const improved = Leaderboard.setLocalBest(levelId, ms);
+    const pb = Leaderboard.getLocalBest(levelId);
+    const name = Save.get('playerName', '');
+    const online = !!Leaderboard.apiBase();
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:26px;color:#46d8ff">TEMPS</span></div>
+      <p style="font-size:22px;font-weight:900;margin:6px 0">${fmtTime(ms)}</p>
+      <p class="hint">${improved ? '🏆 Nouveau record perso !' : 'Record perso : ' + fmtTime(pb)}</p>
+      ${online ? `<div class="field"><label>TON PSEUDO (classement en ligne)</label><input id="pname" maxlength="12" value="${name}" placeholder="JOUEUR"></div>
+      <div class="row" style="margin-top:8px"><button class="btn" id="submit">📤 Envoyer mon temps</button></div>` :
+        `<p class="hint">Configure un serveur (Versus en ligne) pour activer le classement en ligne.</p>`}
+      <div class="status" id="st"></div>
+      <div id="board" style="margin-top:8px"></div>
+      <div class="menu-list" style="margin-top:14px">
+        <button class="btn" id="retry">↻ Rejouer</button>
+        <button class="btn secondary" id="map">🗺 Carte</button>
+        <button class="btn ghost" id="menu">Menu</button>
+      </div>
+    `);
+    const st = p.querySelector('#st');
+    const board = p.querySelector('#board');
+    const renderBoard = (scores) => {
+      if (!scores) { board.innerHTML = ''; return; }
+      if (scores.length === 0) { board.innerHTML = '<p class="hint">Sois le premier au classement !</p>'; return; }
+      board.innerHTML = '<p class="hint" style="margin-bottom:4px">CLASSEMENT EN LIGNE</p>' +
+        scores.slice(0, 10).map((s, i) => `<div style="display:flex;justify-content:space-between;font:12px monospace;padding:2px 8px;${(s.name===name)?'color:#46d8ff':''}"><span>${i + 1}. ${escapeHtml(s.name)}</span><span>${fmtTime(s.ms)}</span></div>`).join('');
+    };
+    if (online) {
+      st.textContent = 'Chargement du classement…';
+      Leaderboard.fetchTop(levelId).then((s) => { st.textContent = ''; renderBoard(s); });
+      p.querySelector('#submit').onclick = async () => {
+        const nm = p.querySelector('#pname').value.trim() || 'JOUEUR';
+        Save.set('playerName', nm); st.textContent = 'Envoi…';
+        const r = await Leaderboard.submit(levelId, nm, ms);
+        st.textContent = r ? '✓ Temps envoyé !' : '❌ Échec de l’envoi.';
+        renderBoard(await Leaderboard.fetchTop(levelId));
+      };
+    }
+    p.querySelector('#retry').onclick = () => this.startSpeedrun(worldIdx, levelIdx);
+    p.querySelector('#map').onclick = () => this.showMap('speedrun');
+    p.querySelector('#menu').onclick = () => this.returnToMenu();
+    this.checkOrientation();
+  }
+
   // ---------- UI helpers ----------
-  clearUI() { ui.classList.add('hidden'); ui.innerHTML = ''; }
+  clearUI() { this.scene?.dispose?.(); ui.classList.add('hidden'); ui.innerHTML = ''; }
   panel(html) {
     ui.classList.remove('hidden');
     ui.innerHTML = `<div class="panel">${html}</div>`;
@@ -144,7 +207,8 @@ class Game {
     const p = this.panel(`
       <div class="title"><span class="big">BIGMARIO</span><span class="sub">PLATEFORME RÉTRO</span></div>
       <div class="menu-list">
-        <button class="btn" id="b-solo">▶ Aventure (Solo)</button>
+        <button class="btn" id="b-solo">🗺 Aventure (carte du monde)</button>
+        <button class="btn" id="b-speed">⏱ Contre-la-montre</button>
         <button class="btn secondary" id="b-vs-bot">🤖 Versus vs IA</button>
         <button class="btn secondary" id="b-vs-local">⚔ Versus local (2 joueurs)</button>
         <button class="btn secondary" id="b-vs-online">🌐 Versus en ligne</button>
@@ -152,7 +216,8 @@ class Game {
       </div>
       <p class="hint">Clavier: ◀▶ déplacer • Espace sauter • J tir • Échap pause.<br>Manette et tactile détectés automatiquement.</p>
     `);
-    p.querySelector('#b-solo').onclick = () => { resumeAudio(); this.showWorldSelect(); };
+    p.querySelector('#b-solo').onclick = () => { resumeAudio(); this.showMap('solo'); };
+    p.querySelector('#b-speed').onclick = () => { resumeAudio(); this.showMap('speedrun'); };
     p.querySelector('#b-vs-bot').onclick = () => { resumeAudio(); this.showArenaSelect('bot'); };
     p.querySelector('#b-vs-local').onclick = () => { resumeAudio(); this.showArenaSelect('local'); };
     p.querySelector('#b-vs-online').onclick = () => { resumeAudio(); this.showOnline(); };

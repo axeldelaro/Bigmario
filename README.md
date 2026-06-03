@@ -12,7 +12,9 @@ en ligne.
 > librement hébergeables et partageables.
 
 - 🕹️ **Jouable au clavier, à la manette, et au tactile** (overlay en mode paysage sur téléphone, vibration).
-- 🧩 **Aventure solo** : 3 mondes / 6 niveaux, **combat de boss**, ennemis variés (marcheur, carapace, volant, **à pics**), power-ups (champignon / fleur de feu / étoile), blocs, tuyaux, drapeau d'arrivée.
+- 🗺️ **Carte du monde** animée pour choisir ses niveaux.
+- 🧩 **Aventure solo** : 3 mondes / **9 niveaux**, **combat de boss**, ennemis variés (marcheur, carapace, volant, **à pics**), power-ups (champignon / fleur de feu / étoile), blocs, tuyaux, drapeau d'arrivée.
+- ⏱️ **Contre-la-montre** : chrono au **millième de seconde**, retry instantané, **meilleurs temps locaux** et **classements en ligne**.
 - 🪜 **Mécaniques** : **ressorts**, **plateformes mobiles**, **checkpoints**, **gemmes cachées** (3/niveau, sauvegardées).
 - ✨ **Game feel** : screen-shake, hit-stop, cartes d'intro de niveau, particules.
 - ⚔️ **Versus** : **contre l'IA**, à 2 sur le même écran, **ou en ligne** (premier à 5 KO), 3 arènes.
@@ -80,6 +82,17 @@ Partage le **même code de salon** à ton adversaire et lancez-vous.
 > la première connexion peut prendre ~30 s, c'est normal.
 
 Hébergeurs alternatifs gratuits compatibles : **Railway**, **Glitch**, **Fly.io**, **Cyclic**.
+
+### 3. Les classements en ligne (contre-la-montre)
+Le **même serveur** sert aussi de classement : il expose une petite API REST
+(`GET /api/scores?level=ID`, `POST /api/scores`). Le jeu réutilise
+automatiquement l'adresse configurée pour le versus (le `wss://` est converti en
+`https://` pour l'API). Les temps sont **toujours sauvegardés en local** ; s'il y
+a un serveur, le jeu propose d'**envoyer ton temps** et affiche le top 10.
+
+> Les temps sont stockés dans `server/scores.json`. Sur une offre gratuite, le
+> disque peut être réinitialisé lors d'un redéploiement (les records locaux, eux,
+> restent).
 
 ---
 

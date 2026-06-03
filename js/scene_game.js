@@ -5,16 +5,19 @@ import { Level } from './level.js';
 import { Player, Enemy, Boss, Coin, Gem, MovingPlatform, EnemyShot, PowerUp, Fireball, Particle, FloatText } from './entities.js';
 import { SFX, playMusic } from './audio.js';
 import { WORLDS } from './levels.js';
+import { fmtTime } from './leaderboard.js';
 
 export class GameScene {
-  constructor(game, worldIdx = 0, levelIdx = 0, carry = null) {
+  constructor(game, worldIdx = 0, levelIdx = 0, carry = null, opts = {}) {
     this.game = game;
     this.worldIdx = worldIdx; this.levelIdx = levelIdx;
+    this.speedrun = !!opts.speedrun;
+    this.runMs = 0; this.runFinished = false;
     this.cam = { x: 0, y: 0 };
     this.particles = []; this.floats = []; this.fireballs = []; this.hazards = [];
     this.state = 'intro'; // intro | play | dying | levelclear | gameover
     this.stateT = 0; this.shake = 0; this.freeze = 0; this.pendingClear = 0;
-    this.carry = carry || { lives: 3, score: 0, coins: 0 };
+    this.carry = carry || { lives: this.speedrun ? 99 : 3, score: 0, coins: 0 };
     this.collectedGems = new Set();   // gemmes déjà prises (persistent entre morts)
     this.activeCheckpoint = null;     // {x,y}
     this.loadLevel();
@@ -45,6 +48,7 @@ export class GameScene {
     this.player = new Player(ps.x, ps.y, { lives: this.carry.lives, skin: 'p1', id: 0 });
     this.player.score = this.carry.score; this.player.coins = this.carry.coins;
     this.timeLeft = def.time; this.timeAcc = 0;
+    this.runMs = 0; this.runFinished = false;
     this.cam.x = clamp(ps.x - VIEW_W * 0.42, 0, Math.max(0, this.level.pixelW - VIEW_W));
     this.cam.y = 0;
     this.state = 'intro'; this.stateT = 0; this.pendingClear = 0;
@@ -84,9 +88,16 @@ export class GameScene {
     SFX.win(); playMusic('overworld');
     player.addScore(Math.floor(this.timeLeft) * 10, this);
     this.saveGems();
+    if (this.speedrun) this.finishRun();
   }
   onBossDefeated() { if (this.pendingClear <= 0) this.pendingClear = 1.6; this.addShake(8); }
   onPlayerDeath() { if (this.state === 'play') { this.state = 'dying'; this.stateT = 0; this.freeze = 0.12; this.addShake(5); } }
+
+  finishRun() {
+    if (this.runFinished) return;
+    this.runFinished = true;
+    this.game.onSpeedrunFinish?.(this.worldIdx, this.levelIdx, this.runMs);
+  }
 
   saveGems() {
     if (this.totalGems <= 0) return;
@@ -114,6 +125,7 @@ export class GameScene {
     if (this.pendingClear > 0) { this.pendingClear -= dt; if (this.pendingClear <= 0 && this.state === 'play') { this.bossClear(); } }
 
     if (this.state === 'play') {
+      this.runMs += dt * 1000;
       this.timeAcc += dt;
       if (this.timeAcc >= 1) { this.timeAcc -= 1; this.timeLeft--; if (this.timeLeft <= 0) { this.timeLeft = 0; this.player.die(this); } }
     }
@@ -140,8 +152,8 @@ export class GameScene {
         SFX.gem(); this.addFloat(gm.x, gm.y - 6, '◆', '#46d8ff'); this.burst(gm.x + 6, gm.y + 6, '#46d8ff', 10);
       }
     }
-    // checkpoints
-    for (const cp of this.level.checkpoints) {
+    // checkpoints (désactivés en contre-la-montre)
+    if (!this.speedrun) for (const cp of this.level.checkpoints) {
       if (this.level.tile(cp.tx, cp.ty) !== 'C') continue;
       const r = { x: cp.tx * TILE, y: cp.ty * TILE, w: TILE, h: TILE * 2 };
       if (aabb(this.player, r)) {
@@ -193,6 +205,7 @@ export class GameScene {
   bossClear() {
     this.state = 'levelclear'; this.stateT = 0; SFX.win(); playMusic('overworld');
     this.player.addScore(5000 + Math.floor(this.timeLeft) * 10, this); this.saveGems();
+    if (this.speedrun) this.finishRun();
   }
 
   handleEnemyCollisions() {
@@ -253,12 +266,17 @@ export class GameScene {
 
   updateState(dt) {
     if (this.state === 'dying') {
+      if (this.speedrun) {
+        if (this.stateT > 0.9) { this.collectedGems = new Set(); this.activeCheckpoint = null; this.loadLevel(); }
+        return;
+      }
       if (this.stateT > 1.6) {
         this.player.lives--;
         if (this.player.lives <= 0) { this.state = 'gameover'; this.stateT = 0; this.game.gameOver(this.player.score); }
         else { this.carry = { lives: this.player.lives, score: this.player.score, coins: this.player.coins }; this.loadLevel(); }
       }
     } else if (this.state === 'levelclear') {
+      if (this.speedrun) return; // fin gérée par l'UI du contre-la-montre
       if (this.stateT > 2.6) {
         const world = WORLDS[this.worldIdx];
         const carry = { lives: this.player.lives, score: this.player.score, coins: this.player.coins };
@@ -301,9 +319,19 @@ export class GameScene {
 
     this.drawHUD(c);
     if (this.boss && !this.boss.dead) this.drawBossBar(c);
+    if (this.speedrun) this.drawTimer(c);
     if (this.state === 'intro') this.drawIntro(c);
-    if (this.state === 'levelclear') this.banner(c, this.level.hasBoss ? 'BOSS VAINCU !' : 'NIVEAU TERMINÉ !', '#ffd23b');
+    if (this.state === 'levelclear' && !this.speedrun) this.banner(c, this.level.hasBoss ? 'BOSS VAINCU !' : 'NIVEAU TERMINÉ !', '#ffd23b');
+    if (this.state === 'levelclear' && this.speedrun) this.banner(c, fmtTime(this.runMs), '#46d8ff');
     if (this.state === 'gameover') this.banner(c, 'GAME OVER', '#ff5d5d');
+  }
+
+  drawTimer(c) {
+    const t = fmtTime(this.runMs);
+    c.font = '13px monospace'; c.textAlign = 'center';
+    c.fillStyle = '#000'; c.fillText(t, VIEW_W / 2 + 1, 27);
+    c.fillStyle = this.state === 'levelclear' ? '#46d8ff' : '#fff'; c.fillText(t, VIEW_W / 2, 26);
+    c.textAlign = 'left';
   }
 
   drawHUD(c) {

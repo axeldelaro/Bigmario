@@ -8,20 +8,26 @@ const ctxStub = new Proxy({}, {
     if (p === 'putImageData') return () => {};
     if (p === 'createImageData') return (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) });
     if (p === 'measureText') return () => ({ width: 8 });
+    if (p === 'createLinearGradient' || p === 'createRadialGradient') return () => ({ addColorStop() {} });
     if (p === 'canvas') return { width: 16, height: 16 };
     return () => {};
   },
   set() { return true; },
 });
 function makeCanvas() {
-  return { width: 16, height: 16, style: {}, getContext: () => ctxStub };
+  return {
+    width: 16, height: 16, style: {}, getContext: () => ctxStub,
+    addEventListener() {}, removeEventListener() {},
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 192 }),
+  };
 }
 function makeEl() {
   return {
     style: {}, dataset: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     set innerHTML(_) {}, get innerHTML() { return ''; },
     querySelector: () => makeEl(), querySelectorAll: () => [],
-    addEventListener() {}, appendChild() {}, onclick: null,
+    addEventListener() {}, removeEventListener() {}, appendChild() {}, onclick: null,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 192 }),
   };
 }
 globalThis.document = {
@@ -58,6 +64,7 @@ import { buildArt } from '../js/art.js';
 import { setArt } from '../js/entities.js';
 import { GameScene } from '../js/scene_game.js';
 import { VersusScene } from '../js/scene_versus.js';
+import { MapScene } from '../js/scene_map.js';
 import { WORLDS } from '../js/levels.js';
 
 const art = buildArt();
@@ -87,10 +94,12 @@ let errors = 0;
 function fakeGame(input) {
   const gemStore = {};
   return {
-    input, art,
+    input, art, canvas: makeCanvas(),
     togglePause() {}, gameOver() { this._go = true; }, gameComplete() { this._gc = true; },
     saveProgress() {}, endVersus() { this._ev = true; },
     getGems(k) { return gemStore[k] || 0; }, setGems(k, n) { gemStore[k] = n; },
+    startSolo() { this._solo = true; }, startSpeedrun() { this._sr = true; },
+    returnToMenu() { this._menu = true; }, onSpeedrunFinish() { this._fin = true; },
     _go: false, _gc: false, _ev: false,
   };
 }
@@ -125,6 +134,12 @@ runScene((g) => new VersusScene(g, { mode: 'bot', arenaIdx: 0 }), 'VERSUS vs IA 
 runScene((g) => new VersusScene(g, { mode: 'bot', arenaIdx: 2 }), 'VERSUS vs IA A2', 1500);
 runScene((g) => new VersusScene(g, { mode: 'online', net: netStub, localId: 0, arenaIdx: 0 }), 'VERSUS online host', 1200);
 runScene((g) => new VersusScene(g, { mode: 'online', net: netStub, localId: 1, arenaIdx: 0 }), 'VERSUS online guest', 1200);
+
+// Carte du monde (solo + speedrun) et contre-la-montre
+runScene((g) => new MapScene(g, 'solo'), 'MAP solo', 600);
+runScene((g) => new MapScene(g, 'speedrun'), 'MAP speedrun', 600);
+runScene((g) => new GameScene(g, 0, 0, null, { speedrun: true }), 'SPEEDRUN 1-1', 1500);
+runScene((g) => new GameScene(g, 2, 2, null, { speedrun: true }), 'SPEEDRUN 3-3 boss', 1500);
 
 console.log(errors === 0 ? '\n✅ SMOKE TEST PASSED (no runtime errors)' : `\n❌ ${errors} error(s)`);
 process.exit(errors === 0 ? 0 : 1);

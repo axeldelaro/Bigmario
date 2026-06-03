@@ -6,15 +6,67 @@
 // Déploiement gratuit : voir ../README.md (Render / Railway / Glitch...)
 
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 8080;
 const rooms = new Map(); // roomId -> [ws, ws]
 
+// ---- Classement (contre-la-montre) ----
+const SCORES_FILE = path.join(__dirname, 'scores.json');
+const MAX_PER_LEVEL = 50;
+let scores = {}; // levelId -> [{name, ms, ts}]
+try { scores = JSON.parse(fs.readFileSync(SCORES_FILE, 'utf8')); } catch { scores = {}; }
+let saveTimer = null;
+function persist() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => { saveTimer = null; fs.writeFile(SCORES_FILE, JSON.stringify(scores), () => {}); }, 1000);
+}
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+function sendJSON(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json', ...CORS }); res.end(JSON.stringify(obj)); }
+
 const server = http.createServer((req, res) => {
-  // petite page de santé (utile pour les hébergeurs gratuits + keep-alive)
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('Bigmario relay OK — ' + rooms.size + ' salon(s) actif(s).');
+  const url = new URL(req.url, 'http://x');
+  if (req.method === 'OPTIONS') { res.writeHead(204, CORS); res.end(); return; }
+
+  if (url.pathname === '/api/scores' && req.method === 'GET') {
+    const level = String(url.searchParams.get('level') || '');
+    const limit = Math.min(50, parseInt(url.searchParams.get('limit') || '10', 10) || 10);
+    const list = (scores[level] || []).slice(0, limit);
+    return sendJSON(res, 200, { level, scores: list });
+  }
+
+  if (url.pathname === '/api/scores' && req.method === 'POST') {
+    let body = '';
+    req.on('data', (c) => { body += c; if (body.length > 1e4) req.destroy(); });
+    req.on('end', () => {
+      let m; try { m = JSON.parse(body); } catch { return sendJSON(res, 400, { error: 'bad json' }); }
+      const level = String(m.level || '').slice(0, 16);
+      const name = String(m.name || 'JOUEUR').replace(/[^\w \-éàèùçâêîôû]/gi, '').slice(0, 12) || 'JOUEUR';
+      const ms = Math.round(Number(m.ms));
+      if (!level || !isFinite(ms) || ms <= 0 || ms > 36e5) return sendJSON(res, 400, { error: 'invalid' });
+      const list = scores[level] || (scores[level] = []);
+      // un seul meilleur temps par pseudo
+      const existing = list.findIndex((s) => s.name === name);
+      if (existing >= 0) { if (ms < list[existing].ms) list[existing] = { name, ms, ts: Date.now() }; }
+      else list.push({ name, ms, ts: Date.now() });
+      list.sort((a, b) => a.ms - b.ms);
+      if (list.length > MAX_PER_LEVEL) list.length = MAX_PER_LEVEL;
+      persist();
+      const rank = list.findIndex((s) => s.name === name) + 1;
+      return sendJSON(res, 200, { ok: true, rank, scores: list.slice(0, 10) });
+    });
+    return;
+  }
+
+  // page de santé (utile pour les hébergeurs gratuits + keep-alive)
+  res.writeHead(200, { 'Content-Type': 'text/plain', ...CORS });
+  res.end('Bigmario relay OK — ' + rooms.size + ' salon(s), ' + Object.keys(scores).length + ' niveau(x) classés.');
 });
 
 const wss = new WebSocketServer({ server });
