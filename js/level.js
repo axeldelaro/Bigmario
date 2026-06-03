@@ -2,10 +2,10 @@
 import { TILE, VIEW_W, VIEW_H } from './core.js';
 import { tileCanvas } from './art.js';
 
-const SOLID = new Set(['X', 'H', 'B', '?', 'M', 'U', 'D', 'p', 'P']);
+const SOLID = new Set(['X', 'H', 'B', '?', 'M', 'U', 'D', 'p', 'P', 'T']);
 const SEMI = new Set(['=']); // solide seulement par le dessus
 const HAZARD = new Set(['^']);
-const ENEMY_CHARS = { g: 'goon', k: 'shell', f: 'fly' };
+const ENEMY_CHARS = { g: 'goon', k: 'shell', f: 'fly', z: 'spiky', O: 'boss' };
 const ITEM_QUESTION = { '?': 'coin', 'M': 'mushroom', 'U': 'star' };
 
 export class Level {
@@ -24,6 +24,10 @@ export class Level {
     this.playerStart = { x: 32, y: 0 };
     this.goal = null;
     this.coins = [];       // pièces issues de 'o'
+    this.gems = [];        // gemmes cachées issues de 'j'
+    this.platforms = [];   // plateformes mobiles issues de 'm'(horiz) / 'n'(vert)
+    this.checkpoints = []; // {tx,ty}
+    this.hasBoss = false;
     this._extract();
     this._bgCache = null;
   }
@@ -35,11 +39,15 @@ export class Level {
         const x = tx * TILE, y = ty * TILE;
         if (ch === 'S') { this.playerStart = { x, y }; this.rows[ty][tx] = ' '; }
         else if (ch === 'o') { this.coins.push({ tx, ty }); this.rows[ty][tx] = ' '; }
-        else if (ENEMY_CHARS[ch]) { this.spawns.push({ type: ENEMY_CHARS[ch], x, y }); this.rows[ty][tx] = ' '; }
+        else if (ch === 'j') { this.gems.push({ tx, ty }); this.rows[ty][tx] = ' '; }
+        else if (ch === 'm') { this.platforms.push({ x, y, axis: 'h' }); this.rows[ty][tx] = ' '; }
+        else if (ch === 'n') { this.platforms.push({ x, y, axis: 'v' }); this.rows[ty][tx] = ' '; }
+        else if (ch === 'C') { this.checkpoints.push({ tx, ty }); }
+        else if (ENEMY_CHARS[ch]) { if (ch === 'O') this.hasBoss = true; this.spawns.push({ type: ENEMY_CHARS[ch], x, y }); this.rows[ty][tx] = ' '; }
         else if (ch === 'G') { if (!this.goal) this.goal = { x: x + 4, y: 0, tx }; }
       }
     }
-    if (!this.goal) this.goal = { x: this.pixelW - 48, y: 0, tx: this.w - 3 };
+    if (!this.goal && !this.hasBoss) this.goal = { x: this.pixelW - 48, y: 0, tx: this.w - 3 };
   }
 
   tile(tx, ty) {

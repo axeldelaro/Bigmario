@@ -49,7 +49,10 @@ export class Input {
     // Boutons tactiles
     document.querySelectorAll('.tbtn').forEach((btn) => {
       const act = btn.dataset.act;
-      const set = (v) => { this.touch[act] = v; btn.classList.toggle('pressed', v); };
+      const set = (v) => {
+        this.touch[act] = v; btn.classList.toggle('pressed', v);
+        if (v && navigator.vibrate) navigator.vibrate(8); // retour haptique
+      };
       const on = (e) => { e.preventDefault(); set(true); };
       const off = (e) => { e.preventDefault(); set(false); };
       btn.addEventListener('touchstart', on, { passive: false });

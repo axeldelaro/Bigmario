@@ -47,6 +47,111 @@ export class Coin {
   }
 }
 
+export class Gem {
+  constructor(tx, ty) { this.x = tx * TILE + 2; this.y = ty * TILE + 2; this.w = 12; this.h = 12; this.t = 0; this.baseY = this.y; this.dead = false; }
+  update(dt) { this.t += dt; this.y = this.baseY + Math.sin(this.t * 3) * 2; }
+  draw(c, cam) {
+    const img = (Math.floor(this.t * 6) % 2) ? ART.gem.a : ART.gem.b;
+    c.save(); c.shadowColor = '#46d8ff'; c.shadowBlur = 6;
+    c.drawImage(img, Math.round(this.x - cam.x) - 2, Math.round(this.y - cam.y) - 2); c.restore();
+  }
+}
+
+// Plateforme mobile (collision « solide par le dessus » gérée par la scène)
+export class MovingPlatform {
+  constructor(x, y, axis = 'h', amp = 48, speed = 1.2) {
+    this.w = 32; this.h = 8; this.x = x; this.y = y; this.axis = axis;
+    this.ox = x; this.oy = y; this.amp = amp; this.speed = speed;
+    this.t = Math.random() * Math.PI * 2; this.dx = 0; this.dy = 0; this.dead = false;
+  }
+  update(dt) {
+    this.t += dt;
+    const s = Math.sin(this.t * this.speed) * this.amp;
+    if (this.axis === 'h') { const nx = this.ox + s; this.dx = nx - this.x; this.x = nx; this.dy = 0; }
+    else { const ny = this.oy + s; this.dy = ny - this.y; this.y = ny; this.dx = 0; }
+  }
+  draw(c, cam) {
+    const x = Math.round(this.x - cam.x), y = Math.round(this.y - cam.y);
+    c.fillStyle = '#caa057'; c.fillRect(x, y, this.w, this.h);
+    c.fillStyle = '#e8c889'; c.fillRect(x, y, this.w, 2);
+    c.fillStyle = '#7a5a2a'; c.fillRect(x, y + this.h - 1, this.w, 1);
+    for (let i = 4; i < this.w; i += 8) { c.fillStyle = '#a07c3a'; c.fillRect(x + i, y + 3, 2, 3); }
+  }
+}
+
+// Projectile hostile (boss)
+export class EnemyShot {
+  constructor(x, y, vx, vy) { this.x = x; this.y = y; this.w = 8; this.h = 8; this.vx = vx; this.vy = vy; this.t = 0; this.dead = false; }
+  update(dt, level) {
+    this.t += dt; this.vy += 700 * dt;
+    this.x += this.vx * dt; this.y += this.vy * dt;
+    if (level.solidAt(this.x + 4, this.y + 8) || level.solidAt(this.x + 4, this.y)) this.dead = true;
+    if (this.t > 4 || this.y > level.pixelH + 20) this.dead = true;
+  }
+  draw(c, cam) {
+    const x = Math.round(this.x - cam.x), y = Math.round(this.y - cam.y);
+    c.save(); c.shadowColor = '#ff8c3b'; c.shadowBlur = 5;
+    c.fillStyle = '#ffd23b'; c.beginPath(); c.arc(x + 4, y + 4, 4, 0, 7); c.fill();
+    c.fillStyle = '#ff5d2e'; c.beginPath(); c.arc(x + 4, y + 4, 2, 0, 7); c.fill(); c.restore();
+  }
+}
+
+// BOSS — à vaincre en sautant sur sa tête plusieurs fois
+export class Boss {
+  constructor(x, y) {
+    this.x = x; this.y = y - 14; this.w = 30; this.h = 28; this.vx = -40; this.vy = 0;
+    this.dir = -1; this.hp = 3; this.t = 0; this.dead = false; this.removed = false;
+    this.invuln = 0; this.shootCd = 1.6; this.jumpCd = 2; this.flash = 0; this.intro = 0.6;
+  }
+  hitTop(scene) {
+    if (this.invuln > 0 || this.dead) return false;
+    this.hp--; this.invuln = 1.1; this.flash = 0.5; SFX.bosshit();
+    scene.addShake?.(6); scene.burst?.(this.x + 15, this.y, '#46b84a', 14);
+    this.vx = (this.vx > 0 ? 1 : -1) * (60 + (3 - this.hp) * 30);
+    if (this.hp <= 0) { this.dead = true; this.vy = -260; SFX.boom(); scene.onBossDefeated?.(this); }
+    return true;
+  }
+  update(dt, level, scene) {
+    this.t += dt;
+    if (this.flash > 0) this.flash -= dt;
+    if (this.dead) { this.vy += GRAVITY * dt; this.x += this.vx * dt; this.y += this.vy * dt; if (this.y > level.pixelH + 60) this.removed = true; return; }
+    if (this.intro > 0) { this.intro -= dt; return; }
+    if (this.invuln > 0) this.invuln -= dt;
+
+    this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+    const r = level.moveAndCollide(this, dt);
+    if (r.hitX) { this.vx = -this.vx; this.dir = -this.dir; }
+    // se retourne aux bords
+    if (r.onGround) {
+      const aheadX = this.vx > 0 ? this.x + this.w + 2 : this.x - 2;
+      if (!level.solidAt(aheadX, this.y + this.h + 1)) { this.vx = -this.vx; this.dir = -this.dir; }
+      // saut périodique
+      this.jumpCd -= dt;
+      if (this.jumpCd <= 0) { this.vy = -300; this.jumpCd = 1.8 + Math.random(); }
+    }
+    // tir vers le joueur
+    this.shootCd -= dt;
+    if (this.shootCd <= 0 && scene.player) {
+      this.shootCd = Math.max(0.8, 2.0 - (3 - this.hp) * 0.4);
+      const tgt = scene.player;
+      const dx = (tgt.x - this.x); const dir = dx > 0 ? 1 : -1;
+      scene.spawnHazard?.(new EnemyShot(this.x + 15, this.y + 8, dir * 90, -180));
+    }
+    if (this.x < 0) { this.x = 0; this.vx = Math.abs(this.vx); }
+    if (this.x > level.pixelW - this.w) { this.x = level.pixelW - this.w; this.vx = -Math.abs(this.vx); }
+  }
+  draw(c, cam) {
+    if (this.flash > 0 && Math.floor(this.t * 30) % 2) return;
+    const img = (Math.floor(this.t * 3) % 2) ? ART.boss.a : ART.boss.b;
+    const x = Math.round(this.x - cam.x) - 1, y = Math.round(this.y - cam.y);
+    c.save();
+    if (this.dir > 0) { c.translate(x + 15, 0); c.scale(-1, 1); c.translate(-(x + 15), 0); }
+    if (this.dead) { c.translate(x + 15, y + 14); c.rotate(this.t * 6); c.drawImage(img, -15, -14); }
+    else c.drawImage(img, x, y);
+    c.restore();
+  }
+}
+
 // Objet qui jaillit d'un bloc et se déplace
 export class PowerUp {
   constructor(x, y, kind) {
@@ -153,6 +258,7 @@ export class Enemy {
     const x = Math.round(this.x - cam.x) - 1, y = Math.round(this.y - cam.y) - 2;
     let img;
     if (this.type === 'fly') img = (Math.floor(this.t * 12) % 2) ? ART.fly.a : ART.fly.b;
+    else if (this.type === 'spiky') img = (Math.floor(this.t * 8) % 2) ? ART.spiky.a : ART.spiky.b;
     else if (this.type === 'shell') img = this.state === 'shell' ? ART.shell.hide : ART.shell.a;
     else if (this.state === 'flat') img = ART.goon.flat;
     else img = (Math.floor(this.t * 8) % 2) ? ART.goon.a : ART.goon.b;
@@ -278,6 +384,11 @@ export class Player {
     if (r.ceiling && r.ceilTile) {
       const ev = level.hitBlock(r.ceilTile.tx, r.ceilTile.ty);
       if (ev) scene.onBlockHit?.(ev, this);
+    }
+    // ressort: rebond surpuissant si on atterrit sur une tuile 'T'
+    if (this.onGround && this.vy >= 0) {
+      const ft = level.tile(Math.floor((this.x + this.w / 2) / TILE), Math.floor((this.y + this.h) / TILE));
+      if (ft === 'T') { this.vy = -560; this.onGround = false; this.holdJump = true; this.bounce = 1; SFX.spring(); scene.onSpring?.(this); }
     }
     if (this.bounce > 0) this.bounce = Math.max(0, this.bounce - dt * 5);
 

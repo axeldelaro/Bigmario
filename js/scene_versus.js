@@ -73,6 +73,7 @@ export class VersusScene {
   burst(x, y, col, n = 8) { for (let i = 0; i < n; i++) this.particles.push(new Particle(x, y, rand(-120,120), rand(-120,20), col, rand(0.3,0.7), 2)); }
 
   inputFor(idx) {
+    if (this.mode === 'bot' && idx === 1) return this.aiInput();
     const I = this.game.input;
     // en ligne, le joueur local utilise le contrôleur 0; en local, p0=clavier1/manette1, p1=clavier2/manette2
     const player = this.mode === 'online' ? 0 : idx;
@@ -81,6 +82,38 @@ export class VersusScene {
       left: I.isDown('left', player), right: I.isDown('right', player), down: I.isDown('down', player),
       jump: I.isDown('jump', player), jumpPressed: I.justPressed('jump', player),
       fire: I.isDown('fire', player), firePressed: I.justPressed('fire', player), run: I.isDown('fire', player),
+    };
+  }
+
+  // IA simple pour le bot (joueur 2)
+  aiInput() {
+    const me = this.players[1], foe = this.players[0];
+    this._ai = this._ai || { jumpT: 0, fireT: 0, jumpPressed: false, firePressed: false };
+    const ai = this._ai;
+    ai.jumpT -= 1 / 120; ai.fireT -= 1 / 120;
+    const dx = foe.x - me.x, ady = me.y - foe.y;
+    const wantRight = dx > 4, wantLeft = dx < -4;
+    // sauter pour passer au-dessus de l'adversaire, franchir un mur, ou éviter un vide
+    let jump = false;
+    const aheadX = me.dir > 0 ? me.x + me.w + 2 : me.x - 2;
+    const wallAhead = this.level.solidAt(aheadX, me.y + me.h - 4);
+    const gapAhead = !this.level.solidAt(aheadX, me.y + me.h + 4);
+    if (me.onGround && ai.jumpT <= 0) {
+      if (Math.abs(dx) < 40 && foe.y >= me.y - 4) { jump = true; }      // sauter sur sa tête
+      else if (wallAhead || gapAhead) jump = true;
+      else if (Math.random() < 0.02) jump = true;
+      if (jump) ai.jumpT = 0.5 + Math.random() * 0.4;
+    }
+    ai.jumpPressed = jump;
+    // tir si à portée horizontale et à peu près même hauteur
+    let firePressed = false;
+    if (me.power === 'fire' && ai.fireT <= 0 && Math.abs(ady) < 24 && Math.abs(dx) < 140 && (dx > 0) === (me.dir > 0)) {
+      firePressed = true; ai.fireT = 0.6 + Math.random() * 0.5;
+    }
+    return {
+      left: wantLeft, right: wantRight, down: false,
+      jump: jump || (me.vy < 0 && Math.random() < 0.6), jumpPressed: jump,
+      fire: firePressed, firePressed, run: Math.abs(dx) > 80,
     };
   }
 
@@ -100,7 +133,7 @@ export class VersusScene {
     if (this.timeAcc >= 1) { this.timeAcc -= 1; this.timeLeft = Math.max(0, this.timeLeft - 1); }
     if (this.timeLeft <= 0 && !this.over) this.finishByScore();
 
-    if (this.mode === 'local') {
+    if (this.mode !== 'online') {
       this.players[0].update(dt, this.level, this, this.inputFor(0));
       this.players[1].update(dt, this.level, this, this.inputFor(1));
       this.resolveCombat(0, 1); this.resolveCombat(1, 0);
@@ -134,8 +167,8 @@ export class VersusScene {
     this.particles = this.particles.filter((p) => !p.dead);
     this.floats = this.floats.filter((f) => !f.dead);
 
-    // respawn morts (local)
-    if (this.mode === 'local') this.players.forEach((p, i) => { if (p.dead && p.deathT > 1.2) this.respawn(p, i); });
+    // respawn morts (local / bot)
+    if (this.mode !== 'online') this.players.forEach((p, i) => { if (p.dead && p.deathT > 1.2) this.respawn(p, i); });
     else { const me = this.players[this.localId]; if (me.dead && me.deathT > 1.2) this.respawn(me, this.localId); }
 
     this.cam.x = clamp((this.level.pixelW - VIEW_W) / 2, 0, Math.max(0, this.level.pixelW - VIEW_W));
@@ -211,6 +244,8 @@ export class VersusScene {
     if (this.over) {
       const txt = this.winner < 0 ? 'ÉGALITÉ !' : (this.mode === 'online'
         ? (this.winner === this.localId ? 'VICTOIRE !' : 'DÉFAITE')
+        : this.mode === 'bot'
+        ? (this.winner === 0 ? 'VICTOIRE !' : 'L\'IA GAGNE')
         : `JOUEUR ${this.winner + 1} GAGNE !`);
       c.fillStyle = '#000'; c.globalAlpha = 0.55; c.fillRect(0, VIEW_H/2-18, VIEW_W, 36); c.globalAlpha = 1;
       c.font = '16px monospace'; c.textAlign = 'center';
@@ -222,7 +257,7 @@ export class VersusScene {
     c.fillStyle = '#000'; c.globalAlpha = 0.4; c.fillRect(0, 0, VIEW_W, 16); c.globalAlpha = 1;
     c.font = '9px monospace';
     c.fillStyle = '#7fc6ff'; c.textAlign = 'left'; c.fillText('J1  ' + this.kos[0] + ' KO', 6, 11);
-    c.fillStyle = '#37c24a'; c.textAlign = 'right'; c.fillText(this.kos[1] + ' KO  J2', VIEW_W - 6, 11);
+    c.fillStyle = '#37c24a'; c.textAlign = 'right'; c.fillText(this.kos[1] + ' KO  ' + (this.mode === 'bot' ? 'IA' : 'J2'), VIEW_W - 6, 11);
     c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(String(this.timeLeft).padStart(2,'0'), VIEW_W/2, 11);
     c.textAlign = 'left';
   }

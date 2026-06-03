@@ -85,10 +85,13 @@ const moveScript = (t, act) => {
 
 let errors = 0;
 function fakeGame(input) {
+  const gemStore = {};
   return {
     input, art,
     togglePause() {}, gameOver() { this._go = true; }, gameComplete() { this._gc = true; },
-    saveProgress() {}, endVersus() { this._ev = true; }, _go: false, _gc: false, _ev: false,
+    saveProgress() {}, endVersus() { this._ev = true; },
+    getGems(k) { return gemStore[k] || 0; }, setGems(k, n) { gemStore[k] = n; },
+    _go: false, _gc: false, _ev: false,
   };
 }
 
@@ -117,6 +120,9 @@ for (let w = 0; w < WORLDS.length; w++) {
 const netStub = { relay() {}, on() { return this; }, close() {} };
 runScene((g) => new VersusScene(g, { mode: 'local', arenaIdx: 0 }), 'VERSUS local A0', 1200);
 runScene((g) => new VersusScene(g, { mode: 'local', arenaIdx: 1 }), 'VERSUS local A1', 1200);
+runScene((g) => new VersusScene(g, { mode: 'local', arenaIdx: 2 }), 'VERSUS local A2', 1200);
+runScene((g) => new VersusScene(g, { mode: 'bot', arenaIdx: 0 }), 'VERSUS vs IA A0', 1500);
+runScene((g) => new VersusScene(g, { mode: 'bot', arenaIdx: 2 }), 'VERSUS vs IA A2', 1500);
 runScene((g) => new VersusScene(g, { mode: 'online', net: netStub, localId: 0, arenaIdx: 0 }), 'VERSUS online host', 1200);
 runScene((g) => new VersusScene(g, { mode: 'online', net: netStub, localId: 1, arenaIdx: 0 }), 'VERSUS online guest', 1200);
 

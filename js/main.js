@@ -106,6 +106,11 @@ class Game {
     this.scene = new VersusScene(this, { mode: 'local', arenaIdx });
     this.checkOrientation();
   }
+  startVersusBot(arenaIdx = 0) {
+    this.clearUI(); this.mode = 'versus'; this.paused = false;
+    this.scene = new VersusScene(this, { mode: 'bot', arenaIdx });
+    this.checkOrientation();
+  }
   startVersusOnline(net, localId, arenaIdx) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
     this.net = net;
@@ -114,6 +119,8 @@ class Game {
   }
 
   saveProgress(world, level) { const u = Save.get('unlocked', 0); if (world > u) Save.set('unlocked', world); }
+  getGems(key) { return Save.get(key, 0); }
+  setGems(key, n) { Save.set(key, n); }
   gameOver(score) { this.bestScore(score); setTimeout(() => this.showGameOver(score), 1800); }
   gameComplete(score) { this.bestScore(score); this.showComplete(score); }
   bestScore(s) { if (s > Save.get('best', 0)) Save.set('best', s); }
@@ -138,6 +145,7 @@ class Game {
       <div class="title"><span class="big">BIGMARIO</span><span class="sub">PLATEFORME RÉTRO</span></div>
       <div class="menu-list">
         <button class="btn" id="b-solo">▶ Aventure (Solo)</button>
+        <button class="btn secondary" id="b-vs-bot">🤖 Versus vs IA</button>
         <button class="btn secondary" id="b-vs-local">⚔ Versus local (2 joueurs)</button>
         <button class="btn secondary" id="b-vs-online">🌐 Versus en ligne</button>
         <button class="btn ghost" id="b-options">⚙ Options & Aide</button>
@@ -145,6 +153,7 @@ class Game {
       <p class="hint">Clavier: ◀▶ déplacer • Espace sauter • J tir • Échap pause.<br>Manette et tactile détectés automatiquement.</p>
     `);
     p.querySelector('#b-solo').onclick = () => { resumeAudio(); this.showWorldSelect(); };
+    p.querySelector('#b-vs-bot').onclick = () => { resumeAudio(); this.showArenaSelect('bot'); };
     p.querySelector('#b-vs-local').onclick = () => { resumeAudio(); this.showArenaSelect('local'); };
     p.querySelector('#b-vs-online').onclick = () => { resumeAudio(); this.showOnline(); };
     p.querySelector('#b-options').onclick = () => this.showOptions();
@@ -155,8 +164,10 @@ class Game {
     let cards = '';
     WORLDS.forEach((w, wi) => w.levels.forEach((l, li) => {
       const locked = wi > unlocked;
+      const g = this.getGems(`gems.${wi}-${li}`);
+      const gemTxt = !locked && g > 0 ? ` ◆${g}` : '';
       cards += `<div class="lvl-card" data-w="${wi}" data-l="${li}" ${locked ? 'data-lock="1"' : ''} style="${locked ? 'opacity:.45' : ''}">
-        ${wi + 1}-${li + 1}<small>${locked ? '🔒' : l.name.replace(/^[0-9-]+\s*/, '')}</small></div>`;
+        ${wi + 1}-${li + 1}<small>${locked ? '🔒' : l.name.replace(/^[0-9-]+\s*/, '') + gemTxt}</small></div>`;
     }));
     const p = this.panel(`
       <div class="title"><span class="big" style="font-size:34px">AVENTURE</span></div>
@@ -173,10 +184,13 @@ class Game {
 
   showArenaSelect(mode, net, localId) {
     let cards = ARENAS.map((a, i) => `<div class="lvl-card" data-i="${i}">${a.name}<small>${a.theme}</small></div>`).join('');
+    const sub = mode === 'online' ? 'EN LIGNE' : mode === 'bot' ? 'CONTRE L\'IA' : 'LOCAL — 2 JOUEURS';
     const p = this.panel(`
-      <div class="title"><span class="big" style="font-size:34px">VERSUS</span><span class="sub">${mode === 'online' ? 'EN LIGNE' : 'LOCAL — 2 JOUEURS'}</span></div>
+      <div class="title"><span class="big" style="font-size:34px">VERSUS</span><span class="sub">${sub}</span></div>
       <p class="hint">${mode === 'local'
         ? 'J1: ◀▶ + Espace + J. J2: F/H + T + U. (ou 2 manettes)'
+        : mode === 'bot'
+        ? 'Affronte le bot. Premier à 5 KO ou meilleur score au temps.'
         : 'Premier à 5 KO ou meilleur score à la fin du temps.'}</p>
       <div class="grid-levels">${cards}</div>
       <div class="row" style="margin-top:16px"><button class="btn ghost" id="back">← Retour</button></div>
@@ -185,6 +199,7 @@ class Game {
       card.onclick = () => {
         const i = +card.dataset.i;
         if (mode === 'online') this.startVersusOnline(net, localId, i);
+        else if (mode === 'bot') this.startVersusBot(i);
         else this.startVersusLocal(i);
       };
     });
@@ -284,4 +299,10 @@ Game.prototype.startVersusOnline = function (net, localId, arenaIdx) {
   _origStartOnline.call(this, net, localId, arenaIdx);
 };
 
-window.addEventListener('load', () => { window.GAME = new Game(); });
+window.addEventListener('load', () => {
+  window.GAME = new Game();
+  // PWA: installation + jeu hors-ligne
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+});

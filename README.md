@@ -11,11 +11,14 @@ en ligne.
 > niveaux, la musique et le code sont créés de zéro et générés par code, donc
 > librement hébergeables et partageables.
 
-- 🕹️ **Jouable au clavier, à la manette, et au tactile** (overlay en mode paysage sur téléphone).
-- 🧩 **Aventure solo** : plusieurs mondes et niveaux, ennemis, power-ups (champignon / fleur de feu / étoile), blocs, tuyaux, drapeau d'arrivée.
-- ⚔️ **Versus** : à 2 sur le même écran **ou en ligne** (premier à 5 KO).
+- 🕹️ **Jouable au clavier, à la manette, et au tactile** (overlay en mode paysage sur téléphone, vibration).
+- 🧩 **Aventure solo** : 3 mondes / 6 niveaux, **combat de boss**, ennemis variés (marcheur, carapace, volant, **à pics**), power-ups (champignon / fleur de feu / étoile), blocs, tuyaux, drapeau d'arrivée.
+- 🪜 **Mécaniques** : **ressorts**, **plateformes mobiles**, **checkpoints**, **gemmes cachées** (3/niveau, sauvegardées).
+- ✨ **Game feel** : screen-shake, hit-stop, cartes d'intro de niveau, particules.
+- ⚔️ **Versus** : **contre l'IA**, à 2 sur le même écran, **ou en ligne** (premier à 5 KO), 3 arènes.
+- 📲 **PWA** : installable sur l'écran d'accueil et **jouable hors-ligne**.
 - 🎵 Musique chiptune et bruitages **générés en temps réel** (aucun fichier audio).
-- 💸 **Hébergement gratuit** : le jeu est 100 % statique (GitHub Pages), le serveur versus tient sur un offre gratuite (Render).
+- 💸 **Hébergement gratuit** : le jeu est 100 % statique (GitHub Pages), le serveur versus tient sur une offre gratuite (Render).
 
 ---
 
