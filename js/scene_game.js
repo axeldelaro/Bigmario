@@ -15,10 +15,10 @@ export class GameScene {
     this.speedrun = !!opts.speedrun;
     this.runMs = 0; this.runFinished = false;
     this.recorder = this.speedrun ? new GhostRecorder() : null;
-    this.ghost = null;
+    this.ghosts = []; // [{g:GhostPlayer, glow, label}]
     if (this.speedrun) {
       const data = GhostStore.load(`${worldIdx}-${levelIdx}`);
-      if (data) { const g = new GhostPlayer(data); if (g.valid) this.ghost = g; }
+      if (data) { const g = new GhostPlayer(data); if (g.valid) this.ghosts.push({ g, glow: '#46d8ff', label: 'PB' }); }
     }
     this.cam = { x: 0, y: 0 };
     this.particles = []; this.floats = []; this.fireballs = []; this.hazards = [];
@@ -322,7 +322,7 @@ export class GameScene {
     if (this.boss) this.boss.draw(c, this.cam);
     for (const hz of this.hazards) hz.draw(c, this.cam);
     for (const fb of this.fireballs) fb.draw(c, this.cam);
-    if (this.ghost) this.drawGhost(c);
+    for (const gh of this.ghosts) this.drawGhost(c, gh);
     if (!this.player.dead || this.player.deathT < 9) this.player.draw(c, this.cam);
     for (const p of this.particles) p.draw(c, this.cam);
     for (const f of this.floats) f.draw(c, this.cam);
@@ -342,12 +342,24 @@ export class GameScene {
     c.font = '13px monospace'; c.textAlign = 'center';
     c.fillStyle = '#000'; c.fillText(t, VIEW_W / 2 + 1, 27);
     c.fillStyle = this.state === 'levelclear' ? '#46d8ff' : '#fff'; c.fillText(t, VIEW_W / 2, 26);
-    if (this.ghost) { c.fillStyle = '#b9a8e6'; c.font = '7px monospace'; c.fillText('👻 fantôme', VIEW_W / 2, 36); }
+    if (this.ghosts.length) {
+      c.font = '7px monospace'; c.textAlign = 'center';
+      const labels = this.ghosts.map((g) => g.label).join(' · ');
+      c.fillStyle = '#b9a8e6'; c.fillText('👻 ' + labels, VIEW_W / 2, 36);
+    }
     c.textAlign = 'left';
   }
 
-  drawGhost(c) {
-    const pose = this.ghost.poseAt(this.runMs);
+  addGhost(data, opts = {}) {
+    const g = new GhostPlayer(data);
+    if (!g.valid) return;
+    // évite les doublons de label
+    this.ghosts = this.ghosts.filter((e) => e.label !== opts.label);
+    this.ghosts.push({ g, glow: opts.glow || '#ffd23b', label: opts.label || 'WR' });
+  }
+
+  drawGhost(c, entry) {
+    const pose = entry.g.poseAt(this.runMs);
     if (!pose) return;
     const A = this.game.art.hero;
     const big = pose.power >= 1;
@@ -361,7 +373,8 @@ export class GameScene {
     const x = Math.round(pose.x - this.cam.x) - 2;
     const y = Math.round(pose.y - this.cam.y) - (big ? 12 : 1);
     c.save();
-    c.globalAlpha = 0.4;
+    c.globalAlpha = 0.42;
+    c.shadowColor = entry.glow; c.shadowBlur = 6;
     if (pose.dir < 0) { c.translate(x + 8, 0); c.scale(-1, 1); c.translate(-(x + 8), 0); }
     c.drawImage(img, x, y);
     c.restore();

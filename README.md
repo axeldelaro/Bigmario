@@ -15,6 +15,8 @@ en ligne.
 - 🗺️ **Carte du monde** animée pour choisir ses niveaux.
 - 🧩 **Aventure solo** : 3 mondes / **9 niveaux**, **combat de boss**, ennemis variés (marcheur, carapace, volant, **à pics**), power-ups (champignon / fleur de feu / étoile), blocs, tuyaux, drapeau d'arrivée.
 - ⏱️ **Contre-la-montre** : chrono au **millième de seconde**, retry instantané, **meilleurs temps locaux** et **classements en ligne**.
+- 👻 **Fantômes** : rejoue ton record (PB) **et** le fantôme du **record en ligne** (WR) côte à côte ; en versus, affronte un **fantôme rival** (rejoue un adversaire d'un match précédent).
+- ⏸️ **Menu pause tactile** (Reprendre / Recommencer / Son / Menu) et **réglage son mémorisé**.
 - 🪜 **Mécaniques** : **ressorts**, **plateformes mobiles**, **checkpoints**, **gemmes cachées** (3/niveau, sauvegardées).
 - ✨ **Game feel** : screen-shake, hit-stop, cartes d'intro de niveau, particules.
 - ⚔️ **Versus** : **contre l'IA**, à 2 sur le même écran, **ou en ligne** (premier à 5 KO), 3 arènes.

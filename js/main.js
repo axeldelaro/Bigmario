@@ -31,6 +31,7 @@ class Game {
     this.paused = false;
     this.mode = 'menu'; // menu | game | versus | map
     this.net = null;
+    if (Save.get('muted', false)) toggleMute(); // restaure le réglage son
     this.resize();
     addEventListener('resize', () => this.resize());
     addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
@@ -69,7 +70,10 @@ class Game {
   loop(t) {
     const dt = Math.min(0.05, (t - this.last) / 1000); this.last = t;
     this.input.update();
-    if (this.scene && !this.paused && this.mode !== 'menu') {
+    if (this.paused) {
+      if (this.input.justPressed('pause', 0)) this.togglePause();
+      this.acc = 0;
+    } else if (this.scene && this.mode !== 'menu') {
       // pas fixe pour la physique
       this.acc += dt;
       const step = 1 / 120; let n = 0;
@@ -85,35 +89,57 @@ class Game {
 
   drawPauseOverlay() {
     ctx.fillStyle = '#000'; ctx.globalAlpha = 0.55; ctx.fillRect(0, 0, VIEW_W, VIEW_H); ctx.globalAlpha = 1;
-    ctx.fillStyle = '#fff'; ctx.font = '16px monospace'; ctx.textAlign = 'center';
-    ctx.fillText('PAUSE', VIEW_W / 2, VIEW_H / 2 - 4);
-    ctx.font = '8px monospace';
-    ctx.fillText('Échap/Start: reprendre  •  M: menu', VIEW_W / 2, VIEW_H / 2 + 12);
-    ctx.textAlign = 'left';
-    if (this.input.justPressed('pause', 0)) this.togglePause();
   }
 
   togglePause() {
-    if (this.mode === 'menu') return;
+    if (this.mode !== 'game' && this.mode !== 'versus') return;
     this.paused = !this.paused; SFX.pause();
-    if (this.paused) { this._pauseKeyHandler = (e) => { if (e.code === 'KeyM') this.returnToMenu(); }; addEventListener('keydown', this._pauseKeyHandler); }
-    else if (this._pauseKeyHandler) { removeEventListener('keydown', this._pauseKeyHandler); this._pauseKeyHandler = null; }
+    if (this.paused) this.showPausePanel();
+    else { ui.classList.add('hidden'); ui.innerHTML = ''; }
+  }
+
+  showPausePanel() {
+    const canRestart = !!this._restart;
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:32px">PAUSE</span></div>
+      <div class="menu-list">
+        <button class="btn" id="resume">▶ Reprendre</button>
+        ${canRestart ? '<button class="btn secondary" id="restart">↻ Recommencer</button>' : ''}
+        <button class="btn ghost" id="mute2"></button>
+        <button class="btn ghost" id="pmenu">Menu principal</button>
+      </div>`);
+    p.querySelector('#resume').onclick = () => this.togglePause();
+    if (canRestart) p.querySelector('#restart').onclick = () => { this.paused = false; ui.classList.add('hidden'); this._restart(); };
+    const mb = p.querySelector('#mute2');
+    const setLbl = () => (mb.textContent = isMuted() ? '🔇 Son: COUPÉ' : '🔊 Son: ON');
+    setLbl();
+    mb.onclick = () => { const m = toggleMute(); Save.set('muted', m); setLbl(); };
+    p.querySelector('#pmenu').onclick = () => { this.paused = false; this.returnToMenu(); };
   }
 
   // ---------- Transitions ----------
   startSolo(worldIdx = 0, levelIdx = 0) {
     this.clearUI(); this.mode = 'game'; this.paused = false;
+    this._restart = () => this.startSolo(worldIdx, levelIdx);
     this.scene = new GameScene(this, worldIdx, levelIdx);
     this.checkOrientation();
   }
   startVersusLocal(arenaIdx = 0) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
+    this._restart = () => this.startVersusLocal(arenaIdx);
     this.scene = new VersusScene(this, { mode: 'local', arenaIdx });
     this.checkOrientation();
   }
   startVersusBot(arenaIdx = 0) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
+    this._restart = () => this.startVersusBot(arenaIdx);
     this.scene = new VersusScene(this, { mode: 'bot', arenaIdx });
+    this.checkOrientation();
+  }
+  startVersusRival(arenaIdx = 0) {
+    this.clearUI(); this.mode = 'versus'; this.paused = false;
+    this._restart = () => this.startVersusRival(arenaIdx);
+    this.scene = new VersusScene(this, { mode: 'rival', arenaIdx });
     this.checkOrientation();
   }
   showMap(mode = 'solo') {
@@ -123,8 +149,17 @@ class Game {
   }
   startSpeedrun(worldIdx = 0, levelIdx = 0) {
     this.clearUI(); this.mode = 'game'; this.paused = false;
+    this._restart = () => this.startSpeedrun(worldIdx, levelIdx);
     this.scene = new GameScene(this, worldIdx, levelIdx, null, { speedrun: true });
     this.checkOrientation();
+    // fantôme du record en ligne (asynchrone)
+    const levelId = `${worldIdx}-${levelIdx}`;
+    Leaderboard.fetchGhost(levelId).then((res) => {
+      const s = this.scene;
+      if (res && res.data && s && s.speedrun && s.worldIdx === worldIdx && s.levelIdx === levelIdx) {
+        s.addGhost(res.data, { glow: '#ffd23b', label: 'WR ' + (res.name || '').slice(0, 8) });
+      }
+    });
   }
   startVersusOnline(net, localId, arenaIdx) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
@@ -186,9 +221,10 @@ class Game {
       p.querySelector('#submit').onclick = async () => {
         const nm = p.querySelector('#pname').value.trim() || 'JOUEUR';
         Save.set('playerName', nm); st.textContent = 'Envoi…';
-        const r = await Leaderboard.submit(levelId, nm, ms);
-        st.textContent = r ? '✓ Temps envoyé !' : '❌ Échec de l’envoi.';
-        renderBoard(await Leaderboard.fetchTop(levelId));
+        const pbGhost = GhostStore.load(levelId) || ghostData;
+        const r = await Leaderboard.submit(levelId, nm, ms, pbGhost);
+        st.textContent = r ? `✓ Envoyé ! Tu es Nº ${r.rank}${r.total ? '/' + r.total : ''}` : '❌ Échec de l’envoi.';
+        renderBoard(r && r.scores ? r.scores : await Leaderboard.fetchTop(levelId));
       };
     }
     p.querySelector('#retry').onclick = () => this.startSpeedrun(worldIdx, levelIdx);
@@ -212,6 +248,7 @@ class Game {
         <button class="btn" id="b-solo">🗺 Aventure (carte du monde)</button>
         <button class="btn" id="b-speed">⏱ Contre-la-montre</button>
         <button class="btn secondary" id="b-vs-bot">🤖 Versus vs IA</button>
+        <button class="btn secondary" id="b-vs-rival">🏁 Versus vs Fantôme rival</button>
         <button class="btn secondary" id="b-vs-local">⚔ Versus local (2 joueurs)</button>
         <button class="btn secondary" id="b-vs-online">🌐 Versus en ligne</button>
         <button class="btn ghost" id="b-options">⚙ Options & Aide</button>
@@ -221,6 +258,7 @@ class Game {
     p.querySelector('#b-solo').onclick = () => { resumeAudio(); this.showMap('solo'); };
     p.querySelector('#b-speed').onclick = () => { resumeAudio(); this.showMap('speedrun'); };
     p.querySelector('#b-vs-bot').onclick = () => { resumeAudio(); this.showArenaSelect('bot'); };
+    p.querySelector('#b-vs-rival').onclick = () => { resumeAudio(); this.showArenaSelect('rival'); };
     p.querySelector('#b-vs-local').onclick = () => { resumeAudio(); this.showArenaSelect('local'); };
     p.querySelector('#b-vs-online').onclick = () => { resumeAudio(); this.showOnline(); };
     p.querySelector('#b-options').onclick = () => this.showOptions();
@@ -250,14 +288,19 @@ class Game {
   }
 
   showArenaSelect(mode, net, localId) {
-    let cards = ARENAS.map((a, i) => `<div class="lvl-card" data-i="${i}">${a.name}<small>${a.theme}</small></div>`).join('');
-    const sub = mode === 'online' ? 'EN LIGNE' : mode === 'bot' ? 'CONTRE L\'IA' : 'LOCAL — 2 JOUEURS';
+    let cards = ARENAS.map((a, i) => {
+      const hasGhost = mode === 'rival' && GhostStore.has(`vghost.${i}`);
+      return `<div class="lvl-card" data-i="${i}">${a.name}<small>${a.theme}${hasGhost ? ' 👻' : ''}</small></div>`;
+    }).join('');
+    const sub = mode === 'online' ? 'EN LIGNE' : mode === 'bot' ? "CONTRE L'IA" : mode === 'rival' ? 'FANTÔME RIVAL' : 'LOCAL — 2 JOUEURS';
     const p = this.panel(`
       <div class="title"><span class="big" style="font-size:34px">VERSUS</span><span class="sub">${sub}</span></div>
       <p class="hint">${mode === 'local'
         ? 'J1: ◀▶ + Espace + J. J2: F/H + T + U. (ou 2 manettes)'
         : mode === 'bot'
         ? 'Affronte le bot. Premier à 5 KO ou meilleur score au temps.'
+        : mode === 'rival'
+        ? "Affronte le fantôme d'un match précédent (👻). Sans fantôme, c'est l'IA — ton match en crée un !"
         : 'Premier à 5 KO ou meilleur score à la fin du temps.'}</p>
       <div class="grid-levels">${cards}</div>
       <div class="row" style="margin-top:16px"><button class="btn ghost" id="back">← Retour</button></div>
@@ -267,6 +310,7 @@ class Game {
         const i = +card.dataset.i;
         if (mode === 'online') this.startVersusOnline(net, localId, i);
         else if (mode === 'bot') this.startVersusBot(i);
+        else if (mode === 'rival') this.startVersusRival(i);
         else this.startVersusLocal(i);
       };
     });
@@ -331,7 +375,7 @@ class Game {
       </div>
       <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• Champignon = grandir, Fleur = tir, Étoile = invincible.<br>• Saute sur les ennemis pour les vaincre.<br>• Manette : A saut, X tir, Start pause.</p>
     `);
-    p.querySelector('#mute').onclick = (e) => { const m = toggleMute(); e.target.textContent = m ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'; };
+    p.querySelector('#mute').onclick = (e) => { const m = toggleMute(); Save.set('muted', m); e.target.textContent = m ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'; };
     p.querySelector('#fs').onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };
     p.querySelector('#reset').onclick = () => { Save.set('unlocked', 0); Save.set('best', 0); this.showOptions(); };
     p.querySelector('#back').onclick = () => this.showTitle();

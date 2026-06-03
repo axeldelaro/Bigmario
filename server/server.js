@@ -15,13 +15,21 @@ const rooms = new Map(); // roomId -> [ws, ws]
 
 // ---- Classement (contre-la-montre) ----
 const SCORES_FILE = path.join(__dirname, 'scores.json');
+const GHOSTS_FILE = path.join(__dirname, 'ghosts.json');
 const MAX_PER_LEVEL = 50;
+const MAX_GHOST_POINTS = 12000; // ~4000 échantillons (x,y,pose)
 let scores = {}; // levelId -> [{name, ms, ts}]
+let ghosts = {}; // levelId -> {name, ms, data:{dt,f}}  (fantôme du record)
 try { scores = JSON.parse(fs.readFileSync(SCORES_FILE, 'utf8')); } catch { scores = {}; }
+try { ghosts = JSON.parse(fs.readFileSync(GHOSTS_FILE, 'utf8')); } catch { ghosts = {}; }
 let saveTimer = null;
 function persist() {
   if (saveTimer) return;
-  saveTimer = setTimeout(() => { saveTimer = null; fs.writeFile(SCORES_FILE, JSON.stringify(scores), () => {}); }, 1000);
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    fs.writeFile(SCORES_FILE, JSON.stringify(scores), () => {});
+    fs.writeFile(GHOSTS_FILE, JSON.stringify(ghosts), () => {});
+  }, 1000);
 }
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -29,6 +37,10 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type',
 };
 function sendJSON(res, code, obj) { res.writeHead(code, { 'Content-Type': 'application/json', ...CORS }); res.end(JSON.stringify(obj)); }
+function validGhost(g) {
+  return g && typeof g === 'object' && Number.isFinite(g.dt) && Array.isArray(g.f)
+    && g.f.length >= 6 && g.f.length <= MAX_GHOST_POINTS && g.f.every((v) => Number.isFinite(v));
+}
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://x');
@@ -38,12 +50,20 @@ const server = http.createServer((req, res) => {
     const level = String(url.searchParams.get('level') || '');
     const limit = Math.min(50, parseInt(url.searchParams.get('limit') || '10', 10) || 10);
     const list = (scores[level] || []).slice(0, limit);
-    return sendJSON(res, 200, { level, scores: list });
+    const wr = ghosts[level];
+    return sendJSON(res, 200, { level, scores: list, hasGhost: !!wr, ghostName: wr ? wr.name : null });
+  }
+
+  if (url.pathname === '/api/ghost' && req.method === 'GET') {
+    const level = String(url.searchParams.get('level') || '');
+    const g = ghosts[level];
+    if (!g) return sendJSON(res, 200, { ghost: null });
+    return sendJSON(res, 200, { ghost: g.data, name: g.name, ms: g.ms });
   }
 
   if (url.pathname === '/api/scores' && req.method === 'POST') {
     let body = '';
-    req.on('data', (c) => { body += c; if (body.length > 1e4) req.destroy(); });
+    req.on('data', (c) => { body += c; if (body.length > 2e5) req.destroy(); });
     req.on('end', () => {
       let m; try { m = JSON.parse(body); } catch { return sendJSON(res, 400, { error: 'bad json' }); }
       const level = String(m.level || '').slice(0, 16);
@@ -57,9 +77,13 @@ const server = http.createServer((req, res) => {
       else list.push({ name, ms, ts: Date.now() });
       list.sort((a, b) => a.ms - b.ms);
       if (list.length > MAX_PER_LEVEL) list.length = MAX_PER_LEVEL;
+      // si ce temps devient le record du niveau, on garde son fantôme
+      if (list[0].name === name && list[0].ms === ms && validGhost(m.ghost)) {
+        ghosts[level] = { name, ms, data: { dt: Math.round(m.ghost.dt), f: m.ghost.f } };
+      }
       persist();
       const rank = list.findIndex((s) => s.name === name) + 1;
-      return sendJSON(res, 200, { ok: true, rank, scores: list.slice(0, 10) });
+      return sendJSON(res, 200, { ok: true, rank, total: list.length, scores: list.slice(0, 10) });
     });
     return;
   }

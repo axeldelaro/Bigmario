@@ -1,5 +1,6 @@
 node_modules/
 server/scores.json
+server/ghosts.json
 *.log
 .DS_Store
 .env

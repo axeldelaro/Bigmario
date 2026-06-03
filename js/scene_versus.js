@@ -6,13 +6,14 @@ import { Level } from './level.js';
 import { Player, Enemy, Coin, PowerUp, Fireball, Particle, FloatText } from './entities.js';
 import { SFX, playMusic } from './audio.js';
 import { ARENAS } from './levels.js';
+import { GhostRecorder, GhostPlayer, GhostStore } from './ghost.js';
 
 const KO_TO_WIN = 5;
 
 export class VersusScene {
   constructor(game, opts = {}) {
     this.game = game;
-    this.mode = opts.mode || 'local'; // 'local' | 'online'
+    this.mode = opts.mode || 'local'; // 'local' | 'bot' | 'rival' | 'online'
     this.net = opts.net || null;
     this.localId = opts.localId ?? 0; // index du joueur contrôlé en ligne
     this.arenaIdx = opts.arenaIdx ?? 0;
@@ -22,6 +23,14 @@ export class VersusScene {
     this.over = false; this.winner = -1; this.stateT = 0;
     this.netAcc = 0; this.remoteBuf = null;
     this.kos = [0, 0];
+    // Fantôme rival: enregistre le joueur 0 (hors ligne) pour créer un adversaire fantôme
+    this.matchMs = 0;
+    this.rec = (this.mode !== 'online') ? new GhostRecorder() : null;
+    this.rivalGhost = null;
+    if (this.mode === 'rival') {
+      const data = GhostStore.load(`vghost.${this.arenaIdx}`);
+      if (data) { const g = new GhostPlayer(data); if (g.valid) this.rivalGhost = g; }
+    }
     this.load();
     if (this.mode === 'online' && this.net) this.bindNet();
   }
@@ -73,7 +82,8 @@ export class VersusScene {
   burst(x, y, col, n = 8) { for (let i = 0; i < n; i++) this.particles.push(new Particle(x, y, rand(-120,120), rand(-120,20), col, rand(0.3,0.7), 2)); }
 
   inputFor(idx) {
-    if (this.mode === 'bot' && idx === 1) return this.aiInput();
+    // joueur 1 piloté par l'IA en mode bot, ou en mode rival sans fantôme enregistré
+    if (idx === 1 && (this.mode === 'bot' || (this.mode === 'rival' && !this.rivalGhost))) return this.aiInput();
     const I = this.game.input;
     // en ligne, le joueur local utilise le contrôleur 0; en local, p0=clavier1/manette1, p1=clavier2/manette2
     const player = this.mode === 'online' ? 0 : idx;
@@ -117,6 +127,21 @@ export class VersusScene {
     };
   }
 
+  // Pilote l'adversaire (joueur 1) en rejouant un fantôme enregistré (boucle).
+  puppetRival(dt) {
+    const r = this.players[1];
+    const dur = this.rivalGhost.n * this.rivalGhost.dt;
+    const pose = this.rivalGhost.poseAt(dur > 0 ? this.matchMs % dur : 0);
+    if (!pose) return;
+    if (pose.power >= 1 && r.power === 'small') { r.power = 'big'; r.setSize(true); }
+    const prevY = r.y;
+    r.x = pose.x; r.y = pose.y;
+    r.vy = dt > 0 ? (r.y - prevY) / dt : 0; // vitesse verticale dérivée (pour l'écrasement)
+    r.vx = 0; r.dir = pose.dir; r.onGround = !pose.air;
+    if (pose.moving) r.walkT += dt * 8;
+    if (r.invuln > 0) r.invuln -= dt;
+  }
+
   respawn(p, idx) {
     const s = this.spawnPts[idx];
     p.x = s.x; p.y = s.y; p.vx = 0; p.vy = 0; p.dead = false; p.deathT = 0;
@@ -134,8 +159,11 @@ export class VersusScene {
     if (this.timeLeft <= 0 && !this.over) this.finishByScore();
 
     if (this.mode !== 'online') {
+      this.matchMs += dt * 1000;
       this.players[0].update(dt, this.level, this, this.inputFor(0));
-      this.players[1].update(dt, this.level, this, this.inputFor(1));
+      if (this.rec && !this.over) this.rec.update(dt, this.players[0], this.matchMs);
+      if (this.mode === 'rival' && this.rivalGhost && !this.players[1].dead) this.puppetRival(dt);
+      else this.players[1].update(dt, this.level, this, this.inputFor(1));
       this.resolveCombat(0, 1); this.resolveCombat(1, 0);
     } else {
       const me = this.players[this.localId];
@@ -227,6 +255,8 @@ export class VersusScene {
     if (this.over) return;
     this.over = true; this.winner = winner; this.stateT = 0;
     SFX.win();
+    // sauvegarde le déplacement du joueur comme fantôme rival pour cette arène
+    if (this.rec) { const d = this.rec.data(); if (d.f.length >= 60) GhostStore.save(`vghost.${this.arenaIdx}`, d); }
     if (this.mode === 'online' && this.localId === 0) this.net.relay({ t: 'end', winner });
   }
   endByPeer() { this.finish(this.localId); }
@@ -244,8 +274,8 @@ export class VersusScene {
     if (this.over) {
       const txt = this.winner < 0 ? 'ÉGALITÉ !' : (this.mode === 'online'
         ? (this.winner === this.localId ? 'VICTOIRE !' : 'DÉFAITE')
-        : this.mode === 'bot'
-        ? (this.winner === 0 ? 'VICTOIRE !' : 'L\'IA GAGNE')
+        : (this.mode === 'bot' || this.mode === 'rival')
+        ? (this.winner === 0 ? 'VICTOIRE !' : (this.mode === 'rival' ? 'LE RIVAL GAGNE' : 'L\'IA GAGNE'))
         : `JOUEUR ${this.winner + 1} GAGNE !`);
       c.fillStyle = '#000'; c.globalAlpha = 0.55; c.fillRect(0, VIEW_H/2-18, VIEW_W, 36); c.globalAlpha = 1;
       c.font = '16px monospace'; c.textAlign = 'center';
@@ -257,7 +287,8 @@ export class VersusScene {
     c.fillStyle = '#000'; c.globalAlpha = 0.4; c.fillRect(0, 0, VIEW_W, 16); c.globalAlpha = 1;
     c.font = '9px monospace';
     c.fillStyle = '#7fc6ff'; c.textAlign = 'left'; c.fillText('J1  ' + this.kos[0] + ' KO', 6, 11);
-    c.fillStyle = '#37c24a'; c.textAlign = 'right'; c.fillText(this.kos[1] + ' KO  ' + (this.mode === 'bot' ? 'IA' : 'J2'), VIEW_W - 6, 11);
+    const p2label = this.mode === 'bot' ? 'IA' : this.mode === 'rival' ? '👻RIVAL' : 'J2';
+    c.fillStyle = '#37c24a'; c.textAlign = 'right'; c.fillText(this.kos[1] + ' KO  ' + p2label, VIEW_W - 6, 11);
     c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(String(this.timeLeft).padStart(2,'0'), VIEW_W/2, 11);
     c.textAlign = 'left';
   }

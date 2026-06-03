@@ -155,6 +155,25 @@ import { GhostRecorder, GhostPlayer, GhostStore } from '../js/ghost.js';
   if (!g.valid || !pose) { console.error('GHOST FAIL'); errors++; }
   // rejouer un speedrun avec fantôme chargé (exerce drawGhost)
   runScene((gg) => new GameScene(gg, 0, 0, null, { speedrun: true }), 'SPEEDRUN 1-1 +ghost', 800);
+  // multi-fantômes: ajouter un 2e fantôme (WR) en cours de scène
+  {
+    const game = fakeGame(makeInput(moveScript));
+    const sc = new GameScene(game, 0, 0, null, { speedrun: true });
+    sc.addGhost(GhostStore.load('0-0'), { glow: '#ffd23b', label: 'WR TEST' });
+    let ok = sc.ghosts.length >= 1;
+    for (let i = 0; i < 600; i++) { game.input.update(); sc.update(1 / 120); if (i % 2 === 0) sc.draw(ctxStub); }
+    console.log(`MULTI-GHOST: ${sc.ghosts.length} fantôme(s)`); if (!ok) errors++;
+  }
+  // fantôme rival en versus: seed un vghost d'arène puis lance le mode rival
+  {
+    const rec2 = new GhostRecorder();
+    const fp = { x: 40, y: 90, vx: 30, dir: -1, onGround: true, power: 'big', big: true };
+    for (let t = 0; t < 400; t++) { fp.x += (t % 80 < 40 ? 1 : -1); rec2.update(1 / 120, fp, t * (1000 / 120)); }
+    GhostStore.save('vghost.0', rec2.data());
+  }
+  runScene((g) => new VersusScene(g, { mode: 'rival', arenaIdx: 0 }), 'VERSUS rival (ghost)', 1500);
+  // rival sans fantôme -> repli IA (arène 1)
+  runScene((g) => new VersusScene(g, { mode: 'rival', arenaIdx: 1 }), 'VERSUS rival (fallback IA)', 1200);
 }
 
 console.log(errors === 0 ? '\n✅ SMOKE TEST PASSED (no runtime errors)' : `\n❌ ${errors} error(s)`);

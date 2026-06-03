@@ -39,16 +39,30 @@ export const Leaderboard = {
     } catch { return null; }
   },
 
-  async submit(levelId, name, ms) {
+  async submit(levelId, name, ms, ghost) {
     const base = this.apiBase();
     if (!base) return null;
     try {
+      const body = { level: levelId, name: (name || 'JOUEUR').slice(0, 12), ms: Math.round(ms) };
+      if (ghost && ghost.f && ghost.f.length) body.ghost = ghost;
       const r = await fetch(`${base}/api/scores`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ level: levelId, name: (name || 'JOUEUR').slice(0, 12), ms: Math.round(ms) }),
+        body: JSON.stringify(body),
       });
       if (!r.ok) return null;
       return await r.json();
+    } catch { return null; }
+  },
+
+  // Récupère le fantôme du record en ligne pour un niveau.
+  async fetchGhost(levelId) {
+    const base = this.apiBase();
+    if (!base) return null;
+    try {
+      const r = await fetch(`${base}/api/ghost?level=${encodeURIComponent(levelId)}`, { cache: 'no-store' });
+      if (!r.ok) return null;
+      const data = await r.json();
+      return data && data.ghost ? { data: data.ghost, name: data.name, ms: data.ms } : null;
     } catch { return null; }
   },
 };
