@@ -107,43 +107,51 @@ export class EnemyShot {
 // BOSS — à vaincre en sautant sur sa tête plusieurs fois
 export class Boss {
   constructor(x, y) {
-    this.x = x; this.y = y - 14; this.w = 30; this.h = 28; this.vx = -40; this.vy = 0;
-    this.dir = -1; this.hp = 3; this.t = 0; this.dead = false; this.removed = false;
-    this.invuln = 0; this.shootCd = 1.6; this.jumpCd = 2; this.flash = 0; this.intro = 0.6;
+    this.w = 48; this.h = 40;            // GROS boss
+    this.x = x - this.w / 2 + 8; this.y = y - this.h - 6; this.vx = -42; this.vy = 0;
+    this.dir = -1; this.maxHp = 5; this.hp = 5; this.t = 0; this.dead = false; this.removed = false;
+    this.invuln = 0; this.shootCd = 1.6; this.jumpCd = 2.2; this.flash = 0; this.intro = 0.7; this.wasGround = false;
   }
   hitTop(scene) {
     if (this.invuln > 0 || this.dead) return false;
-    this.hp--; this.invuln = 1.1; this.flash = 0.5; SFX.bosshit();
-    scene.addShake?.(6); scene.burst?.(this.x + 15, this.y, '#46b84a', 14);
-    this.vx = (this.vx > 0 ? 1 : -1) * (60 + (3 - this.hp) * 30);
-    if (this.hp <= 0) { this.dead = true; this.vy = -260; SFX.boom(); scene.onBossDefeated?.(this); }
+    this.hp--; this.invuln = 1.0; this.flash = 0.5; SFX.bosshit();
+    scene.addShake?.(7); scene.burst?.(this.x + this.w / 2, this.y + 6, '#46b84a', 18);
+    this.vx = (this.vx > 0 ? 1 : -1) * (70 + (this.maxHp - this.hp) * 26);
+    this.vy = -160;
+    if (this.hp <= 0) { this.dead = true; this.vy = -300; SFX.boom(); scene.onBossDefeated?.(this); }
     return true;
   }
   update(dt, level, scene) {
     this.t += dt;
     if (this.flash > 0) this.flash -= dt;
-    if (this.dead) { this.vy += GRAVITY * dt; this.x += this.vx * dt; this.y += this.vy * dt; if (this.y > level.pixelH + 60) this.removed = true; return; }
+    if (this.dead) { this.vy += GRAVITY * dt; this.x += this.vx * dt; this.y += this.vy * dt; if (this.y > level.pixelH + 80) this.removed = true; return; }
     if (this.intro > 0) { this.intro -= dt; return; }
     if (this.invuln > 0) this.invuln -= dt;
 
+    const rage = 1 + (this.maxHp - this.hp) * 0.12; // plus rapide en perdant des PV
     this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
     const r = level.moveAndCollide(this, dt);
     if (r.hitX) { this.vx = -this.vx; this.dir = -this.dir; }
-    // se retourne aux bords
+    // onde de choc à l'atterrissage d'un saut
+    if (r.onGround && !this.wasGround && scene.spawnHazard) {
+      scene.addShake?.(5);
+      scene.spawnHazard(new Shockwave(this.x + this.w / 2, this.y + this.h, -1));
+      scene.spawnHazard(new Shockwave(this.x + this.w / 2, this.y + this.h, 1));
+    }
+    this.wasGround = r.onGround;
     if (r.onGround) {
       const aheadX = this.vx > 0 ? this.x + this.w + 2 : this.x - 2;
       if (!level.solidAt(aheadX, this.y + this.h + 1)) { this.vx = -this.vx; this.dir = -this.dir; }
-      // saut périodique
       this.jumpCd -= dt;
-      if (this.jumpCd <= 0) { this.vy = -300; this.jumpCd = 1.8 + Math.random(); }
+      if (this.jumpCd <= 0) { this.vy = -330; this.jumpCd = (1.7 + Math.random()) / rage; }
     }
-    // tir vers le joueur
+    // tir vers le joueur (double tir en rage)
     this.shootCd -= dt;
     if (this.shootCd <= 0 && scene.player) {
-      this.shootCd = Math.max(0.8, 2.0 - (3 - this.hp) * 0.4);
-      const tgt = scene.player;
-      const dx = (tgt.x - this.x); const dir = dx > 0 ? 1 : -1;
-      scene.spawnHazard?.(new EnemyShot(this.x + 15, this.y + 8, dir * 90, -180));
+      this.shootCd = Math.max(0.6, 1.9 / rage);
+      const dir = (scene.player.x - this.x) > 0 ? 1 : -1;
+      scene.spawnHazard?.(new EnemyShot(this.x + this.w / 2, this.y + 12, dir * 95, -190));
+      if (this.hp <= 2) scene.spawnHazard?.(new EnemyShot(this.x + this.w / 2, this.y + 12, dir * 130, -120));
     }
     if (this.x < 0) { this.x = 0; this.vx = Math.abs(this.vx); }
     if (this.x > level.pixelW - this.w) { this.x = level.pixelW - this.w; this.vx = -Math.abs(this.vx); }
@@ -151,12 +159,34 @@ export class Boss {
   draw(c, cam) {
     if (this.flash > 0 && Math.floor(this.t * 30) % 2) return;
     const img = (Math.floor(this.t * 3) % 2) ? ART.boss.a : ART.boss.b;
-    const x = Math.round(this.x - cam.x) - 1, y = Math.round(this.y - cam.y);
+    const sw = img.width, sh = img.height;       // sprite source (~31x21)
+    const dw = this.w, dh = Math.round(sh * (this.w / sw));
+    const cx = Math.round(this.x + this.w / 2 - cam.x);
+    const topY = Math.round(this.y + this.h - dh - cam.y);
     c.save();
-    if (this.dir > 0) { c.translate(x + 15, 0); c.scale(-1, 1); c.translate(-(x + 15), 0); }
-    if (this.dead) { c.translate(x + 15, y + 14); c.rotate(this.t * 6); c.drawImage(img, -15, -14); }
-    else c.drawImage(img, x, y);
+    if (this.flash > 0) { c.shadowColor = '#fff'; c.shadowBlur = 6; }
+    c.translate(cx, dh / 2 + topY);
+    if (this.dir > 0) c.scale(-1, 1);
+    if (this.dead) c.rotate(this.t * 6);
+    c.drawImage(img, -dw / 2, -dh / 2, dw, dh);
     c.restore();
+  }
+}
+
+// Onde de choc au sol (boss) — à enjamber
+export class Shockwave {
+  constructor(x, y, dir) { this.x = x; this.y = y - 8; this.w = 10; this.h = 8; this.vx = 150 * dir; this.t = 0; this.dead = false; }
+  update(dt, level) {
+    this.t += dt; this.x += this.vx * dt;
+    if (this.t > 1.4 || this.x < -20 || this.x > level.pixelW + 20) this.dead = true;
+    if (level.solidAt(this.x + (this.vx > 0 ? this.w : 0), this.y + 4)) this.dead = true;
+  }
+  draw(c, cam) {
+    const x = Math.round(this.x - cam.x), y = Math.round(this.y - cam.y);
+    const a = Math.max(0, 1 - this.t / 1.4);
+    c.save(); c.globalAlpha = 0.9 * a; c.fillStyle = '#ffd23b';
+    c.beginPath(); c.moveTo(x, y + 8); c.lineTo(x + 5, y); c.lineTo(x + 10, y + 8); c.closePath(); c.fill();
+    c.globalAlpha = 0.5 * a; c.fillStyle = '#ff7b2e'; c.fillRect(x + 3, y + 4, 4, 4); c.restore();
   }
 }
 
@@ -292,7 +322,7 @@ export class Player {
     this.spawn = { x, y };
     this.bounce = 0; // étirement au saut
     this.squash = 0; // écrasement à l'atterrissage
-    this.wasGround = true; this.skidding = false;
+    this.wasGround = true; this.skidding = false; this.pounding = false;
     this.enterPipe = 0;
   }
 
@@ -382,8 +412,14 @@ export class Player {
     const maxSpeed = wantRun ? SPRINT_MAX : RUN_MAX;
     this.ducking = this.big && input.down && this.onGround;
 
+    // écrasement piqué (slam) : Bas en l'air -> chute rapide qui écrase les ennemis
+    if (!this.pounding && !this.onGround && input.downPressed && !this.win) {
+      this.pounding = true; this.vx = 0; this.vy = 30; SFX.stomp();
+    }
+    if (this.pounding && this.onGround) { this.pounding = false; }
+
     let ax = 0;
-    if (!this.ducking) {
+    if (!this.ducking && !this.pounding) {
       if (input.left) { ax -= (this.onGround ? RUN_ACCEL : AIR_ACCEL); this.dir = -1; }
       if (input.right) { ax += (this.onGround ? RUN_ACCEL : AIR_ACCEL); this.dir = 1; }
     }
@@ -405,19 +441,25 @@ export class Player {
 
     // gravité
     this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+    // slam : descente rapide forcée
+    if (this.pounding) { this.vy = 560; this.vx = 0; this.gliding = false; }
     // vol plané (plume): maintenir Saut en chute ralentit fortement la descente
-    this.gliding = false;
-    if (this.power === 'glide' && !this.onGround && this.vy > 0 && input.jump) {
-      this.vy = Math.min(this.vy, 95); this.gliding = true;
+    else {
+      this.gliding = false;
+      if (this.power === 'glide' && !this.onGround && this.vy > 0 && input.jump) {
+        this.vy = Math.min(this.vy, 95); this.gliding = true;
+      }
     }
 
     const fallV = this.vy;
-    const r = level.moveAndCollide(this, dt, { dropThrough: input.down && input.jumpPressed });
+    const wasPounding = this.pounding;
+    const r = level.moveAndCollide(this, dt, { dropThrough: input.down && input.jumpPressed && !this.pounding });
     this.onGround = r.onGround;
-    // atterrissage: écrasement + poussière
+    // atterrissage: écrasement + poussière (+ onde de choc si slam)
     if (!this.wasGround && this.onGround && fallV > 240) {
-      this.squash = Math.min(1, fallV / 480);
-      scene.dust?.(this.x + this.w / 2, this.y + this.h, Math.min(8, 3 + (fallV / 120) | 0));
+      this.squash = Math.min(1, fallV / 460);
+      scene.dust?.(this.x + this.w / 2, this.y + this.h, Math.min(10, 3 + (fallV / 110) | 0));
+      if (wasPounding) { this.pounding = false; this.squash = 1; scene.onPoundLand?.(this); }
     }
     this.wasGround = this.onGround;
     // dérapage: changement de direction au sol à vive allure -> poussière

@@ -89,7 +89,7 @@ export class VersusScene {
     const player = this.mode === 'online' ? 0 : idx;
     if (idx === 0 && I.justPressed('pause', 0)) this.game.togglePause();
     return {
-      left: I.isDown('left', player), right: I.isDown('right', player), down: I.isDown('down', player),
+      left: I.isDown('left', player), right: I.isDown('right', player), down: I.isDown('down', player), downPressed: I.justPressed('down', player),
       jump: I.isDown('jump', player), jumpPressed: I.justPressed('jump', player),
       fire: I.isDown('fire', player), firePressed: I.justPressed('fire', player), run: I.isDown('fire', player),
     };
@@ -210,7 +210,7 @@ export class VersusScene {
     if (b.invuln > 0) return;
     if (!aabb(a, b)) return;
     const aPrevFeet = a.prevFeet != null ? a.prevFeet : (a.y + a.h);
-    const fromAbove = a.vy > 0 && aPrevFeet <= b.y + 8;
+    const fromAbove = (a.vy > 0 && aPrevFeet <= b.y + 8) || a.pounding;
     if (fromAbove) {
       a.vy = -260; this.kos[aIdx]++; b.die(this); SFX.stomp(); this.burst(b.x+7, b.y+7, '#ff5d5d', 12);
       this.addFloat(b.x, b.y - 8, 'KO !', '#ffd23b');

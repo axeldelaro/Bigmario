@@ -552,7 +552,7 @@ class Game {
         <button class="btn danger" id="reset">🗑 Réinitialiser la progression</button>
         <button class="btn ghost" id="back">← Retour</button>
       </div>
-      <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• 🍄 grandir · 🔥 tir · ⭐ invincible · 🟢 1 vie · 🪶 <b>plume</b> = maintiens Saut en l'air pour <b>planer</b>.<br>• Enchaîne les écrasements en l'air pour des combos.<br>• Manette : A saut, X tir, Start pause.</p>
+      <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• 🍄 grandir · 🔥 tir · ⭐ invincible · 🟢 1 vie · 🪶 <b>plume</b> = maintiens Saut en l'air pour <b>planer</b>.<br>• Enchaîne les écrasements en l'air pour des combos.<br>• <b>Bas en l'air = écrasement piqué</b> (broie tout, même les pics).<br>• Manette : A saut, X tir, Start pause.</p>
     `);
     p.querySelector('#ach').onclick = () => this.showAchievements();
     p.querySelector('#friend').onclick = () => this.showFriend();

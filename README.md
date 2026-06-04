@@ -19,6 +19,8 @@ en ligne.
 - ⏱️ **Contre-la-montre** : chrono au **millième de seconde**, retry instantané, **meilleurs temps locaux** et **classements en ligne**.
 - 🏁 **Marathon** : les 9 niveaux d'affilée, un seul chrono, classement dédié.
 - 🔗 **Combos** : enchaîne les écrasements en l'air pour des points croissants (jusqu'au 1-UP), champignon vert **1-UP**.
+- 💥 **Écrasement piqué** : appuie sur **Bas** en l'air pour un slam qui broie tout (même les ennemis à pics) avec onde de choc.
+- 👹 **Gros boss** (Gardien) : grand, 5 PV, projectiles et onde de choc au sol — à vaincre par-dessus.
 - 👻 **Fantômes** : rejoue ton record (PB) **et** le fantôme du **record en ligne** (WR) côte à côte ; en versus, affronte un **fantôme rival** (rejoue un adversaire d'un match précédent).
 - 🎬 **Replays** : revois n'importe quel run (caméra qui suit, lecture/pause, vitesse 0.5×/1×/2×).
 - 👥 **Fantôme d'ami** : partage un run par **code court** (serveur) ou **fichier .bmr**, charge celui d'un ami pour le **revoir** ou **courir contre**.

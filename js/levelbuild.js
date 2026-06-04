@@ -17,7 +17,10 @@ function floorH(g) {
   for (let x = 0; x < W; x++) { g[0][x] = 'H'; g[10][x] = 'H'; g[11][x] = 'H'; }
   for (let y = 0; y < 12; y++) { g[y][0] = 'H'; g[y][W - 1] = 'H'; }
 }
-function pipe(g, col, top = 8) { for (let r = top; r <= 9; r++) g[r][col] = r === top ? 'P' : 'p'; }
+// tuyau 2 tuiles de large (P = tête, p = corps), reposant sur le sol (row 9)
+function pipe(g, col, top = 8) {
+  for (let dx = 0; dx < 2; dx++) for (let r = top; r <= 9; r++) g[r][col + dx] = (r === top ? 'P' : 'p');
+}
 // plateau de sol surélevé (le perso grimpe ; marche ≤ 3 tuiles)
 function mesa(g, x0, x1, top) { box(g, x0, x1, top, 11, 'X'); }
 // escalier de blocs durs montant (dir=1) ou descendant (dir=-1)
