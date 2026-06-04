@@ -147,8 +147,8 @@ function buildRenderer() {
   const key = new THREE.DirectionalLight(0xfff1d0, 2.0);
   key.position.set(-7, 14, 9);
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  key.shadow.radius = 4;
+  key.shadow.mapSize.set(1024, 1024); // équilibre qualité/perf (mobile)
+  key.shadow.radius = 3;
   const sc = key.shadow.camera;
   sc.left = -16; sc.right = 16; sc.top = 12; sc.bottom = -12; sc.near = 1; sc.far = 60;
   key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02;

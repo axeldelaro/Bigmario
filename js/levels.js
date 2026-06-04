@@ -21,6 +21,10 @@ export const WORLDS = [
     name: 'Cimes & Gardien',
     levels: [BUILT.L31, BUILT.L32, BUILT.L33],
   },
+  {
+    name: 'Orage & Gardien Suprême',
+    levels: [BUILT.L41, BUILT.L42, BUILT.L43],
+  },
 ];
 
 // Arènes versus (symétriques, bouclées par les bords)
