@@ -186,7 +186,51 @@ function L33() { // 3-3 Antre du Gardien — combat de boss avec plateformes d'e
   return { name: '3-3 Antre du Gardien', theme: 'castle', time: 220, map: rows(g) };
 }
 
+// =================== MONDE 4 ===================
+function L41() { // 4-1 Bourrasques — relief intense, ressorts, double route
+  const W = 124, g = grid(W); floorX(g, [[38, 40], [62, 64], [88, 90], [110, 112]]);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  stairs(g, 8, 9, 3, 1); mesa(g, 11, 18, 7); put(g, 6, 14, 'g'); coins(g, 5, 12, 3);
+  mesa(g, 19, 26, 8); put(g, 7, 22, 'k');
+  put(g, 9, 30, 'T'); put(g, 2, 30, 'j');           // ressort -> gemme haute
+  put(g, 5, 34, 'W');                               // plume
+  plat(g, 5, 44, 5); put(g, 4, 46, 'j'); plat(g, 4, 52, 4); // pont haut bonus
+  pipe(g, 56, 8);
+  put(g, 8, 70, 'C');                               // checkpoint
+  stairs(g, 72, 9, 2, 1); mesa(g, 74, 82, 8); put(g, 7, 78, 'k'); put(g, 5, 76, 'n');
+  plat(g, 4, 94, 5); put(g, 3, 96, 'j'); put(g, 9, 100, 'T'); put(g, 2, 100, 'j');
+  put(g, 6, 104, '?'); put(g, 6, 106, '?');
+  put(g, 9, 36, 'g'); put(g, 9, 48, 'z'); put(g, 9, 60, 'g'); put(g, 9, 86, 'z'); put(g, 9, 108, 'g'); put(g, 9, 118, 'k');
+  return { name: '4-1 Bourrasques', theme: 'overworld', time: 360, map: rows(g) };
+}
+function L42() { // 4-2 Donjon — château exigeant, pics, colonnes, deux routes
+  const W = 112, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  box(g, 18, 19, 1, 5, 'H'); box(g, 44, 45, 1, 5, 'H'); box(g, 72, 73, 1, 5, 'H'); // piliers suspendus
+  put(g, 9, 26, '^^'); put(g, 9, 52, '^^'); put(g, 9, 80, '^^');                   // pics au sol
+  plat(g, 7, 24, 4); plat(g, 7, 50, 5); plat(g, 6, 78, 5);                          // passerelles
+  plat(g, 4, 32, 6); put(g, 3, 34, 'j'); plat(g, 4, 86, 6); coins(g, 3, 87, 3);     // route haute
+  put(g, 6, 36, 'B?B'); put(g, 6, 66, 'BMB'); put(g, 5, 58, 'W');
+  pipe(g, 40, 8); pipe(g, 62, 8);
+  put(g, 8, 56, 'C');
+  put(g, 9, 14, 'k'); put(g, 9, 36, 'z'); put(g, 9, 58, 'k'); put(g, 9, 70, 'z'); put(g, 9, 96, 'k');
+  put(g, 6, 51, 'g');
+  return { name: '4-2 Donjon', theme: 'castle', time: 360, map: rows(g) };
+}
+function L43() { // 4-3 Gardien Suprême — boss en grande arène
+  const W = 60, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S');
+  plat(g, 5, 8, 5); plat(g, 5, 46, 5); plat(g, 6, 26, 8);  // plateformes d'esquive
+  plat(g, 3, 18, 5); plat(g, 3, 36, 5);
+  put(g, 3, 10, 'M'); put(g, 3, 48, 'W'); put(g, 2, 20, 'U'); // fleu de feu, plume, étoile
+  put(g, 5, 28, 'j'); put(g, 5, 31, 'j');
+  coins(g, 8, 14, 3); coins(g, 8, 40, 3);
+  put(g, 9, 30, 'O');
+  return { name: '4-3 Gardien Suprême', theme: 'castle', time: 240, map: rows(g) };
+}
+
 export const BUILT = {
   L11: L11(), L12: L12(), L13: L13(), L21: L21(), L22: L22(), L23: L23(),
   L31: L31(), L32: L32(), L33: L33(),
+  L41: L41(), L42: L42(), L43: L43(),
 };
