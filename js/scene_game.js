@@ -206,11 +206,15 @@ export class GameScene {
   ridePlatform(p, pf) {
     if (p.dead) return;
     const feet = p.y + p.h;
-    const within = p.x + p.w > pf.x + 2 && p.x < pf.x + pf.w - 2;
+    const prevFeet = p.prevFeet != null ? p.prevFeet : feet;
+    const within = p.x + p.w > pf.x + 1 && p.x < pf.x + pf.w - 1;
     if (!within) return;
-    if (p.vy >= -1 && feet >= pf.y - 2 && feet <= pf.y + pf.h + 7) {
-      p.y = pf.y - p.h; p.vy = 0; p.onGround = true;
-      p.x += pf.dx; p.y += pf.dy;
+    // atterri sur le dessus ce frame (était au-dessus, descend) OU déjà posé dessus
+    const landed = p.vy >= 0 && prevFeet <= pf.y + 3 && feet >= pf.y - 1;
+    const resting = p.vy >= -1 && feet >= pf.y - 2 && feet <= pf.y + pf.h;
+    if (landed || resting) {
+      p.y = pf.y - p.h; p.vy = 0; p.onGround = true; p.coyote = 0.09;
+      p.x += pf.dx; p.y += pf.dy; // porté par la plateforme
     }
   }
 
@@ -228,7 +232,9 @@ export class GameScene {
       if (e.dead || e.removed || e.state === 'flat') continue;
       if (!aabb(p, e)) continue;
       if (p.star > 0) { e.kill(p.x < e.x ? 1 : -1); p.addScore(100, this); this.burst(e.x + 7, e.y + 7, '#ffd23b', 8); continue; }
-      const fromAbove = (p.y + p.h) - e.y < 12 && p.vy > 40;
+      // écrasement fiable: les pieds étaient au-dessus de l'ennemi et on descend
+      const prevFeet = p.prevFeet != null ? p.prevFeet : (p.y + p.h);
+      const fromAbove = p.vy > 0 && prevFeet <= e.y + 8;
 
       if (e.type === 'spiky') { if (!p.win) p.hurt(this); continue; } // instompable
 
@@ -240,7 +246,12 @@ export class GameScene {
           else { e.vx = 0; SFX.stomp(); }
           p.vy = bounce(); this.freeze = 0.02;
         } else if (still && !p.win) { e.dir = p.x < e.x ? 1 : -1; e.vx = e.dir * 150; SFX.kick(); }
-        else if (!p.win) p.hurt(this);
+        else if (!p.win) {
+          // une carapace lancée ne blesse que si elle vient VERS le joueur (pas celle qu'on vient de tirer)
+          const movingShell = e.state === 'shell' && Math.abs(e.vx) >= 10;
+          const toward = (e.vx > 0 && e.x < p.x) || (e.vx < 0 && e.x > p.x);
+          if (!movingShell || toward) p.hurt(this);
+        }
         continue;
       }
 
@@ -254,7 +265,8 @@ export class GameScene {
     if (!b || b.dead || p.dead || p.win) return;
     if (!aabb(p, b)) return;
     if (p.star > 0) { b.hitTop(this); p.vy = -240; return; }
-    const fromAbove = (p.y + p.h) - b.y < 16 && p.vy > 30;
+    const prevFeet = p.prevFeet != null ? p.prevFeet : (p.y + p.h);
+    const fromAbove = p.vy > 0 && prevFeet <= b.y + 12;
     if (fromAbove) { if (b.hitTop(this)) { p.vy = (this.curInput && this.curInput.jump ? -320 : -240); this.freeze = 0.08; } }
     else p.hurt(this);
   }

@@ -135,8 +135,9 @@ export class VersusScene {
     if (!pose) return;
     if (pose.power >= 1 && r.power === 'small') { r.power = 'big'; r.setSize(true); }
     const prevY = r.y;
+    r.prevFeet = r.y + r.h;
     r.x = pose.x; r.y = pose.y;
-    r.vy = dt > 0 ? (r.y - prevY) / dt : 0; // vitesse verticale dérivée (pour l'écrasement)
+    r.vy = dt > 0 ? clamp((r.y - prevY) / dt, -400, 400) : 0; // vitesse verticale dérivée (écrasement)
     r.vx = 0; r.dir = pose.dir; r.onGround = !pose.air;
     if (pose.moving) r.walkT += dt * 8;
     if (r.invuln > 0) r.invuln -= dt;
@@ -208,7 +209,8 @@ export class VersusScene {
     if (a.dead || b.dead) return;
     if (b.invuln > 0) return;
     if (!aabb(a, b)) return;
-    const fromAbove = (a.y + a.h) - b.y < 12 && a.vy > 30 && a.y < b.y;
+    const aPrevFeet = a.prevFeet != null ? a.prevFeet : (a.y + a.h);
+    const fromAbove = a.vy > 0 && aPrevFeet <= b.y + 8;
     if (fromAbove) {
       a.vy = -260; this.kos[aIdx]++; b.die(this); SFX.stomp(); this.burst(b.x+7, b.y+7, '#ff5d5d', 12);
       this.addFloat(b.x, b.y - 8, 'KO !', '#ffd23b');

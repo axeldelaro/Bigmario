@@ -128,37 +128,67 @@ export class Level {
   // ---------- Rendu ----------
   drawBackground(c, cam) {
     const theme = this.theme;
-    if (theme === 'underground') c.fillStyle = '#08111f';
-    else if (theme === 'castle') c.fillStyle = '#160e12';
-    else c.fillStyle = '#5fa8ff';
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+    // ciel en dégradé
+    let g;
+    try { g = c.createLinearGradient(0, 0, 0, VIEW_H); } catch { g = null; }
+    if (theme === 'underground') { if (g) { g.addColorStop(0, '#0a1830'); g.addColorStop(1, '#040a16'); } c.fillStyle = g || '#08111f'; }
+    else if (theme === 'castle') { if (g) { g.addColorStop(0, '#241019'); g.addColorStop(1, '#0e0608'); } c.fillStyle = g || '#160e12'; }
+    else { if (g) { g.addColorStop(0, '#6fc0ff'); g.addColorStop(0.7, '#9fd6ff'); g.addColorStop(1, '#cdecff'); } c.fillStyle = g || '#5fa8ff'; }
     c.fillRect(0, 0, VIEW_W, VIEW_H);
 
     if (theme === 'overworld') {
-      // collines parallax
+      // soleil + halo
+      c.fillStyle = '#fff7d0'; c.globalAlpha = 0.9;
+      c.beginPath(); c.arc(VIEW_W - 48, 38, 14, 0, 7); c.fill();
+      c.globalAlpha = 0.2; c.beginPath(); c.arc(VIEW_W - 48, 38, 24, 0, 7); c.fill(); c.globalAlpha = 1;
+      // montagnes lointaines (parallaxe lente)
+      const m = (cam.x * 0.12) % 180;
+      c.fillStyle = '#7fa8d8';
+      for (let i = -1; i < VIEW_W / 180 + 2; i++) {
+        const bx = i * 180 - m;
+        c.beginPath(); c.moveTo(bx, VIEW_H - 20); c.lineTo(bx + 50, VIEW_H - 78); c.lineTo(bx + 100, VIEW_H - 20); c.fill();
+        c.fillStyle = '#fff'; c.beginPath(); c.moveTo(bx + 42, VIEW_H - 66); c.lineTo(bx + 50, VIEW_H - 78); c.lineTo(bx + 58, VIEW_H - 66); c.fill();
+        c.fillStyle = '#7fa8d8';
+      }
+      // collines proches
       const off = (cam.x * 0.3) % 160;
-      c.fillStyle = '#3fa24a';
+      c.fillStyle = '#46b454';
       for (let i = -1; i < VIEW_W / 160 + 2; i++) {
         const bx = i * 160 - off;
-        c.beginPath(); c.arc(bx + 40, VIEW_H - 16, 36, Math.PI, 0); c.fill();
-        c.beginPath(); c.arc(bx + 110, VIEW_H - 16, 24, Math.PI, 0); c.fill();
+        c.beginPath(); c.arc(bx + 40, VIEW_H - 14, 40, Math.PI, 0); c.fill();
+        c.beginPath(); c.arc(bx + 112, VIEW_H - 14, 26, Math.PI, 0); c.fill();
       }
-      // nuages
-      const co = (cam.x * 0.15) % 200;
-      c.fillStyle = '#ffffffcc';
-      for (let i = -1; i < VIEW_W / 200 + 2; i++) {
-        const bx = i * 200 - co + 30;
-        cloud(c, bx, 28); cloud(c, bx + 120, 54);
-      }
+      // arbres/buissons
+      const to = (cam.x * 0.5) % 96;
+      for (let i = -1; i < VIEW_W / 96 + 2; i++) tree(c, i * 96 - to + 20, VIEW_H - 20);
+      // nuages animés
+      const co = (cam.x * 0.15 + now * 6) % 220;
+      c.fillStyle = '#ffffffe0';
+      for (let i = -1; i < VIEW_W / 220 + 2; i++) { const bx = i * 220 - co + 30; cloud(c, bx, 26); cloud(c, bx + 130, 50); }
     } else if (theme === 'underground') {
-      c.fillStyle = '#0e1c33';
-      const off = (cam.x * 0.25) % 64;
-      for (let x = -64; x < VIEW_W + 64; x += 64) for (let y = 0; y < VIEW_H; y += 64) {
-        c.fillRect(x - off + 28, y + 20, 8, 24);
+      // veines minérales + cristaux scintillants
+      const off = (cam.x * 0.25) % 80;
+      c.strokeStyle = '#16263f'; c.lineWidth = 3;
+      for (let x = -80; x < VIEW_W + 80; x += 80) {
+        c.beginPath(); c.moveTo(x - off, 0); c.lineTo(x - off + 30, 60); c.lineTo(x - off + 10, 120); c.lineTo(x - off + 40, VIEW_H); c.stroke();
+      }
+      for (let i = 0; i < 14; i++) {
+        const x = ((i * 73) - cam.x * 0.3) % (VIEW_W + 40); const px = (x + VIEW_W + 40) % (VIEW_W + 40) - 20;
+        const y = 24 + (i * 53) % (VIEW_H - 48);
+        const tw = 0.5 + 0.5 * Math.sin(now * 3 + i);
+        c.fillStyle = `rgba(80,200,255,${0.25 + tw * 0.4})`;
+        c.beginPath(); c.moveTo(px, y - 5); c.lineTo(px + 3, y); c.lineTo(px, y + 6); c.lineTo(px - 3, y); c.fill();
       }
     } else {
-      const off = (cam.x * 0.2) % 48;
-      c.fillStyle = '#241419';
-      for (let x = -48; x < VIEW_W + 48; x += 48) { c.fillRect(x - off, 0, 24, VIEW_H); }
+      // mur de briques sombre + torches vacillantes
+      const off = (cam.x * 0.2) % 32;
+      c.fillStyle = '#1d1216';
+      for (let y = 0; y < VIEW_H; y += 16) for (let x = -32; x < VIEW_W + 32; x += 32) {
+        c.fillRect(x - off + ((y / 16) % 2) * 16, y, 30, 14);
+      }
+      const so = (cam.x * 0.4) % 140;
+      for (let i = -1; i < VIEW_W / 140 + 2; i++) torch(c, i * 140 - so + 40, 36, now, i);
     }
   }
 
@@ -191,4 +221,22 @@ function cloud(c, x, y) {
   c.arc(x, y, 9, 0, Math.PI * 2); c.arc(x + 11, y, 12, 0, Math.PI * 2);
   c.arc(x + 24, y, 9, 0, Math.PI * 2); c.fillRect(x, y, 24, 10);
   c.fill();
+}
+
+function tree(c, x, baseY) {
+  c.fillStyle = '#6a3f1c'; c.fillRect(x + 6, baseY - 10, 4, 12);
+  c.fillStyle = '#2f8a3c';
+  c.beginPath(); c.arc(x + 8, baseY - 14, 9, 0, Math.PI * 2); c.arc(x + 1, baseY - 9, 6, 0, Math.PI * 2); c.arc(x + 15, baseY - 9, 6, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#3fa24a'; c.beginPath(); c.arc(x + 6, baseY - 16, 5, 0, Math.PI * 2); c.fill();
+}
+
+function torch(c, x, y, now, seed) {
+  const flick = 0.7 + 0.3 * Math.sin(now * 12 + seed * 2.1);
+  c.fillStyle = '#3a2a1a'; c.fillRect(x - 1, y, 3, 16);             // support
+  c.fillStyle = `rgba(255,170,40,${0.25 * flick})`;                 // halo
+  c.beginPath(); c.arc(x, y - 2, 12 * flick, 0, Math.PI * 2); c.fill();
+  c.fillStyle = '#ffcb3b'; c.beginPath();                           // flamme
+  c.moveTo(x - 3, y); c.quadraticCurveTo(x, y - 11 * flick, x + 3, y); c.fill();
+  c.fillStyle = '#ff7b2e'; c.beginPath();
+  c.moveTo(x - 2, y); c.quadraticCurveTo(x, y - 7 * flick, x + 2, y); c.fill();
 }

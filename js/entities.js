@@ -8,6 +8,14 @@ import { SFX } from './audio.js';
 let ART = null;
 export function setArt(a) { ART = a; }
 
+// ombre au sol (ellipse douce) pour donner de la profondeur
+export function shadow(c, cx, cy, w, alpha = 1) {
+  c.save();
+  c.globalAlpha = 0.28 * alpha; c.fillStyle = '#000';
+  c.beginPath(); c.ellipse(Math.round(cx), Math.round(cy) - 1, w / 2, 2.2, 0, 0, Math.PI * 2); c.fill();
+  c.restore();
+}
+
 // ---------------------------------------------------------------------------
 export class Particle {
   constructor(x, y, vx, vy, col, life = 0.6, size = 2, grav = 600) {
@@ -256,6 +264,7 @@ export class Enemy {
 
   draw(c, cam) {
     const x = Math.round(this.x - cam.x) - 1, y = Math.round(this.y - cam.y) - 2;
+    if (!this.dead) shadow(c, this.x + this.w / 2 - cam.x, this.y + this.h - cam.y, this.w * 0.7, this.type === 'fly' ? 0.4 : 1);
     let img;
     if (this.type === 'fly') img = (Math.floor(this.t * 12) % 2) ? ART.fly.a : ART.fly.b;
     else if (this.type === 'spiky') img = (Math.floor(this.t * 8) % 2) ? ART.spiky.a : ART.spiky.b;
@@ -293,9 +302,22 @@ export class Player {
     if (!big && wasBig) this.y += 12;
   }
 
+  // évite de rester encastré dans un plafond après avoir grandi
+  unstick(level) {
+    if (!level) return;
+    let guard = 0;
+    while (guard++ < 20) {
+      const lx = Math.floor((this.x + 2) / TILE);
+      const rx = Math.floor((this.x + this.w - 2) / TILE);
+      const ty = Math.floor(this.y / TILE);
+      if (level.isSolid(level.tile(lx, ty)) || level.isSolid(level.tile(rx, ty))) this.y++;
+      else break;
+    }
+  }
+
   grow(kind, scene) {
-    if (kind === 'mushroom') { if (this.power === 'small') { this.power = 'big'; this.setSize(true); SFX.power(); } else this.addScore(1000, scene); }
-    else if (kind === 'flower') { this.power = 'fire'; this.setSize(true); SFX.power(); }
+    if (kind === 'mushroom') { if (this.power === 'small') { this.power = 'big'; this.setSize(true); this.unstick(scene && scene.level); SFX.power(); } else this.addScore(1000, scene); }
+    else if (kind === 'flower') { const was = this.power; this.power = 'fire'; this.setSize(true); if (was === 'small') this.unstick(scene && scene.level); SFX.power(); }
     else if (kind === 'star') { this.star = 9; SFX.power(); }
     this.invuln = Math.max(this.invuln, 0.2);
   }
@@ -335,6 +357,7 @@ export class Player {
   // input: {left,right,jump(held),jumpPressed,fire(pressed),down}
   update(dt, level, scene, input) {
     this.t += dt;
+    this.prevFeet = this.y + this.h; // position des pieds avant déplacement (écrasement fiable)
     if (this.dead) {
       this.deathT += dt; this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
       this.y += this.vy * dt; return;
@@ -419,6 +442,9 @@ export class Player {
     else if (!this.onGround && !this.dead) img = set.jump;
     else if (moving) img = (Math.floor(this.walkT) % 2) ? set.walk : set.idle;
     else img = set.idle;
+
+    // ombre au sol
+    shadow(c, this.x + this.w / 2 - cam.x, this.y + this.h - cam.y, this.w * 0.7, this.onGround ? 1 : 0.5);
 
     c.save();
     if (this.star > 0) { // halo d'invincibilité

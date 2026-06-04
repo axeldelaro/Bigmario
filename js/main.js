@@ -86,9 +86,35 @@ class Game {
     // rendu
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
     if (this.scene) this.scene.draw(ctx);
-    else { ctx.fillStyle = '#120a26'; ctx.fillRect(0, 0, VIEW_W, VIEW_H); }
+    else this.drawMenuBackdrop();
     if (this.paused) this.drawPauseOverlay();
     requestAnimationFrame((tt) => this.loop(tt));
+  }
+
+  // décor animé derrière les menus
+  drawMenuBackdrop() {
+    const t = performance.now() / 1000;
+    let g; try { g = ctx.createLinearGradient(0, 0, 0, VIEW_H); } catch { g = null; }
+    if (g) { g.addColorStop(0, '#3a1f6e'); g.addColorStop(0.6, '#241252'); g.addColorStop(1, '#120a26'); ctx.fillStyle = g; }
+    else ctx.fillStyle = '#1a1030';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+    // étoiles scintillantes
+    for (let i = 0; i < 50; i++) {
+      const x = (i * 71) % VIEW_W, y = (i * 37) % (VIEW_H - 40);
+      ctx.globalAlpha = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 2 + i));
+      ctx.fillStyle = i % 5 === 0 ? '#ffd23b' : '#fff';
+      ctx.fillRect(x, y, 1, 1);
+    }
+    ctx.globalAlpha = 1;
+    // collines
+    ctx.fillStyle = '#2a1a55';
+    for (let i = 0; i < 5; i++) { ctx.beginPath(); ctx.arc(i * 80 + 20, VIEW_H + 6, 40, Math.PI, 0); ctx.fill(); }
+    ctx.fillStyle = '#3a2575';
+    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(i * 90 + 60, VIEW_H + 12, 30, Math.PI, 0); ctx.fill(); }
+    // héros qui salue (petit sprite qui sautille)
+    const hop = Math.max(0, Math.sin(t * 2.5)) * 6;
+    const img = this.art.hero.smallIdle;
+    if (img) ctx.drawImage(img, 24, VIEW_H - 30 - hop);
   }
 
   drawPauseOverlay() {
@@ -297,23 +323,35 @@ class Game {
     const p = this.panel(`
       <div class="title"><span class="big">BIGMARIO</span><span class="sub">PLATEFORME RÉTRO</span></div>
       <div class="menu-list">
-        <button class="btn" id="b-solo">🗺 Aventure (carte du monde)</button>
+        <button class="btn" id="b-solo">🗺 Aventure</button>
         <button class="btn" id="b-speed">⏱ Contre-la-montre</button>
-        <button class="btn secondary" id="b-vs-bot">🤖 Versus vs IA</button>
-        <button class="btn secondary" id="b-vs-rival">🏁 Versus vs Fantôme rival</button>
-        <button class="btn secondary" id="b-vs-local">⚔ Versus local (2 joueurs)</button>
-        <button class="btn secondary" id="b-vs-online">🌐 Versus en ligne</button>
+        <button class="btn secondary" id="b-vs">⚔ Versus</button>
         <button class="btn ghost" id="b-options">⚙ Options & Aide</button>
       </div>
       <p class="hint">Clavier: ◀▶ déplacer • Espace sauter • J tir • Échap pause.<br>Manette et tactile détectés automatiquement.</p>
     `);
     p.querySelector('#b-solo').onclick = () => { resumeAudio(); this.showMap('solo'); };
     p.querySelector('#b-speed').onclick = () => { resumeAudio(); this.showMap('speedrun'); };
-    p.querySelector('#b-vs-bot').onclick = () => { resumeAudio(); this.showArenaSelect('bot'); };
-    p.querySelector('#b-vs-rival').onclick = () => { resumeAudio(); this.showArenaSelect('rival'); };
-    p.querySelector('#b-vs-local').onclick = () => { resumeAudio(); this.showArenaSelect('local'); };
-    p.querySelector('#b-vs-online').onclick = () => { resumeAudio(); this.showOnline(); };
+    p.querySelector('#b-vs').onclick = () => { resumeAudio(); this.showVersusMenu(); };
     p.querySelector('#b-options').onclick = () => this.showOptions();
+  }
+
+  showVersusMenu() {
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:34px">VERSUS</span><span class="sub">CHOISIS UN MODE</span></div>
+      <div class="menu-list">
+        <button class="btn" id="m-bot">🤖 Contre l'IA</button>
+        <button class="btn" id="m-rival">🏁 Contre un Fantôme rival</button>
+        <button class="btn secondary" id="m-local">👥 Local (2 joueurs)</button>
+        <button class="btn secondary" id="m-online">🌐 En ligne</button>
+        <button class="btn ghost" id="m-back">← Retour</button>
+      </div>
+    `);
+    p.querySelector('#m-bot').onclick = () => this.showArenaSelect('bot');
+    p.querySelector('#m-rival').onclick = () => this.showArenaSelect('rival');
+    p.querySelector('#m-local').onclick = () => this.showArenaSelect('local');
+    p.querySelector('#m-online').onclick = () => this.showOnline();
+    p.querySelector('#m-back').onclick = () => this.showTitle();
   }
 
   showWorldSelect() {
@@ -366,7 +404,7 @@ class Game {
         else this.startVersusLocal(i);
       };
     });
-    p.querySelector('#back').onclick = () => (mode === 'online' ? this.showOnline() : this.showTitle());
+    p.querySelector('#back').onclick = () => (mode === 'online' ? this.showOnline() : this.showVersusMenu());
   }
 
   showOnline() {
@@ -386,7 +424,7 @@ class Game {
       <p class="hint">Besoin d'un serveur gratuit ? Voir <span class="badge">README</span> : déploiement en 1 clic sur Render. Sans serveur, joue en <b>Versus local</b>.</p>
     `);
     const st = p.querySelector('#st');
-    p.querySelector('#back').onclick = () => this.showTitle();
+    p.querySelector('#back').onclick = () => this.showVersusMenu();
     p.querySelector('#connect').onclick = async () => {
       const u = p.querySelector('#srv').value.trim();
       const r = p.querySelector('#room').value.trim() || 'arene1';
