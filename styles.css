@@ -53,7 +53,9 @@ html, body {
   max-width: min(92vw, 520px);
   width: 100%;
   text-align: center;
+  animation: panel-in .22s cubic-bezier(.2,.9,.3,1.2) both;
 }
+@keyframes panel-in { from { opacity: 0; transform: translateY(8px) scale(.96); } to { opacity: 1; transform: none; } }
 
 .title {
   font-weight: 900;
@@ -62,7 +64,15 @@ html, body {
   margin-bottom: 6px;
   text-shadow: 0 3px 0 #000, 0 0 18px rgba(255,203,59,.5);
 }
-.title .big { display:block; font-size: clamp(34px, 9vw, 64px); color: var(--accent); }
+.title .big {
+  display:block; font-size: clamp(34px, 9vw, 64px);
+  background: linear-gradient(90deg, #ffcb3b, #ff8a3b, #ffe07a, #ffcb3b);
+  background-size: 300% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: var(--accent);
+  animation: shine 4s linear infinite;
+}
+@keyframes shine { to { background-position: 300% 0; } }
 .title .sub { display:block; font-size: clamp(11px, 3.2vw, 16px); color:#cdb8ff; letter-spacing:3px; margin-top:6px; }
 
 .menu-list { display: flex; flex-direction: column; gap: 12px; margin-top: 20px; }
@@ -80,7 +90,9 @@ button.btn {
   box-shadow: 0 5px 0 #00000088;
   transition: transform .05s, box-shadow .05s;
 }
-button.btn:hover { transform: translateY(-1px); }
+button.btn { position: relative; overflow: hidden; }
+button.btn::after { content: ''; position: absolute; inset: 0 0 60% 0; background: linear-gradient(rgba(255,255,255,.35), transparent); pointer-events: none; }
+button.btn:hover { transform: translateY(-1px); filter: brightness(1.06); }
 button.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #00000088; }
 button.btn.secondary { background: linear-gradient(#7fc6ff, #3a8fe0); color: #03203a; }
 button.btn.danger { background: linear-gradient(#ff9a9a, var(--accent2)); color:#3a0303; }

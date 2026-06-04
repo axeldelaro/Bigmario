@@ -7,6 +7,9 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="mobile-web-app-capable" content="yes" />
   <title>Bigmario — Plateforme rétro en ligne</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -20,6 +23,7 @@
     <div id="touch" class="touch-layer hidden">
       <div class="touch-left">
         <button class="tbtn" data-act="left" aria-label="Gauche">◀</button>
+        <button class="tbtn" data-act="down" aria-label="Bas">▼</button>
         <button class="tbtn" data-act="right" aria-label="Droite">▶</button>
       </div>
       <div class="touch-right">

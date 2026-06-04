@@ -75,6 +75,12 @@ export const SFX = {
   pause() { tone(660, 0.06, 'square', 0.2); },
   hit() { noise(0.1, 0.2); slide(600, 200, 0.12, 'sawtooth', 0.25); },
   count() { tone(1047, 0.05, 'square', 0.2); },
+  spring() { slide(300, 900, 0.18, 'square', 0.3); },
+  gem() { [1047, 1319, 1568, 2093].forEach((f, i) => setTimeout(() => tone(f, 0.09, 'triangle', 0.22), i * 45)); },
+  checkpoint() { [659, 880, 1175].forEach((f, i) => setTimeout(() => tone(f, 0.12, 'square', 0.25), i * 90)); },
+  bosshit() { noise(0.2, 0.35); slide(400, 80, 0.25, 'sawtooth', 0.35); },
+  boss() { slide(120, 60, 0.4, 'sawtooth', 0.35); },
+  boom() { noise(0.4, 0.4); slide(220, 40, 0.4, 'sawtooth', 0.35); },
 };
 
 // ---- Musique: boucles chiptune simples par thème ----

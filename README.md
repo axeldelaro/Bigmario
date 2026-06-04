@@ -11,11 +11,25 @@ en ligne.
 > niveaux, la musique et le code sont créés de zéro et générés par code, donc
 > librement hébergeables et partageables.
 
-- 🕹️ **Jouable au clavier, à la manette, et au tactile** (overlay en mode paysage sur téléphone).
-- 🧩 **Aventure solo** : plusieurs mondes et niveaux, ennemis, power-ups (champignon / fleur de feu / étoile), blocs, tuyaux, drapeau d'arrivée.
-- ⚔️ **Versus** : à 2 sur le même écran **ou en ligne** (premier à 5 KO).
+- 🕹️ **Jouable au clavier, à la manette, et au tactile** (overlay en mode paysage sur téléphone, vibration).
+- 🎨 **Décors détaillés** : ciel en dégradé, parallaxe multi-couches (montagnes, collines, arbres, nuages), cristaux scintillants et torches animées ; ombres au sol et menus animés.
+- 🗺️ **Carte du monde** animée pour choisir ses niveaux.
+- ✅ **Niveaux garantis franchissables** : un validateur physique headless (`test/solve.mjs`) simule le moteur réel et vérifie qu'un auto-joueur atteint l'arrivée de chaque niveau.
+- 🧩 **Aventure solo** : 3 mondes / **9 niveaux**, **combat de boss**, ennemis variés (marcheur, carapace, volant, **à pics**), power-ups (champignon / fleur de feu / étoile), blocs, tuyaux, drapeau d'arrivée.
+- ⏱️ **Contre-la-montre** : chrono au **millième de seconde**, retry instantané, **meilleurs temps locaux** et **classements en ligne**.
+- 🏁 **Marathon** : les 9 niveaux d'affilée, un seul chrono, classement dédié.
+- 🔗 **Combos** : enchaîne les écrasements en l'air pour des points croissants (jusqu'au 1-UP), champignon vert **1-UP**.
+- 👻 **Fantômes** : rejoue ton record (PB) **et** le fantôme du **record en ligne** (WR) côte à côte ; en versus, affronte un **fantôme rival** (rejoue un adversaire d'un match précédent).
+- 🎬 **Replays** : revois n'importe quel run (caméra qui suit, lecture/pause, vitesse 0.5×/1×/2×).
+- 👥 **Fantôme d'ami** : partage un run par **code court** (serveur) ou **fichier .bmr**, charge celui d'un ami pour le **revoir** ou **courir contre**.
+- 🥇 **Médailles** (or/argent/bronze) par temps de référence, **succès** à débloquer.
+- ⏸️ **Menu pause tactile** (Reprendre / Recommencer / Son / Menu) et **réglage son mémorisé**.
+- 🪜 **Mécaniques** : **ressorts**, **plateformes mobiles**, **checkpoints**, **gemmes cachées** (3/niveau, sauvegardées).
+- ✨ **Game feel** : screen-shake, hit-stop, cartes d'intro de niveau, particules.
+- ⚔️ **Versus** : **contre l'IA**, à 2 sur le même écran, **ou en ligne** (premier à 5 KO), 3 arènes.
+- 📲 **PWA** : installable sur l'écran d'accueil et **jouable hors-ligne**.
 - 🎵 Musique chiptune et bruitages **générés en temps réel** (aucun fichier audio).
-- 💸 **Hébergement gratuit** : le jeu est 100 % statique (GitHub Pages), le serveur versus tient sur un offre gratuite (Render).
+- 💸 **Hébergement gratuit** : le jeu est 100 % statique (GitHub Pages), le serveur versus tient sur une offre gratuite (Render).
 
 ---
 
@@ -77,6 +91,17 @@ Partage le **même code de salon** à ton adversaire et lancez-vous.
 > la première connexion peut prendre ~30 s, c'est normal.
 
 Hébergeurs alternatifs gratuits compatibles : **Railway**, **Glitch**, **Fly.io**, **Cyclic**.
+
+### 3. Les classements en ligne (contre-la-montre)
+Le **même serveur** sert aussi de classement : il expose une petite API REST
+(`GET /api/scores?level=ID`, `POST /api/scores`). Le jeu réutilise
+automatiquement l'adresse configurée pour le versus (le `wss://` est converti en
+`https://` pour l'API). Les temps sont **toujours sauvegardés en local** ; s'il y
+a un serveur, le jeu propose d'**envoyer ton temps** et affiche le top 10.
+
+> Les temps sont stockés dans `server/scores.json`. Sur une offre gratuite, le
+> disque peut être réinitialisé lors d'un redéploiement (les records locaux, eux,
+> restent).
 
 ---
 

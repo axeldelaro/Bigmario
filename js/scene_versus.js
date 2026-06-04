@@ -6,13 +6,14 @@ import { Level } from './level.js';
 import { Player, Enemy, Coin, PowerUp, Fireball, Particle, FloatText } from './entities.js';
 import { SFX, playMusic } from './audio.js';
 import { ARENAS } from './levels.js';
+import { GhostRecorder, GhostPlayer, GhostStore } from './ghost.js';
 
 const KO_TO_WIN = 5;
 
 export class VersusScene {
   constructor(game, opts = {}) {
     this.game = game;
-    this.mode = opts.mode || 'local'; // 'local' | 'online'
+    this.mode = opts.mode || 'local'; // 'local' | 'bot' | 'rival' | 'online'
     this.net = opts.net || null;
     this.localId = opts.localId ?? 0; // index du joueur contrôlé en ligne
     this.arenaIdx = opts.arenaIdx ?? 0;
@@ -22,6 +23,14 @@ export class VersusScene {
     this.over = false; this.winner = -1; this.stateT = 0;
     this.netAcc = 0; this.remoteBuf = null;
     this.kos = [0, 0];
+    // Fantôme rival: enregistre le joueur 0 (hors ligne) pour créer un adversaire fantôme
+    this.matchMs = 0;
+    this.rec = (this.mode !== 'online') ? new GhostRecorder() : null;
+    this.rivalGhost = null;
+    if (this.mode === 'rival') {
+      const data = GhostStore.load(`vghost.${this.arenaIdx}`);
+      if (data) { const g = new GhostPlayer(data); if (g.valid) this.rivalGhost = g; }
+    }
     this.load();
     if (this.mode === 'online' && this.net) this.bindNet();
   }
@@ -73,6 +82,8 @@ export class VersusScene {
   burst(x, y, col, n = 8) { for (let i = 0; i < n; i++) this.particles.push(new Particle(x, y, rand(-120,120), rand(-120,20), col, rand(0.3,0.7), 2)); }
 
   inputFor(idx) {
+    // joueur 1 piloté par l'IA en mode bot, ou en mode rival sans fantôme enregistré
+    if (idx === 1 && (this.mode === 'bot' || (this.mode === 'rival' && !this.rivalGhost))) return this.aiInput();
     const I = this.game.input;
     // en ligne, le joueur local utilise le contrôleur 0; en local, p0=clavier1/manette1, p1=clavier2/manette2
     const player = this.mode === 'online' ? 0 : idx;
@@ -82,6 +93,54 @@ export class VersusScene {
       jump: I.isDown('jump', player), jumpPressed: I.justPressed('jump', player),
       fire: I.isDown('fire', player), firePressed: I.justPressed('fire', player), run: I.isDown('fire', player),
     };
+  }
+
+  // IA simple pour le bot (joueur 2)
+  aiInput() {
+    const me = this.players[1], foe = this.players[0];
+    this._ai = this._ai || { jumpT: 0, fireT: 0, jumpPressed: false, firePressed: false };
+    const ai = this._ai;
+    ai.jumpT -= 1 / 120; ai.fireT -= 1 / 120;
+    const dx = foe.x - me.x, ady = me.y - foe.y;
+    const wantRight = dx > 4, wantLeft = dx < -4;
+    // sauter pour passer au-dessus de l'adversaire, franchir un mur, ou éviter un vide
+    let jump = false;
+    const aheadX = me.dir > 0 ? me.x + me.w + 2 : me.x - 2;
+    const wallAhead = this.level.solidAt(aheadX, me.y + me.h - 4);
+    const gapAhead = !this.level.solidAt(aheadX, me.y + me.h + 4);
+    if (me.onGround && ai.jumpT <= 0) {
+      if (Math.abs(dx) < 40 && foe.y >= me.y - 4) { jump = true; }      // sauter sur sa tête
+      else if (wallAhead || gapAhead) jump = true;
+      else if (Math.random() < 0.02) jump = true;
+      if (jump) ai.jumpT = 0.5 + Math.random() * 0.4;
+    }
+    ai.jumpPressed = jump;
+    // tir si à portée horizontale et à peu près même hauteur
+    let firePressed = false;
+    if (me.power === 'fire' && ai.fireT <= 0 && Math.abs(ady) < 24 && Math.abs(dx) < 140 && (dx > 0) === (me.dir > 0)) {
+      firePressed = true; ai.fireT = 0.6 + Math.random() * 0.5;
+    }
+    return {
+      left: wantLeft, right: wantRight, down: false,
+      jump: jump || (me.vy < 0 && Math.random() < 0.6), jumpPressed: jump,
+      fire: firePressed, firePressed, run: Math.abs(dx) > 80,
+    };
+  }
+
+  // Pilote l'adversaire (joueur 1) en rejouant un fantôme enregistré (boucle).
+  puppetRival(dt) {
+    const r = this.players[1];
+    const dur = this.rivalGhost.n * this.rivalGhost.dt;
+    const pose = this.rivalGhost.poseAt(dur > 0 ? this.matchMs % dur : 0);
+    if (!pose) return;
+    if (pose.power >= 1 && r.power === 'small') { r.power = 'big'; r.setSize(true); }
+    const prevY = r.y;
+    r.prevFeet = r.y + r.h;
+    r.x = pose.x; r.y = pose.y;
+    r.vy = dt > 0 ? clamp((r.y - prevY) / dt, -400, 400) : 0; // vitesse verticale dérivée (écrasement)
+    r.vx = 0; r.dir = pose.dir; r.onGround = !pose.air;
+    if (pose.moving) r.walkT += dt * 8;
+    if (r.invuln > 0) r.invuln -= dt;
   }
 
   respawn(p, idx) {
@@ -100,9 +159,12 @@ export class VersusScene {
     if (this.timeAcc >= 1) { this.timeAcc -= 1; this.timeLeft = Math.max(0, this.timeLeft - 1); }
     if (this.timeLeft <= 0 && !this.over) this.finishByScore();
 
-    if (this.mode === 'local') {
+    if (this.mode !== 'online') {
+      this.matchMs += dt * 1000;
       this.players[0].update(dt, this.level, this, this.inputFor(0));
-      this.players[1].update(dt, this.level, this, this.inputFor(1));
+      if (this.rec && !this.over) this.rec.update(dt, this.players[0], this.matchMs);
+      if (this.mode === 'rival' && this.rivalGhost && !this.players[1].dead) this.puppetRival(dt);
+      else this.players[1].update(dt, this.level, this, this.inputFor(1));
       this.resolveCombat(0, 1); this.resolveCombat(1, 0);
     } else {
       const me = this.players[this.localId];
@@ -134,8 +196,8 @@ export class VersusScene {
     this.particles = this.particles.filter((p) => !p.dead);
     this.floats = this.floats.filter((f) => !f.dead);
 
-    // respawn morts (local)
-    if (this.mode === 'local') this.players.forEach((p, i) => { if (p.dead && p.deathT > 1.2) this.respawn(p, i); });
+    // respawn morts (local / bot)
+    if (this.mode !== 'online') this.players.forEach((p, i) => { if (p.dead && p.deathT > 1.2) this.respawn(p, i); });
     else { const me = this.players[this.localId]; if (me.dead && me.deathT > 1.2) this.respawn(me, this.localId); }
 
     this.cam.x = clamp((this.level.pixelW - VIEW_W) / 2, 0, Math.max(0, this.level.pixelW - VIEW_W));
@@ -147,7 +209,8 @@ export class VersusScene {
     if (a.dead || b.dead) return;
     if (b.invuln > 0) return;
     if (!aabb(a, b)) return;
-    const fromAbove = (a.y + a.h) - b.y < 12 && a.vy > 30 && a.y < b.y;
+    const aPrevFeet = a.prevFeet != null ? a.prevFeet : (a.y + a.h);
+    const fromAbove = a.vy > 0 && aPrevFeet <= b.y + 8;
     if (fromAbove) {
       a.vy = -260; this.kos[aIdx]++; b.die(this); SFX.stomp(); this.burst(b.x+7, b.y+7, '#ff5d5d', 12);
       this.addFloat(b.x, b.y - 8, 'KO !', '#ffd23b');
@@ -194,6 +257,13 @@ export class VersusScene {
     if (this.over) return;
     this.over = true; this.winner = winner; this.stateT = 0;
     SFX.win();
+    // sauvegarde le déplacement du joueur comme fantôme rival pour cette arène
+    if (this.rec) { const d = this.rec.data(); if (d.f.length >= 60) GhostStore.save(`vghost.${this.arenaIdx}`, d); }
+    // succès: victoire du joueur humain
+    const humanWon = this.mode === 'online' ? (winner === this.localId)
+      : (this.mode === 'bot' || this.mode === 'rival') ? (winner === 0)
+      : (winner >= 0);
+    if (humanWon) this.game.stat?.('vwin');
     if (this.mode === 'online' && this.localId === 0) this.net.relay({ t: 'end', winner });
   }
   endByPeer() { this.finish(this.localId); }
@@ -211,6 +281,8 @@ export class VersusScene {
     if (this.over) {
       const txt = this.winner < 0 ? 'ÉGALITÉ !' : (this.mode === 'online'
         ? (this.winner === this.localId ? 'VICTOIRE !' : 'DÉFAITE')
+        : (this.mode === 'bot' || this.mode === 'rival')
+        ? (this.winner === 0 ? 'VICTOIRE !' : (this.mode === 'rival' ? 'LE RIVAL GAGNE' : 'L\'IA GAGNE'))
         : `JOUEUR ${this.winner + 1} GAGNE !`);
       c.fillStyle = '#000'; c.globalAlpha = 0.55; c.fillRect(0, VIEW_H/2-18, VIEW_W, 36); c.globalAlpha = 1;
       c.font = '16px monospace'; c.textAlign = 'center';
@@ -222,7 +294,8 @@ export class VersusScene {
     c.fillStyle = '#000'; c.globalAlpha = 0.4; c.fillRect(0, 0, VIEW_W, 16); c.globalAlpha = 1;
     c.font = '9px monospace';
     c.fillStyle = '#7fc6ff'; c.textAlign = 'left'; c.fillText('J1  ' + this.kos[0] + ' KO', 6, 11);
-    c.fillStyle = '#37c24a'; c.textAlign = 'right'; c.fillText(this.kos[1] + ' KO  J2', VIEW_W - 6, 11);
+    const p2label = this.mode === 'bot' ? 'IA' : this.mode === 'rival' ? '👻RIVAL' : 'J2';
+    c.fillStyle = '#37c24a'; c.textAlign = 'right'; c.fillText(this.kos[1] + ' KO  ' + p2label, VIEW_W - 6, 11);
     c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(String(this.timeLeft).padStart(2,'0'), VIEW_W/2, 11);
     c.textAlign = 'left';
   }

@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#1a1030"/>
+  <rect x="56" y="56" width="400" height="400" rx="64" fill="#2a1a55"/>
+  <!-- casquette -->
+  <rect x="176" y="120" width="160" height="40" fill="#e23b3b"/>
+  <rect x="176" y="156" width="160" height="20" fill="#a31d1d"/>
+  <!-- visage -->
+  <rect x="184" y="176" width="144" height="80" fill="#ffcb9c"/>
+  <rect x="216" y="200" width="24" height="24" fill="#241b14"/>
+  <rect x="272" y="200" width="24" height="24" fill="#241b14"/>
+  <!-- corps -->
+  <rect x="168" y="256" width="176" height="96" fill="#2f6cff"/>
+  <rect x="232" y="256" width="48" height="96" fill="#ffcf3b"/>
+  <circle cx="256" cy="300" r="14" fill="#1c3fb0"/>
+  <!-- pieds -->
+  <rect x="184" y="352" width="48" height="40" fill="#241b14"/>
+  <rect x="280" y="352" width="48" height="40" fill="#241b14"/>
+  <!-- étoile déco -->
+  <path d="M400 120 l12 26 28 3 -21 19 6 28 -25 -14 -25 14 6 -28 -21 -19 28 -3z" fill="#ffd23b"/>
+</svg>

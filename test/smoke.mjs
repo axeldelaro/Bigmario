@@ -8,20 +8,26 @@ const ctxStub = new Proxy({}, {
     if (p === 'putImageData') return () => {};
     if (p === 'createImageData') return (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) });
     if (p === 'measureText') return () => ({ width: 8 });
+    if (p === 'createLinearGradient' || p === 'createRadialGradient') return () => ({ addColorStop() {} });
     if (p === 'canvas') return { width: 16, height: 16 };
     return () => {};
   },
   set() { return true; },
 });
 function makeCanvas() {
-  return { width: 16, height: 16, style: {}, getContext: () => ctxStub };
+  return {
+    width: 16, height: 16, style: {}, getContext: () => ctxStub,
+    addEventListener() {}, removeEventListener() {},
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 192 }),
+  };
 }
 function makeEl() {
   return {
     style: {}, dataset: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     set innerHTML(_) {}, get innerHTML() { return ''; },
     querySelector: () => makeEl(), querySelectorAll: () => [],
-    addEventListener() {}, appendChild() {}, onclick: null,
+    addEventListener() {}, removeEventListener() {}, appendChild() {}, onclick: null,
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 192 }),
   };
 }
 globalThis.document = {
@@ -58,6 +64,10 @@ import { buildArt } from '../js/art.js';
 import { setArt } from '../js/entities.js';
 import { GameScene } from '../js/scene_game.js';
 import { VersusScene } from '../js/scene_versus.js';
+import { MapScene } from '../js/scene_map.js';
+import { ReplayScene } from '../js/scene_replay.js';
+import { parTimes, medalFor } from '../js/medals.js';
+import { ACHIEVEMENTS, unlockedCount, markSet } from '../js/achievements.js';
 import { WORLDS } from '../js/levels.js';
 
 const art = buildArt();
@@ -85,10 +95,18 @@ const moveScript = (t, act) => {
 
 let errors = 0;
 function fakeGame(input) {
+  const gemStore = {};
   return {
-    input, art,
+    input, art, canvas: makeCanvas(),
     togglePause() {}, gameOver() { this._go = true; }, gameComplete() { this._gc = true; },
-    saveProgress() {}, endVersus() { this._ev = true; }, _go: false, _gc: false, _ev: false,
+    saveProgress() {}, endVersus() { this._ev = true; },
+    getGems(k) { return gemStore[k] || 0; }, setGems(k, n) { gemStore[k] = n; },
+    startSolo() { this._solo = true; }, startSpeedrun() { this._sr = true; },
+    startMarathon() { this._mar = true; }, onMarathonFinish() { this._marfin = true; },
+    returnToMenu() { this._menu = true; }, onSpeedrunFinish() { this._fin = true; },
+    watchReplay() { this._rep = true; }, endReplay() { this._endrep = true; },
+    stat() {}, fadeIn() {}, reduceMotion: false,
+    _go: false, _gc: false, _ev: false,
   };
 }
 
@@ -117,8 +135,73 @@ for (let w = 0; w < WORLDS.length; w++) {
 const netStub = { relay() {}, on() { return this; }, close() {} };
 runScene((g) => new VersusScene(g, { mode: 'local', arenaIdx: 0 }), 'VERSUS local A0', 1200);
 runScene((g) => new VersusScene(g, { mode: 'local', arenaIdx: 1 }), 'VERSUS local A1', 1200);
+runScene((g) => new VersusScene(g, { mode: 'local', arenaIdx: 2 }), 'VERSUS local A2', 1200);
+runScene((g) => new VersusScene(g, { mode: 'bot', arenaIdx: 0 }), 'VERSUS vs IA A0', 1500);
+runScene((g) => new VersusScene(g, { mode: 'bot', arenaIdx: 2 }), 'VERSUS vs IA A2', 1500);
 runScene((g) => new VersusScene(g, { mode: 'online', net: netStub, localId: 0, arenaIdx: 0 }), 'VERSUS online host', 1200);
 runScene((g) => new VersusScene(g, { mode: 'online', net: netStub, localId: 1, arenaIdx: 0 }), 'VERSUS online guest', 1200);
+
+// Carte du monde (solo + speedrun) et contre-la-montre
+runScene((g) => new MapScene(g, 'solo'), 'MAP solo', 600);
+runScene((g) => new MapScene(g, 'speedrun'), 'MAP speedrun', 600);
+runScene((g) => new GameScene(g, 0, 0, null, { speedrun: true }), 'SPEEDRUN 1-1', 1500);
+runScene((g) => new GameScene(g, 2, 2, null, { speedrun: true }), 'SPEEDRUN 3-3 boss', 1500);
+runScene((g) => new GameScene(g, 0, 0, null, { marathon: true }), 'MARATHON', 2000);
+
+// Fantôme: enregistrer -> sauver -> rejouer
+import { GhostRecorder, GhostPlayer, GhostStore } from '../js/ghost.js';
+{
+  const rec = new GhostRecorder();
+  const fakePlayer = { x: 0, y: 100, vx: 50, dir: 1, onGround: true, power: 'big', big: true };
+  for (let t = 0; t < 200; t++) { fakePlayer.x += 1; rec.update(1 / 120, fakePlayer, t * (1000 / 120)); }
+  const data = rec.data();
+  GhostStore.save('0-0', data);
+  const g = new GhostPlayer(GhostStore.load('0-0'));
+  const pose = g.poseAt(300);
+  console.log(`GHOST: ${g.n} samples, valid=${g.valid}, poseAt(300ms)=`, pose ? `x=${pose.x|0} dir=${pose.dir} power=${pose.power}` : 'null');
+  if (!g.valid || !pose) { console.error('GHOST FAIL'); errors++; }
+  // rejouer un speedrun avec fantôme chargé (exerce drawGhost)
+  runScene((gg) => new GameScene(gg, 0, 0, null, { speedrun: true }), 'SPEEDRUN 1-1 +ghost', 800);
+  // multi-fantômes: ajouter un 2e fantôme (WR) en cours de scène
+  {
+    const game = fakeGame(makeInput(moveScript));
+    const sc = new GameScene(game, 0, 0, null, { speedrun: true });
+    sc.addGhost(GhostStore.load('0-0'), { glow: '#ffd23b', label: 'WR TEST' });
+    let ok = sc.ghosts.length >= 1;
+    for (let i = 0; i < 600; i++) { game.input.update(); sc.update(1 / 120); if (i % 2 === 0) sc.draw(ctxStub); }
+    console.log(`MULTI-GHOST: ${sc.ghosts.length} fantôme(s)`); if (!ok) errors++;
+  }
+  // fantôme rival en versus: seed un vghost d'arène puis lance le mode rival
+  {
+    const rec2 = new GhostRecorder();
+    const fp = { x: 40, y: 90, vx: 30, dir: -1, onGround: true, power: 'big', big: true };
+    for (let t = 0; t < 400; t++) { fp.x += (t % 80 < 40 ? 1 : -1); rec2.update(1 / 120, fp, t * (1000 / 120)); }
+    GhostStore.save('vghost.0', rec2.data());
+  }
+  runScene((g) => new VersusScene(g, { mode: 'rival', arenaIdx: 0 }), 'VERSUS rival (ghost)', 1500);
+  // rival sans fantôme -> repli IA (arène 1)
+  runScene((g) => new VersusScene(g, { mode: 'rival', arenaIdx: 1 }), 'VERSUS rival (fallback IA)', 1200);
+
+  // Replay viewer (niveau + arène)
+  {
+    const game = fakeGame(makeInput(moveScript));
+    const rs = new ReplayScene(game, { kind: 'level', w: 0, l: 0, name: 'TEST', ms: 30000, ghost: GhostStore.load('0-0') });
+    for (let i = 0; i < 800; i++) { game.input.update(); rs.update(1 / 120); if (i % 2 === 0) rs.draw(ctxStub); }
+    console.log('REPLAY level ran, t=', rs.t | 0);
+    const ra = new ReplayScene(game, { kind: 'arena', arena: 0, name: 'R', ms: 20000, ghost: GhostStore.load('vghost.0') });
+    for (let i = 0; i < 400; i++) { game.input.update(); ra.update(1 / 120); ra.draw(ctxStub); }
+    console.log('REPLAY arena ran, t=', ra.t | 0);
+  }
+  // Médailles + succès
+  {
+    const par = parTimes(WORLDS[0].levels[0]);
+    const m = medalFor(par.gold - 1, par);
+    console.log('MEDALS: gold@', par.gold, '-> medal=', m);
+    if (m !== 'gold') { console.error('MEDAL FAIL'); errors++; }
+    markSet('cleared', '0-0');
+    console.log('ACHIEVEMENTS:', unlockedCount(), '/', ACHIEVEMENTS.length, 'unlocked');
+  }
+}
 
 console.log(errors === 0 ? '\n✅ SMOKE TEST PASSED (no runtime errors)' : `\n❌ ${errors} error(s)`);
 process.exit(errors === 0 ? 0 : 1);

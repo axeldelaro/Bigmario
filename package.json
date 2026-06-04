@@ -1,0 +1,13 @@
+{
+  "name": "bigmario",
+  "version": "1.0.0",
+  "description": "Jeu de plateforme rétro original — solo, versus, contre-la-montre, marathon, fantômes.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "solve": "node test/solve.mjs",
+    "smoke": "node test/smoke.mjs",
+    "test": "node test/solve.mjs && node test/smoke.mjs",
+    "serve": "python3 -m http.server 8000"
+  }
+}
