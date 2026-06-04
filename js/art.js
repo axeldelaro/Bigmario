@@ -276,6 +276,7 @@ const FLY_2 = [
 
 // OBJETS
 const P_ITEM = { '.': null, 'k': '#3a1d06', 'r': '#ff5d3b', 'R': '#c12d12', 'w': '#fff', 'm': '#ffe2b0', 's': '#ffd23b', 'g': '#37c24a', 'o': '#ff9b3b', 'p': '#ff7bd5', 'P': '#c23a9a' };
+const P_ONEUP = { ...P_ITEM, 'r': '#46d84a', 'R': '#1f8a30' }; // champignon 1UP (vert)
 const MUSHROOM = [
   '................',
   '.....kkkkk......',
@@ -427,6 +428,7 @@ export function buildArt() {
   A.fly = { a: makeSprite('f1', FLY_1, P_FLY), b: makeSprite('f2', FLY_2, P_FLY) };
   A.item = {
     mushroom: makeSprite('mush', MUSHROOM, P_ITEM),
+    oneup: makeSprite('oneup', MUSHROOM, P_ONEUP),
     flower: makeSprite('flow', FLOWER, P_ITEM),
     star: makeSprite('star', STAR, P_ITEM),
   };
@@ -487,6 +489,12 @@ function drawTile(c, type, theme) {
       px(c,2,2,2,2,'#fff'); px(c,12,2,2,2,'#fff'); px(c,2,12,2,2,'#fff'); px(c,12,12,2,2,'#fff');
       // point d'interrogation
       px(c,6,4,4,2,'#7a4a00'); px(c,9,5,1,3,'#7a4a00'); px(c,7,7,2,2,'#7a4a00'); px(c,7,10,2,2,'#7a4a00');
+      break;
+    case 'L': // bloc 1UP (vert)
+      px(c,0,0,16,16,'#1f8a30');
+      px(c,1,1,14,14,'#46d84a'); px(c,1,1,14,2,'#9bf0a0'); px(c,1,13,14,2,'#1f8a30');
+      px(c,2,2,2,2,'#fff'); px(c,12,2,2,2,'#fff'); px(c,2,12,2,2,'#fff'); px(c,12,12,2,2,'#fff');
+      px(c,6,5,1,6,'#0c4a18'); px(c,7,5,2,2,'#0c4a18'); px(c,9,5,1,6,'#0c4a18'); // motif "1"
       break;
     case 'D': // bloc mystère épuisé
       px(c,0,0,16,16,'#9a7a3a'); px(c,1,1,14,14,'#7a5a2a'); px(c,1,1,14,2,'#a98a4a');

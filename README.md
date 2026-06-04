@@ -16,6 +16,8 @@ en ligne.
 - 🗺️ **Carte du monde** animée pour choisir ses niveaux.
 - 🧩 **Aventure solo** : 3 mondes / **9 niveaux**, **combat de boss**, ennemis variés (marcheur, carapace, volant, **à pics**), power-ups (champignon / fleur de feu / étoile), blocs, tuyaux, drapeau d'arrivée.
 - ⏱️ **Contre-la-montre** : chrono au **millième de seconde**, retry instantané, **meilleurs temps locaux** et **classements en ligne**.
+- 🏁 **Marathon** : les 9 niveaux d'affilée, un seul chrono, classement dédié.
+- 🔗 **Combos** : enchaîne les écrasements en l'air pour des points croissants (jusqu'au 1-UP), champignon vert **1-UP**.
 - 👻 **Fantômes** : rejoue ton record (PB) **et** le fantôme du **record en ligne** (WR) côte à côte ; en versus, affronte un **fantôme rival** (rejoue un adversaire d'un match précédent).
 - 🎬 **Replays** : revois n'importe quel run (caméra qui suit, lecture/pause, vitesse 0.5×/1×/2×).
 - 👥 **Fantôme d'ami** : partage un run par **code court** (serveur) ou **fichier .bmr**, charge celui d'un ami pour le **revoir** ou **courir contre**.

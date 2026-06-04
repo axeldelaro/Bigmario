@@ -13,7 +13,9 @@ export class GameScene {
     this.game = game;
     this.worldIdx = worldIdx; this.levelIdx = levelIdx;
     this.speedrun = !!opts.speedrun;
+    this.marathon = !!opts.marathon;
     this.runMs = 0; this.runFinished = false;
+    this.combo = 0; this.lookAhead = 0;
     this.recorder = this.speedrun ? new GhostRecorder() : null;
     this.ghosts = []; // [{g:GhostPlayer, glow, label}]
     if (this.speedrun) {
@@ -24,7 +26,7 @@ export class GameScene {
     this.particles = []; this.floats = []; this.fireballs = []; this.hazards = [];
     this.state = 'intro'; // intro | play | dying | levelclear | gameover
     this.stateT = 0; this.shake = 0; this.freeze = 0; this.pendingClear = 0;
-    this.carry = carry || { lives: this.speedrun ? 99 : 3, score: 0, coins: 0 };
+    this.carry = carry || { lives: (this.speedrun || this.marathon) ? 99 : 3, score: 0, coins: 0 };
     this.collectedGems = new Set();   // gemmes déjà prises (persistent entre morts)
     this.activeCheckpoint = null;     // {x,y}
     this.loadLevel();
@@ -55,7 +57,8 @@ export class GameScene {
     this.player = new Player(ps.x, ps.y, { lives: this.carry.lives, skin: 'p1', id: 0 });
     this.player.score = this.carry.score; this.player.coins = this.carry.coins;
     this.timeLeft = def.time; this.timeAcc = 0;
-    this.runMs = 0; this.runFinished = false;
+    this.combo = 0;
+    if (!this.marathon) { this.runMs = 0; this.runFinished = false; } // le marathon cumule le temps
     if (this.recorder) this.recorder.reset();
     this.cam.x = clamp(ps.x - VIEW_W * 0.42, 0, Math.max(0, this.level.pixelW - VIEW_W));
     this.cam.y = 0;
@@ -69,7 +72,7 @@ export class GameScene {
   spawnFireball(fb) { this.fireballs.push(fb); }
   countFireballs(id) { return this.fireballs.filter((f) => f.owner === id).length; }
   spawnHazard(h) { this.hazards.push(h); }
-  addShake(m) { this.shake = Math.max(this.shake, m); }
+  addShake(m) { if (this.game.reduceMotion) return; this.shake = Math.max(this.shake, m); }
   onSpring() { this.addShake(2); }
   burst(x, y, col, n = 8, spd = 120) {
     for (let i = 0; i < n; i++) this.particles.push(new Particle(x, y, rand(-spd, spd), rand(-spd, 20), col, rand(0.3, 0.7), 2));
@@ -79,6 +82,18 @@ export class GameScene {
     for (let i = 0; i < n; i++) {
       const col = i % 2 ? '#e8dcc0' : '#cbbfa0';
       this.particles.push(new Particle(x, y - 1, rand(-50, 50), rand(-30, -5), col, rand(0.25, 0.5), 2, 180));
+    }
+  }
+  // enchaînement d'écrasements dans un même saut: points croissants puis 1UP
+  COMBO_PTS = [100, 200, 400, 800, 1000, 2000, 4000, 8000];
+  addCombo(x, y) {
+    this.combo++;
+    if (this.combo > this.COMBO_PTS.length) {
+      this.player.lives++; SFX.win(); this.addFloat(x, y - 8, '1UP', '#37c24a');
+    } else {
+      const pts = this.COMBO_PTS[this.combo - 1];
+      this.player.score += pts;
+      this.addFloat(x, y - 8, (this.combo > 1 ? 'x' + this.combo + '  ' : '') + pts, this.combo > 1 ? '#ff8a3b' : '#ffd23b');
     }
   }
 
@@ -91,7 +106,7 @@ export class GameScene {
       SFX.bump();
       if (ev.item === 'coin') { player.addCoin(this); this.addFloat(wx, wy - 6, '+1', '#ffd23b'); SFX.coin(); }
       else {
-        const kind = ev.item === 'star' ? 'star' : (player.power === 'small' ? 'mushroom' : 'flower');
+        const kind = ev.item === 'star' ? 'star' : ev.item === 'oneup' ? 'oneup' : (player.power === 'small' ? 'mushroom' : 'flower');
         this.items.push(new PowerUp(wx - 7, wy - 4, kind));
       }
     }
@@ -150,6 +165,8 @@ export class GameScene {
     }
 
     this.player.update(dt, this.level, this, input);
+    // l'enchaînement d'écrasements se réinitialise à l'atterrissage
+    if (this.player.onGround && this.player.vy >= 0) this.combo = 0;
 
     // plateformes mobiles + portage du joueur
     for (const pf of this.platforms) { pf.update(dt); this.ridePlatform(this.player, pf); }
@@ -252,7 +269,7 @@ export class GameScene {
           if (e.state !== 'shell') { e.state = 'shell'; e.vx = 0; e.stateT = 0; SFX.stomp(); }
           else if (still) { e.dir = p.x < e.x ? 1 : -1; e.vx = e.dir * 150; SFX.kick(); }
           else { e.vx = 0; SFX.stomp(); }
-          p.vy = bounce(); this.freeze = 0.02;
+          p.vy = bounce(); this.freeze = 0.02; this.addCombo(e.x + 7, e.y);
         } else if (still && !p.win) { e.dir = p.x < e.x ? 1 : -1; e.vx = e.dir * 150; SFX.kick(); }
         else if (!p.win) {
           // une carapace lancée ne blesse que si elle vient VERS le joueur (pas celle qu'on vient de tirer)
@@ -263,7 +280,7 @@ export class GameScene {
         continue;
       }
 
-      if (fromAbove && !p.win) { const r = e.stomp(); p.vy = bounce(); this.freeze = 0.02; if (r.killed) p.addScore(100, this); }
+      if (fromAbove && !p.win) { e.stomp(); p.vy = bounce(); this.freeze = 0.02; this.addCombo(e.x + 7, e.y); }
       else if (!p.win) p.hurt(this);
     }
   }
@@ -290,16 +307,21 @@ export class GameScene {
   }
 
   updateCamera() {
-    const target = this.player.x + this.player.w / 2 - VIEW_W * 0.42;
+    const p = this.player;
+    // look-ahead: la caméra regarde un peu devant le sens de déplacement
+    const want = (Math.abs(p.vx) > 20 ? p.dir : 0) * 30;
+    this.lookAhead += (want - this.lookAhead) * 0.05;
+    const target = p.x + p.w / 2 - VIEW_W / 2 + this.lookAhead;
     this.cam.x += (target - this.cam.x) * 0.12;
     this.cam.x = clamp(this.cam.x, 0, Math.max(0, this.level.pixelW - VIEW_W));
-    this.cam.y = clamp(this.player.y - VIEW_H * 0.55, 0, Math.max(0, this.level.pixelH - VIEW_H));
+    this.cam.y = clamp(p.y - VIEW_H * 0.55, 0, Math.max(0, this.level.pixelH - VIEW_H));
     if (this.level.pixelH <= VIEW_H) this.cam.y = this.level.pixelH - VIEW_H;
   }
 
   updateState(dt) {
     if (this.state === 'dying') {
-      if (this.speedrun) {
+      if (this.speedrun || this.marathon) {
+        // contre-la-montre / marathon : on recommence le niveau, le chrono continue (sans Game Over)
         if (this.stateT > 0.9) { this.collectedGems = new Set(); this.activeCheckpoint = null; this.loadLevel(); }
         return;
       }
@@ -310,12 +332,13 @@ export class GameScene {
       }
     } else if (this.state === 'levelclear') {
       if (this.speedrun) return; // fin gérée par l'UI du contre-la-montre
-      if (this.stateT > 2.6) {
+      if (this.stateT > (this.marathon ? 1.1 : 2.6)) {
         const world = WORLDS[this.worldIdx];
         const carry = { lives: this.player.lives, score: this.player.score, coins: this.player.coins };
         this.collectedGems = new Set(); this.activeCheckpoint = null;
         if (this.levelIdx + 1 < world.levels.length) { this.levelIdx++; this.carry = carry; this.loadLevel(); }
         else if (this.worldIdx + 1 < WORLDS.length) { this.worldIdx++; this.levelIdx = 0; this.carry = carry; this.game.saveProgress(this.worldIdx, 0); this.loadLevel(); }
+        else if (this.marathon) { this.game.onMarathonFinish?.(this.runMs); }
         else { this.game.gameComplete(this.player.score); }
       }
     }
@@ -353,7 +376,7 @@ export class GameScene {
 
     this.drawHUD(c);
     if (this.boss && !this.boss.dead) this.drawBossBar(c);
-    if (this.speedrun) this.drawTimer(c);
+    if (this.speedrun || this.marathon) this.drawTimer(c);
     if (this.state === 'intro') this.drawIntro(c);
     if (this.state === 'levelclear' && !this.speedrun) this.banner(c, this.level.hasBoss ? 'BOSS VAINCU !' : 'NIVEAU TERMINÉ !', '#ffd23b');
     if (this.state === 'levelclear' && this.speedrun) this.banner(c, fmtTime(this.runMs), '#46d8ff');

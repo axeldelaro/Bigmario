@@ -178,7 +178,7 @@ export class PowerUp {
     if (this.kind === 'star' && r.onGround) this.vy = -240; // étoile rebondit
   }
   draw(c, cam) {
-    const img = this.kind === 'mushroom' ? ART.item.mushroom : this.kind === 'flower' ? ART.item.flower : ART.item.star;
+    const img = this.kind === 'mushroom' ? ART.item.mushroom : this.kind === 'oneup' ? ART.item.oneup : this.kind === 'flower' ? ART.item.flower : ART.item.star;
     c.drawImage(img, Math.round(this.x - cam.x) - 1, Math.round(this.y - cam.y) - 2);
   }
 }
@@ -321,6 +321,7 @@ export class Player {
     if (kind === 'mushroom') { if (this.power === 'small') { this.power = 'big'; this.setSize(true); this.unstick(scene && scene.level); SFX.power(); } else this.addScore(1000, scene); }
     else if (kind === 'flower') { const was = this.power; this.power = 'fire'; this.setSize(true); if (was === 'small') this.unstick(scene && scene.level); SFX.power(); }
     else if (kind === 'star') { this.star = 9; SFX.power(); }
+    else if (kind === 'oneup') { this.lives++; SFX.win(); if (scene) scene.addFloat(this.x, this.y - 8, '1UP', '#37c24a'); }
     this.invuln = Math.max(this.invuln, 0.2);
   }
 

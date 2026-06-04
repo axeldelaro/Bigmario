@@ -36,10 +36,13 @@ class Game {
     this.mode = 'menu'; // menu | game | versus | map
     this.net = null;
     this.fadeAlpha = 0; // fondu d'entrée des scènes
+    this.reduceMotion = Save.get('reduceMotion', false);
+    this._installPrompt = null;
     if (Save.get('muted', false)) toggleMute(); // restaure le réglage son
     this.resize();
     addEventListener('resize', () => this.resize());
     addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
+    addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); this._installPrompt = e; });
     // reprise audio au premier geste
     const wake = () => { resumeAudio(); };
     addEventListener('pointerdown', wake, { once: true });
@@ -202,6 +205,71 @@ class Game {
     });
   }
 
+  // ---- Marathon : les 9 niveaux à la suite, un seul chrono ----
+  startMarathon() {
+    this.clearUI(); this.mode = 'game'; this.paused = false;
+    this._restart = () => this.startMarathon();
+    this.scene = new GameScene(this, 0, 0, null, { marathon: true });
+    this.checkOrientation();
+  }
+  onMarathonFinish(ms) {
+    this.mode = 'menu';
+    const levelId = 'marathon';
+    const improved = Leaderboard.setLocalBest(levelId, ms);
+    const pb = Leaderboard.getLocalBest(levelId);
+    const name = Save.get('playerName', '');
+    const online = !!Leaderboard.apiBase();
+    if (improved) this.stat('record');
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:24px;color:#ffd23b">MARATHON FINI !</span></div>
+      <p style="font-size:22px;font-weight:900;margin:6px 0">${fmtTime(ms)}</p>
+      <p class="hint">${improved ? '🏆 Nouveau record perso !' : 'Record perso : ' + fmtTime(pb)}</p>
+      ${online ? `<div class="field"><label>TON PSEUDO (classement en ligne)</label><input id="pname" maxlength="12" value="${name}" placeholder="JOUEUR"></div>
+      <div class="row" style="margin-top:8px"><button class="btn" id="submit">📤 Envoyer mon temps</button></div>` :
+        `<p class="hint">Configure un serveur pour le classement en ligne.</p>`}
+      <div class="status" id="st"></div>
+      <div id="board" style="margin-top:8px"></div>
+      <div class="menu-list" style="margin-top:12px">
+        <button class="btn" id="retry">↻ Rejouer</button>
+        <button class="btn ghost" id="menu">Menu</button>
+      </div>
+    `);
+    const st = p.querySelector('#st'); const board = p.querySelector('#board');
+    const render = (scores) => {
+      if (!scores || !scores.length) { board.innerHTML = ''; return; }
+      board.innerHTML = '<p class="hint" style="margin-bottom:4px">CLASSEMENT MARATHON</p>' +
+        scores.slice(0, 10).map((s, i) => `<div style="display:flex;justify-content:space-between;font:12px monospace;padding:2px 8px;${(s.name===name)?'color:#46d8ff':''}"><span>${i + 1}. ${escapeHtml(s.name)}</span><span>${fmtTime(s.ms)}</span></div>`).join('');
+    };
+    if (online) {
+      Leaderboard.fetchTop(levelId).then(render);
+      p.querySelector('#submit').onclick = async () => {
+        const nm = p.querySelector('#pname').value.trim() || 'JOUEUR'; Save.set('playerName', nm); st.textContent = 'Envoi…';
+        const r = await Leaderboard.submit(levelId, nm, ms);
+        st.textContent = r ? `✓ Envoyé ! Nº ${r.rank}${r.total ? '/' + r.total : ''}` : '❌ Échec.';
+        render(r && r.scores ? r.scores : await Leaderboard.fetchTop(levelId));
+      };
+    }
+    p.querySelector('#retry').onclick = () => this.startMarathon();
+    p.querySelector('#menu').onclick = () => this.returnToMenu();
+    this.checkOrientation();
+  }
+
+  // chooser du mode contre-la-montre
+  showSpeedMenu() {
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:30px">CONTRE-LA-MONTRE</span></div>
+      <div class="menu-list">
+        <button class="btn" id="bylevel">⏱ Niveau par niveau</button>
+        <button class="btn" id="marathon">🏁 Marathon (9 niveaux)</button>
+        <button class="btn ghost" id="back">← Retour</button>
+      </div>
+      <p class="hint">Niveau par niveau : fantômes, médailles, classements.<br>Marathon : les 9 niveaux d'affilée, un seul chrono.</p>
+    `);
+    p.querySelector('#bylevel').onclick = () => this.showMap('speedrun');
+    p.querySelector('#marathon').onclick = () => this.startMarathon();
+    p.querySelector('#back').onclick = () => this.showTitle();
+  }
+
   // ---- Replay ----
   watchReplay(payload, returnTo) {
     this.clearUI(); this.mode = 'replay'; this.paused = false;
@@ -338,7 +406,7 @@ class Game {
       <p class="hint">Clavier: ◀▶ déplacer • Espace sauter • J tir • Échap pause.<br>Manette et tactile détectés automatiquement.</p>
     `);
     p.querySelector('#b-solo').onclick = () => { resumeAudio(); this.showMap('solo'); };
-    p.querySelector('#b-speed').onclick = () => { resumeAudio(); this.showMap('speedrun'); };
+    p.querySelector('#b-speed').onclick = () => { resumeAudio(); this.showSpeedMenu(); };
     p.querySelector('#b-vs').onclick = () => { resumeAudio(); this.showVersusMenu(); };
     p.querySelector('#b-options').onclick = () => this.showOptions();
   }
@@ -468,15 +536,20 @@ class Game {
         <button class="btn secondary" id="ach">🏆 Succès (${unlockedCount()}/${ACHIEVEMENTS.length})</button>
         <button class="btn secondary" id="friend">👥 Fantôme d'ami / Replay</button>
         <button class="btn secondary" id="mute">${isMuted() ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'}</button>
+        <button class="btn secondary" id="motion">${this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'}</button>
+        ${this._installPrompt ? '<button class="btn" id="install">📲 Installer l\'appli</button>' : ''}
         <button class="btn ghost" id="fs">⛶ Plein écran</button>
         <button class="btn danger" id="reset">🗑 Réinitialiser la progression</button>
         <button class="btn ghost" id="back">← Retour</button>
       </div>
-      <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• Champignon = grandir, Fleur = tir, Étoile = invincible.<br>• Saute sur les ennemis pour les vaincre.<br>• Manette : A saut, X tir, Start pause.</p>
+      <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• Champignon = grandir, Fleur = tir, Étoile = invincible, 🟢 = 1 vie.<br>• Enchaîne les écrasements en l'air pour des combos.<br>• Manette : A saut, X tir, Start pause.</p>
     `);
     p.querySelector('#ach').onclick = () => this.showAchievements();
     p.querySelector('#friend').onclick = () => this.showFriend();
     p.querySelector('#mute').onclick = (e) => { const m = toggleMute(); Save.set('muted', m); e.target.textContent = m ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'; };
+    p.querySelector('#motion').onclick = (e) => { this.reduceMotion = !this.reduceMotion; Save.set('reduceMotion', this.reduceMotion); e.target.textContent = this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'; };
+    const ib = p.querySelector('#install');
+    if (ib) ib.onclick = async () => { const pr = this._installPrompt; if (!pr) return; pr.prompt(); try { await pr.userChoice; } catch {} this._installPrompt = null; this.showOptions(); };
     p.querySelector('#fs').onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };
     p.querySelector('#reset').onclick = () => { Save.set('unlocked', 0); Save.set('best', 0); this.showOptions(); };
     p.querySelector('#back').onclick = () => this.showTitle();

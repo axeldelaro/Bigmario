@@ -72,7 +72,7 @@ export const WORLDS = [
           '                                                                                                 ',
           '              o o o o                          MBM                       o o o o                 ',
           '          ?                  BB?BB                          f f                                  ',
-          '                    f                    o o                          ===        U              ',
+          '                    f                    o o                          === L      U              ',
           '       ===       o o     ===        ===           ^^^^         ===            o o      ===       ',
           '                              k             g            k                g              g       ',
           '   S      g            g            ^^^            XXX           g    ^^^^         g            G ',

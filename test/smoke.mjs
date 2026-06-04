@@ -102,9 +102,10 @@ function fakeGame(input) {
     saveProgress() {}, endVersus() { this._ev = true; },
     getGems(k) { return gemStore[k] || 0; }, setGems(k, n) { gemStore[k] = n; },
     startSolo() { this._solo = true; }, startSpeedrun() { this._sr = true; },
+    startMarathon() { this._mar = true; }, onMarathonFinish() { this._marfin = true; },
     returnToMenu() { this._menu = true; }, onSpeedrunFinish() { this._fin = true; },
     watchReplay() { this._rep = true; }, endReplay() { this._endrep = true; },
-    stat() {},
+    stat() {}, fadeIn() {}, reduceMotion: false,
     _go: false, _gc: false, _ev: false,
   };
 }
@@ -145,6 +146,7 @@ runScene((g) => new MapScene(g, 'solo'), 'MAP solo', 600);
 runScene((g) => new MapScene(g, 'speedrun'), 'MAP speedrun', 600);
 runScene((g) => new GameScene(g, 0, 0, null, { speedrun: true }), 'SPEEDRUN 1-1', 1500);
 runScene((g) => new GameScene(g, 2, 2, null, { speedrun: true }), 'SPEEDRUN 3-3 boss', 1500);
+runScene((g) => new GameScene(g, 0, 0, null, { marathon: true }), 'MARATHON', 2000);
 
 // Fantôme: enregistrer -> sauver -> rejouer
 import { GhostRecorder, GhostPlayer, GhostStore } from '../js/ghost.js';
