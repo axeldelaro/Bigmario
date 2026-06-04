@@ -231,6 +231,38 @@ function L43() { // 4-3 Gardien Suprême — boss en grande arène
   return { name: '4-3 Gardien Suprême', theme: 'castle', time: 240, map: rows(g) };
 }
 
+// =================== ARÈNES VERSUS (20 tuiles = 1 écran exact, murs de contour) ===================
+function arena(name, theme, decorate) {
+  const W = 20, g = grid(W);
+  for (let y = 0; y < 12; y++) { g[y][0] = 'X'; g[y][W - 1] = 'X'; } // murs latéraux (contours)
+  for (let x = 0; x < W; x++) { g[10][x] = 'X'; g[11][x] = 'X'; }    // sol
+  decorate(g);
+  return { name, theme, time: 99, map: rows(g) };
+}
+function A1() {
+  return arena('Arène Duo', 'overworld', (g) => {
+    plat(g, 7, 2, 5); plat(g, 7, 13, 5); plat(g, 4, 7, 6);
+    put(g, 5, 9, 'M'); put(g, 5, 10, 'M'); put(g, 3, 9, '?'); put(g, 3, 10, '?');
+    coins(g, 8, 5, 2); coins(g, 8, 13, 2);
+    g[9][3] = '1'; g[9][16] = '2';
+  });
+}
+function A2() {
+  return arena('Tours', 'castle', (g) => {
+    plat(g, 8, 2, 4); plat(g, 8, 14, 4); plat(g, 5, 2, 4); plat(g, 5, 14, 4); plat(g, 6, 8, 4);
+    put(g, 3, 9, 'M'); put(g, 3, 10, 'U'); coins(g, 4, 8, 4);
+    g[9][3] = '1'; g[9][16] = '2';
+  });
+}
+function A3() {
+  return arena('Ressorts', 'overworld', (g) => {
+    plat(g, 6, 8, 4); plat(g, 8, 3, 4); plat(g, 8, 13, 4); put(g, 9, 6, 'T'); put(g, 9, 13, 'T');
+    put(g, 3, 9, 'M'); put(g, 3, 10, 'M'); coins(g, 5, 8, 4);
+    g[9][2] = '1'; g[9][17] = '2';
+  });
+}
+export const ARENAS = [A1(), A2(), A3()];
+
 export const BUILT = {
   L11: L11(), L12: L12(), L13: L13(), L21: L21(), L22: L22(), L23: L23(),
   L31: L31(), L32: L32(), L33: L33(),
