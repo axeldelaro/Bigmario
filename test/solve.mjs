@@ -73,10 +73,9 @@ let fails = 0;
 for (let w = 0; w < WORLDS.length; w++) {
   for (let l = 0; l < WORLDS[w].levels.length; l++) {
     const def = WORLDS[w].levels[l];
-    // on essaie petit, puis grand, puis sprint — réussite si UNE config passe
-    let r = solveLevel(def, {});
-    if (!r.ok) r = solveLevel(def, { sprint: true }) ;
-    if (!r.ok) r = solveLevel(def, { big: true, sprint: true });
+    // PROFIL HUMAIN : petit perso, course normale (PAS de sprint) -> doit passer.
+    // Empêche les niveaux franchissables uniquement avec un timing/sprint parfait.
+    const r = solveLevel(def, {});
     const tag = `${w + 1}-${l + 1}`;
     if (r.ok) console.log(`PASS ${tag}  (x=${r.x}, t=${r.t}s${r.boss ? ', boss' : ''})`);
     else { console.log(`FAIL ${tag}  -> ${r.reason} à x=${r.x}${r.maxX != null ? ' (maxX=' + r.maxX + ')' : ''}`); fails++; }
