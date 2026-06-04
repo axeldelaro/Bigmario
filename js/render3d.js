@@ -130,6 +130,8 @@ function buildRenderer() {
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  // rendu plus réaliste : tone mapping cinématique
+  if (THREE.ACESFilmicToneMapping) { renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.3; }
 
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0x9fd6ff, 22, 52);
@@ -139,18 +141,19 @@ function buildRenderer() {
   cam.position.set(0, 4.6, 15);
   cam.up.set(0, 1, 0);
 
-  // lumières : ambiant doux + clé directionnelle (ombres) + contre-jour
-  const amb = new THREE.HemisphereLight(0xfdfbff, 0x404a55, 0.85);
+  // lumières (compensées pour l'ACES) : ambiant + clé directionnelle (ombres douces) + contre-jour
+  const amb = new THREE.HemisphereLight(0xfdfbff, 0x44505e, 1.15);
   scene.add(amb);
-  const key = new THREE.DirectionalLight(0xfff1d0, 1.25);
+  const key = new THREE.DirectionalLight(0xfff1d0, 2.0);
   key.position.set(-7, 14, 9);
   key.castShadow = true;
-  key.shadow.mapSize.set(1024, 1024);
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.radius = 4;
   const sc = key.shadow.camera;
   sc.left = -16; sc.right = 16; sc.top = 12; sc.bottom = -12; sc.near = 1; sc.far = 60;
-  key.shadow.bias = -0.0006;
+  key.shadow.bias = -0.0005; key.shadow.normalBias = 0.02;
   scene.add(key); scene.add(key.target);
-  const fill = new THREE.DirectionalLight(0x9fc0ff, 0.35);
+  const fill = new THREE.DirectionalLight(0x9fc0ff, 0.5);
   fill.position.set(8, 6, 6); scene.add(fill);
 
   const root = new THREE.Group(); scene.add(root);
@@ -313,17 +316,24 @@ function texBox(w, h, d, all, front, x = 0, y = 0, z = 0) {
   m.castShadow = true; m.receiveShadow = true; m.position.set(x, y, z); return m;
 }
 
+// membre articulé : pivot (hanche/épaule) avec le membre qui pend en dessous
+function limb(px, py, w, h, d, tx) {
+  const piv = new THREE.Group(); piv.position.set(px, py, 0);
+  piv.add(texBox(w, h, d, tx, null, 0, -h / 2, 0));
+  return piv;
+}
 // ---- modèles texturés ----
 function makeHero() {
   const g = new THREE.Group();
   const torso = texBox(0.95, 0.55, 0.85, 'overalls', 'overalls', 0, 0.28, 0); g.add(torso);
-  g.add(texBox(0.9, 0.62, 0.84, 'skin', 'face', 0, 0.82, 0));   // tête
-  g.add(texBox(1.0, 0.3, 0.96, 'cap', 'cap', 0, 1.12, 0));      // casquette
-  const lL = texBox(0.36, 0.5, 0.52, 'shoe', null, -0.22, -0.25, 0); g.add(lL);
-  const lR = texBox(0.36, 0.5, 0.52, 'shoe', null, 0.22, -0.25, 0); g.add(lR);
-  g.add(texBox(0.22, 0.4, 0.5, 'skin', null, -0.56, 0.3, 0));   // bras
-  g.add(texBox(0.22, 0.4, 0.5, 'skin', null, 0.56, 0.3, 0));
-  g.userData = { lL, lR, torso };
+  const head = texBox(0.9, 0.62, 0.84, 'skin', 'face', 0, 0.82, 0); g.add(head);
+  const cap = texBox(1.0, 0.3, 0.96, 'cap', 'cap', 0, 1.12, 0); g.add(cap);
+  const lL = limb(-0.22, 0.0, 0.36, 0.5, 0.52, 'shoe');
+  const lR = limb(0.22, 0.0, 0.36, 0.5, 0.52, 'shoe');
+  const aL = limb(-0.56, 0.55, 0.22, 0.42, 0.5, 'skin');
+  const aR = limb(0.56, 0.55, 0.22, 0.42, 0.5, 'skin');
+  g.add(lL, lR, aL, aR);
+  g.userData = { torso, head, cap, lL, lR, aL, aR };
   return g;
 }
 function makeGoon() {
@@ -447,11 +457,11 @@ function drawScene(scene) {
     const key = e.type;
     const fac = e.type === 'shell' ? makeShell : e.type === 'fly' ? makeFly : e.type === 'spiky' ? makeSpiky : makeGoon;
     place(key, fac, e.x, e.y, e.w, e.h, (g) => {
-      g.scale.x = e.dir < 0 ? -1 : 1;
-      if (e.userData && e.type === 'fly') {}
-      if (g.userData.w1) { const f = Math.sin(e.t * 14) * 0.5; g.userData.w1.rotation.z = f; g.userData.w2.rotation.z = -f; }
-      if (e.dead) g.rotation.z = Math.PI;
-      else g.rotation.z = 0;
+      g.scale.x = e.dir < 0 ? -1 : 1; g.rotation.set(0, 0, 0);
+      if (e.dead) { g.rotation.z = Math.PI; return; }
+      if (e.type === 'fly') { if (g.userData.w1) { const f = 0.4 + Math.sin(e.t * 16) * 0.6; g.userData.w1.rotation.z = f; g.userData.w2.rotation.z = -f; } g.position.y += Math.sin(e.t * 4) * 0.06; }
+      else if (e.type === 'shell' && e.state === 'shell' && Math.abs(e.vx) > 10) { g.rotation.x = e.t * 9 * (e.vx > 0 ? 1 : -1); } // carapace qui roule
+      else { g.rotation.z = Math.sin(e.t * 9) * 0.13; g.position.y += Math.abs(Math.sin(e.t * 9)) * 0.04; } // dandinement
     });
   }
 
@@ -466,13 +476,38 @@ function drawScene(scene) {
   players.forEach((p, idx) => {
     if (!p) return;
     const g = place('hero' + idx, makeHero, p.x, p.y, p.w, p.h, (g) => {
-      g.scale.x = p.dir < 0 ? -1 : 1;
-      const sc = p.big ? 1.25 : 1; g.scale.y = sc; g.scale.z = 1;
-      // salopette teintée selon le pouvoir (texturée)
-      if (g.userData.torso) g.userData.torso.material = texMat(p.power === 'fire' ? 'overalls_fire' : p.power === 'glide' ? 'overalls_glide' : 'overalls');
-      // anim jambes
-      const ph = Math.sin(p.walkT * 1.2) * 0.4 * (Math.abs(p.vx) > 6 ? 1 : 0);
-      if (g.userData.lL) { g.userData.lL.rotation.x = ph; g.userData.lR.rotation.x = -ph; }
+      const ud = g.userData;
+      if (ud.torso) ud.torso.material = texMat(p.power === 'fire' ? 'overalls_fire' : p.power === 'glide' ? 'overalls_glide' : 'overalls');
+      const moving = Math.abs(p.vx) > 8 && p.onGround;
+      const sp = Math.min(Math.abs(p.vx) / 110, 1);
+      // squash & stretch + taille
+      const big = p.big ? 1.25 : 1;
+      const stretch = (!p.onGround && !p.dead && !p.pounding) ? 0.12 : 0;
+      const sq = p.squash || 0;
+      const sx = (1 - stretch * 0.5 + sq * 0.18) * (p.ducking ? 1.12 : 1);
+      const sy = big * (1 + stretch - sq * 0.22) * (p.ducking ? 0.6 : 1);
+      g.scale.set((p.dir < 0 ? -1 : 1) * sx, sy, 1);
+      g.rotation.z = 0;
+      const L = ud.lL, R = ud.lR, AL = ud.aL, AR = ud.aR;
+      if (!p.onGround && !p.dead) { // saut / chute / plané / slam
+        if (p.pounding) { L.rotation.x = 0.15; R.rotation.x = 0.15; AL.rotation.x = -2.4; AR.rotation.x = -2.4; AL.rotation.z = AR.rotation.z = 0; }
+        else if (p.gliding) { L.rotation.x = -0.3; R.rotation.x = 0.3; AL.rotation.x = 0.2; AR.rotation.x = 0.2; AL.rotation.z = 1.1; AR.rotation.z = -1.1; }
+        else { L.rotation.x = -0.6; R.rotation.x = -0.35; AL.rotation.x = -1.5; AR.rotation.x = -1.2; AL.rotation.z = AR.rotation.z = 0; }
+        ud.head.rotation.x = 0;
+      } else if (moving) { // course
+        const ph = p.walkT * 1.1, amp = 0.3 + 0.55 * sp;
+        L.rotation.x = Math.sin(ph) * amp; R.rotation.x = Math.sin(ph + Math.PI) * amp;
+        AL.rotation.x = Math.sin(ph + Math.PI) * amp * 0.85; AR.rotation.x = Math.sin(ph) * amp * 0.85;
+        AL.rotation.z = AR.rotation.z = 0;
+        g.position.y += Math.abs(Math.sin(ph)) * 0.06 * sp;     // bob vertical
+        g.rotation.z = -0.13 * sp * (p.dir >= 0 ? 1 : -1);       // se penche dans la course
+        ud.head.rotation.x = 0.08 * sp;
+      } else { // repos : respiration
+        const br = Math.sin(p.t * 2.2);
+        L.rotation.x = R.rotation.x = 0;
+        AL.rotation.x = 0.05 + br * 0.05; AR.rotation.x = 0.05 - br * 0.05; AL.rotation.z = AR.rotation.z = 0;
+        ud.head.rotation.x = 0; g.position.y += br * 0.015;
+      }
       g.visible = !(p.invuln > 0 && Math.floor(p.t * 20) % 2 && !p.dead);
     });
   });
