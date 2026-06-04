@@ -230,42 +230,151 @@ function box(w, h, d, hex, x = 0, y = 0, z = 0) {
   m.position.set(x, y, z); return m;
 }
 
-// ---- modèles ----
+// ---- textures d'entités (canvas 48px) ----
+const ETEX = new Map();
+function entCanvas(name) {
+  if (ETEX.has(name)) return ETEX.get(name);
+  const S = 48, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  drawEnt(cv.getContext('2d'), S, name); ETEX.set(name, cv); return cv;
+}
+function drawEnt(c, S, name) {
+  const u = S / 16;
+  const R_ = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x * u, y * u, w * u, h * u); };
+  const dot = (x, y, r, col) => { c.fillStyle = col; c.beginPath(); c.arc(x * u, y * u, r * u, 0, 7); c.fill(); };
+  const rnd = (a, b) => a + Math.random() * (b - a), pick = (...a) => a[(Math.random() * a.length) | 0];
+  const speck = (n, col, x0 = 0, y0 = 0, x1 = 16, y1 = 16) => { for (let i = 0; i < n; i++) dot(rnd(x0, x1), rnd(y0, y1), rnd(0.25, 0.7), col); };
+  const bevel = () => { R_(0, 0, 16, 1, '#ffffff33'); R_(0, 15, 16, 1, '#00000040'); };
+  const eyes = (col = '#241b14') => { dot(5.4, 7, 1.5, '#fff'); dot(10.6, 7, 1.5, '#fff'); dot(5.6, 7.2, 0.75, col); dot(10.8, 7.2, 0.75, col); };
+  switch (name) {
+    case 'skin': R_(0, 0, 16, 16, '#ffcb9c'); speck(18, '#f0b488'); bevel(); break;
+    case 'face':
+      R_(0, 0, 16, 16, '#ffcb9c');
+      c.strokeStyle = '#5a3a22'; c.lineWidth = u * 1.1; c.beginPath(); c.moveTo(3.4 * u, 5 * u); c.lineTo(7 * u, 5.4 * u); c.moveTo(9 * u, 5.4 * u); c.lineTo(12.6 * u, 5 * u); c.stroke(); // sourcils
+      eyes(); R_(7.4, 8.4, 1.2, 1.6, '#e8a878'); // nez
+      c.strokeStyle = '#7a3a2a'; c.lineWidth = u * 0.9; c.beginPath(); c.arc(8 * u, 11 * u, 2.2 * u, 0.15 * Math.PI, 0.85 * Math.PI); c.stroke(); // sourire
+      dot(3.4, 10.2, 1, '#ffb0a0'); dot(12.6, 10.2, 1, '#ffb0a0'); break; // joues
+    case 'cap': R_(0, 0, 16, 16, '#e23b3b'); R_(0, 0, 16, 4, '#f25a5a'); R_(0, 11, 16, 5, '#a31d1d'); dot(8, 5.5, 2, '#fff'); c.fillStyle = '#e23b3b'; c.font = 'bold ' + (4 * u) + 'px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('B', 8 * u, 5.6 * u); bevel(); break;
+    case 'shoe': R_(0, 0, 16, 16, '#3a2410'); R_(0, 11, 16, 5, '#241608'); R_(0, 10.5, 16, 1, '#5a3a1a'); bevel(); break;
+    case 'overalls': case 'overalls_fire': case 'overalls_glide': {
+      const base = name === 'overalls_fire' ? '#ff5d2e' : name === 'overalls_glide' ? '#3aa0e0' : '#2f6cff';
+      const dk = name === 'overalls_fire' ? '#c23010' : name === 'overalls_glide' ? '#1f6aa0' : '#1c3fb0';
+      R_(0, 0, 16, 16, base); R_(6, 0, 4, 16, dk); // bavette centrale
+      dot(8, 3, 1.1, '#ffcf3b'); dot(8, 3, 0.5, '#a3760f'); // bouton
+      R_(2, 2, 1.4, 12, dk); R_(12.6, 2, 1.4, 12, dk); // bretelles
+      for (let y = 1; y < 16; y += 2) { R_(4.6, y, 0.4, 1, '#ffffff44'); R_(11, y, 0.4, 1, '#ffffff44'); } // coutures
+      R_(4, 10, 8, 4, dk); R_(5, 11, 6, 0.5, '#00000044'); bevel(); break;
+    }
+    case 'fur': R_(0, 0, 16, 16, '#9b5a2a'); for (let i = 0; i < 50; i++) R_(rnd(0, 16), rnd(0, 16), 0.4, rnd(1, 2.4), pick('#7c451c', '#b06a32', '#8a4f22')); bevel(); break;
+    case 'goon_face':
+      R_(0, 0, 16, 16, '#9b5a2a'); for (let i = 0; i < 30; i++) R_(rnd(0, 16), rnd(0, 16), 0.4, rnd(1, 2), pick('#7c451c', '#b06a32'));
+      c.strokeStyle = '#3a2410'; c.lineWidth = u * 1.3; c.beginPath(); c.moveTo(2.6 * u, 5.4 * u); c.lineTo(6.4 * u, 6.6 * u); c.moveTo(9.6 * u, 6.6 * u); c.lineTo(13.4 * u, 5.4 * u); c.stroke();
+      eyes('#1a1006'); R_(2, 10, 12, 5, '#f0c89a'); R_(2, 10, 12, 1, '#d8a878'); for (let i = 0; i < 5; i++) R_(3 + i * 2.4, 10, 0.5, 5, '#3a2410'); break; // dents
+    case 'shell_top':
+      R_(0, 0, 16, 16, '#37c24a');
+      c.strokeStyle = '#1f8a30'; c.lineWidth = u * 0.8;
+      for (let yy = 2; yy < 16; yy += 4) for (let xx = 2; xx < 16; xx += 4) { c.beginPath(); c.arc((xx + (yy % 8 === 2 ? 0 : 2)) * u, yy * u, 2 * u, 0, 6.3); c.stroke(); }
+      R_(0, 0, 16, 2, '#7fe88a'); R_(0, 14, 16, 2, '#0c5a1c'); break;
+    case 'shell_skin': R_(0, 0, 16, 16, '#d8ffe0'); speck(14, '#9be0a8'); break;
+    case 'fly_body': R_(0, 0, 16, 16, '#e2483b'); R_(0, 11, 16, 5, '#a3261d'); for (let i = 0; i < 18; i++) R_(rnd(1, 15), rnd(1, 11), 0.5, rnd(1, 2), '#c2382c'); eyes('#200'); break;
+    case 'wing': { const g = c.createLinearGradient(0, 0, S, 0); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#cfe0ff'); c.fillStyle = g; c.fillRect(0, 0, S, S); c.strokeStyle = '#b0c4e8'; c.lineWidth = u * 0.5; for (let i = 2; i < 16; i += 3) { c.beginPath(); c.moveTo(0, i * u); c.lineTo(S, (i - 2) * u); c.stroke(); } break; }
+    case 'spiky_body': R_(0, 0, 16, 16, '#b06ad8'); R_(0, 11, 16, 5, '#7a3aa0'); speck(20, '#9a52c8'); eyes('#1a0a24'); R_(4, 11, 8, 4, '#e0c0ff'); for (let i = 0; i < 4; i++) R_(4.5 + i * 2, 11, 0.5, 4, '#7a3aa0'); break;
+    case 'boss_body':
+      R_(0, 0, 16, 16, '#37c24a');
+      c.strokeStyle = '#1f8a30'; c.lineWidth = u * 0.7; for (let yy = 1; yy < 16; yy += 3) for (let xx = 1; xx < 16; xx += 3) { c.beginPath(); c.arc((xx + (yy % 6 === 1 ? 0 : 1.5)) * u, yy * u, 1.5 * u, 0, 6.3); c.stroke(); }
+      R_(0, 0, 16, 2, '#7fe88a'); R_(0, 13, 16, 3, '#0c5a1c'); break;
+    case 'boss_face':
+      R_(0, 0, 16, 16, '#fff'); R_(0, 0, 16, 5, '#e8a878'); // lèvre
+      R_(1, 5, 14, 3, '#ffffff'); for (let i = 0; i < 6; i++) { R_(1 + i * 2.3, 5, 0.5, 3, '#cdd'); } // dents
+      R_(2, 9, 12, 5, '#5a1010'); break; // gorge
+    case 'mush_cap': R_(0, 0, 16, 16, '#c12d12'); R_(0, 0, 16, 8, '#ff5d3b'); R_(0, 7, 16, 1, '#ffffff66'); for (const p of [[4, 3.5, 2], [11, 4, 1.6], [8, 6, 1.3]]) { dot(p[0], p[1], p[2], '#fff'); } bevel(); break;
+    case 'mush_stem': R_(0, 0, 16, 16, '#ffe2b0'); R_(0, 11, 16, 5, '#e8c890'); dot(5, 8, 1, '#241b14'); dot(11, 8, 1, '#241b14'); break;
+    case 'oneup_cap': R_(0, 0, 16, 16, '#1f8a30'); R_(0, 0, 16, 8, '#46d84a'); for (const p of [[4, 3.5, 2], [11, 4, 1.6], [8, 6, 1.3]]) dot(p[0], p[1], p[2], '#fff'); bevel(); break;
+    case 'item_flower': R_(0, 0, 16, 16, '#37c24a'); for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; dot(8 + Math.cos(a) * 4, 8 + Math.sin(a) * 4, 2.2, i % 2 ? '#ff5d2e' : '#ffd23b'); } dot(8, 8, 2, '#fff'); dot(8, 8, 1, '#ffd23b'); break;
+    case 'item_star': { R_(0, 0, 16, 16, '#caa12a'); c.fillStyle = '#ffd23b'; c.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = (i % 2 ? 3 : 7); c.lineTo((8 + Math.cos(a) * r) * u, (8 + Math.sin(a) * r) * u); } c.closePath(); c.fill(); dot(6, 8, 0.9, '#241b14'); dot(10, 8, 0.9, '#241b14'); break; }
+    case 'item_feather': { const g = c.createLinearGradient(0, 0, 0, S); g.addColorStop(0, '#fff'); g.addColorStop(1, '#46c8ff'); c.fillStyle = g; c.fillRect(0, 0, S, S); R_(7.4, 1, 1.2, 14, '#ffd23b'); c.strokeStyle = '#1f6a9a'; c.lineWidth = u * 0.4; for (let i = 2; i < 15; i += 2) { c.beginPath(); c.moveTo(8 * u, i * u); c.lineTo((8 + (i % 4 ? 4 : -4)) * u, (i - 2) * u); c.stroke(); } break; }
+    case 'coin_face': { const g = c.createRadialGradient(S * 0.4, S * 0.35, 2, S * 0.5, S * 0.5, S * 0.6); g.addColorStop(0, '#fff7c0'); g.addColorStop(0.5, '#ffd23b'); g.addColorStop(1, '#c9961f'); c.fillStyle = g; c.beginPath(); c.arc(8 * u, 8 * u, 7 * u, 0, 6.3); c.fill(); c.strokeStyle = '#a3760f'; c.lineWidth = u * 0.8; c.beginPath(); c.arc(8 * u, 8 * u, 5 * u, 0, 6.3); c.stroke(); c.fillStyle = '#a3760f'; c.font = 'bold ' + (7 * u) + 'px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('★', 8 * u, 8.4 * u); R_(4, 3, 1, 4, '#ffffffaa'); break; }
+    case 'coin_edge': R_(0, 0, 16, 16, '#c9961f'); break;
+    case 'wood': R_(0, 0, 16, 16, '#caa057'); R_(0, 0, 16, 1, '#e8c889'); R_(0, 7.6, 16, 0.6, '#7a5a2a'); for (let i = 0; i < 22; i++) R_(rnd(0, 15), rnd(0, 16), rnd(1, 3), 0.4, '#a8843f'); break;
+    default: R_(0, 0, 16, 16, '#888');
+  }
+}
+function texMat(name, opts = {}) {
+  R._em = R._em || new Map();
+  const key = name + (opts.glow ? '#g' : '');
+  if (R._em.has(key)) return R._em.get(key);
+  const map = R.tex(entCanvas(name), 'et:' + key);
+  const m = new THREE.MeshStandardMaterial({ map, roughness: opts.rough ?? 0.62, metalness: opts.metal ?? 0.05, emissive: opts.glow ? (opts.glow) : 0x000000, emissiveMap: opts.glow ? map : null, emissiveIntensity: opts.gi ?? 0.4 });
+  R._em.set(key, m); return m;
+}
+function texBox(w, h, d, all, front, x = 0, y = 0, z = 0) {
+  const a = texMat(all);
+  const mats = front ? [a, a, a, a, texMat(front), a] : a;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats);
+  m.castShadow = true; m.receiveShadow = true; m.position.set(x, y, z); return m;
+}
+
+// ---- modèles texturés ----
 function makeHero() {
   const g = new THREE.Group();
-  g.add(box(0.9, 0.5, 0.8, 0x2f6cff, 0, 0.25, 0));      // torse (salopette)
-  g.add(box(0.85, 0.55, 0.8, 0xffcb9c, 0, 0.75, 0));    // tête
-  g.add(box(0.95, 0.28, 0.9, 0xe23b3b, 0, 1.02, 0));    // casquette
-  g.add(box(0.12, 0.12, 0.1, 0x241b14, 0.18, 0.78, 0.42)); // oeil
-  g.add(box(0.12, 0.12, 0.1, 0x241b14, -0.18, 0.78, 0.42));
-  const lL = box(0.34, 0.5, 0.5, 0x241b14, -0.22, -0.25, 0); g.add(lL);
-  const lR = box(0.34, 0.5, 0.5, 0x241b14, 0.22, -0.25, 0); g.add(lR);
-  g.userData = { lL, lR };
+  const torso = texBox(0.95, 0.55, 0.85, 'overalls', 'overalls', 0, 0.28, 0); g.add(torso);
+  g.add(texBox(0.9, 0.62, 0.84, 'skin', 'face', 0, 0.82, 0));   // tête
+  g.add(texBox(1.0, 0.3, 0.96, 'cap', 'cap', 0, 1.12, 0));      // casquette
+  const lL = texBox(0.36, 0.5, 0.52, 'shoe', null, -0.22, -0.25, 0); g.add(lL);
+  const lR = texBox(0.36, 0.5, 0.52, 'shoe', null, 0.22, -0.25, 0); g.add(lR);
+  g.add(texBox(0.22, 0.4, 0.5, 'skin', null, -0.56, 0.3, 0));   // bras
+  g.add(texBox(0.22, 0.4, 0.5, 'skin', null, 0.56, 0.3, 0));
+  g.userData = { lL, lR, torso };
   return g;
 }
 function makeGoon() {
   const g = new THREE.Group();
-  g.add(box(0.9, 0.7, 0.8, 0x9b5a2a, 0, 0.35, 0));
-  g.add(box(0.16, 0.16, 0.1, 0xffffff, 0.2, 0.5, 0.42)); g.add(box(0.16, 0.16, 0.1, 0xffffff, -0.2, 0.5, 0.42));
-  g.add(box(0.3, 0.18, 0.5, 0xf0c89a, -0.22, -0.06, 0)); g.add(box(0.3, 0.18, 0.5, 0xf0c89a, 0.22, -0.06, 0));
+  g.add(texBox(0.95, 0.78, 0.85, 'fur', 'goon_face', 0, 0.4, 0));
+  g.add(texBox(0.3, 0.18, 0.5, 'shoe', null, -0.24, -0.05, 0));
+  g.add(texBox(0.3, 0.18, 0.5, 'shoe', null, 0.24, -0.05, 0));
   return g;
 }
-function makeShell() { const g = new THREE.Group(); g.add(box(0.9, 0.75, 0.85, 0x37c24a, 0, 0.4, 0)); g.add(box(0.7, 0.4, 0.7, 0x1f8a30, 0, 0.45, 0.2)); return g; }
-function makeFly() { const g = new THREE.Group(); g.add(box(0.7, 0.6, 0.7, 0xe2483b, 0, 0.4, 0)); const w1 = box(0.5, 0.5, 0.05, 0xffffff, -0.55, 0.55, 0); const w2 = box(0.5, 0.5, 0.05, 0xffffff, 0.55, 0.55, 0); g.add(w1); g.add(w2); g.userData = { w1, w2 }; return g; }
-function makeSpiky() { const g = new THREE.Group(); g.add(box(0.85, 0.6, 0.8, 0xb06ad8, 0, 0.35, 0)); for (let i = -1; i <= 1; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.3, 4), R.mat(0xe0c0ff)); s.position.set(i * 0.25, 0.75, 0); g.add(s); } return g; }
+function makeShell() {
+  const g = new THREE.Group();
+  g.add(texBox(0.9, 0.5, 0.85, 'shell_skin', null, 0, 0.28, 0));
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 10, 0, 6.3, 0, Math.PI / 2), texMat('shell_top'));
+  dome.scale.set(1, 1.1, 1); dome.position.y = 0.5; dome.castShadow = true; g.add(dome);
+  return g;
+}
+function makeFly() {
+  const g = new THREE.Group();
+  g.add(texBox(0.72, 0.62, 0.72, 'fly_body', 'fly_body', 0, 0.42, 0));
+  const w1 = texBox(0.55, 0.55, 0.06, 'wing', null, -0.55, 0.6, 0);
+  const w2 = texBox(0.55, 0.55, 0.06, 'wing', null, 0.55, 0.6, 0);
+  g.add(w1); g.add(w2); g.userData = { w1, w2 }; return g;
+}
+function makeSpiky() {
+  const g = new THREE.Group();
+  g.add(texBox(0.88, 0.62, 0.82, 'spiky_body', 'spiky_body', 0, 0.36, 0));
+  for (let i = -1; i <= 1; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.34, 5), R.mat(0xe0c0ff)); s.castShadow = true; s.position.set(i * 0.26, 0.78, 0); g.add(s); }
+  return g;
+}
 function makeBoss() {
   const g = new THREE.Group();
-  g.add(box(2.4, 2.0, 2.0, 0x37c24a, 0, 1.0, 0));      // corps
-  g.add(box(1.0, 0.9, 0.6, 0xffffff, 0, 1.7, 0.9));    // gueule
-  g.add(box(0.3, 0.3, 0.2, 0x111111, 0.5, 2.0, 0.9)); g.add(box(0.3, 0.3, 0.2, 0x111111, -0.5, 2.0, 0.9));
-  for (let i = -2; i <= 2; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.6, 4), R.mat(0xd8ffe0)); s.position.set(i * 0.5, 2.2, -0.6); g.add(s); }
+  g.add(texBox(2.5, 2.1, 2.1, 'boss_body', 'boss_body', 0, 1.05, 0));
+  g.add(texBox(1.1, 1.0, 0.6, 'boss_face', 'boss_face', 0, 1.7, 0.95));
+  const eL = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), texMat('fly_body', { glow: 0xff3000, gi: 0.6 }));
+  eL.position.set(0.55, 2.1, 0.9); g.add(eL);
+  const eR = eL.clone(); eR.position.x = -0.55; g.add(eR);
+  for (let i = -2; i <= 2; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.66, 5), R.mat(0xeafff0)); s.castShadow = true; s.position.set(i * 0.52, 2.25, -0.6); g.add(s); }
   return g;
 }
-function makeCoin() { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.1, 14), R.mat(0xffd23b)); m.rotation.z = Math.PI / 2; return m; }
-function makeGem() { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.34), R.mat(0x46d8ff)); return m; }
-function makeItem(hex) { const g = new THREE.Group(); g.add(box(0.7, 0.7, 0.7, hex, 0, 0.35, 0)); return g; }
-function makeFire() { const m = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 8), R.mat(0xff5d2e)); return m; }
-function makePlat() { return box(2, 0.4, 1, 0xcaa057); }
+function makeCoin() { return texBox(0.62, 0.62, 0.14, 'coin_edge', 'coin_face'); }
+function makeGem() { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.36), new THREE.MeshStandardMaterial({ color: 0x46d8ff, roughness: 0.1, metalness: 0.35, emissive: 0x0a3a55, emissiveIntensity: 0.6 })); m.castShadow = true; return m; }
+function makeItem(kind) { const g = new THREE.Group(); g.add(makeItemMesh(kind)); return g; }
+function makeItemMesh(kind) {
+  if (kind === 'mushroom') { const g = new THREE.Group(); const cap = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 8, 0, 6.3, 0, Math.PI / 2), texMat('mush_cap')); cap.position.y = 0.42; cap.castShadow = true; g.add(cap); g.add(texBox(0.5, 0.45, 0.5, 'mush_stem', 'mush_stem', 0, 0.18, 0)); return g; }
+  if (kind === 'oneup') { const g = new THREE.Group(); const cap = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 8, 0, 6.3, 0, Math.PI / 2), texMat('oneup_cap')); cap.position.y = 0.42; cap.castShadow = true; g.add(cap); g.add(texBox(0.5, 0.45, 0.5, 'mush_stem', 'mush_stem', 0, 0.18, 0)); return g; }
+  if (kind === 'flower') return texBox(0.72, 0.72, 0.2, 'item_flower', 'item_flower', 0, 0.36, 0);
+  if (kind === 'feather') return texBox(0.7, 0.78, 0.18, 'item_feather', 'item_feather', 0, 0.36, 0);
+  return texBox(0.72, 0.72, 0.2, 'item_star', 'item_star', 0, 0.36, 0); // star
+}
+function makeFire() { const m = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), new THREE.MeshStandardMaterial({ color: 0xff7b2e, emissive: 0xff4000, emissiveIntensity: 0.8, roughness: 0.4 })); m.castShadow = true; return m; }
+function makePlat() { return texBox(2, 0.42, 1, 'wood', 'wood'); }
 
 // ---- rendu d'une scène de jeu ----
 export function renderScene(scene) {
@@ -327,8 +436,8 @@ function drawScene(scene) {
 
   // pièces / gemmes / objets
   for (const co of scene.coins || []) place('coin', makeCoin, co.x, co.y, co.w, co.h, (g) => { g.rotation.y = co.t * 6; });
-  for (const gm of scene.gems || []) place('gem', makeGem, gm.x, gm.y, gm.w, gm.h, (g) => { g.rotation.y = gm.t * 3; });
-  for (const it of scene.items || []) { const hex = it.kind === 'mushroom' ? 0xff5d3b : it.kind === 'oneup' ? 0x46d84a : it.kind === 'feather' ? 0x46c8ff : it.kind === 'flower' ? 0xff5d2e : 0xffd23b; place('item', () => makeItem(0xffffff), it.x, it.y, it.w, it.h, (g) => { g.children[0].material = R.mat(hex); }); }
+  for (const gm of scene.gems || []) place('gem', makeGem, gm.x, gm.y, gm.w, gm.h, (g) => { g.rotation.y = gm.t * 2.5; g.rotation.x = 0.2; });
+  for (const it of scene.items || []) place('item_' + it.kind, () => makeItem(it.kind), it.x, it.y, it.w, it.h, (g) => { g.rotation.y = (it.t || 0) * 1.5; });
   for (const fb of scene.fireballs || []) place('fire', makeFire, fb.x, fb.y, fb.w, fb.h);
   for (const hz of scene.hazards || []) place('haz', () => makeFire(), hz.x, hz.y, hz.w, hz.h);
 
@@ -359,9 +468,8 @@ function drawScene(scene) {
     const g = place('hero' + idx, makeHero, p.x, p.y, p.w, p.h, (g) => {
       g.scale.x = p.dir < 0 ? -1 : 1;
       const sc = p.big ? 1.25 : 1; g.scale.y = sc; g.scale.z = 1;
-      // teinte feu/plume
-      const torso = g.children[0];
-      torso.material = R.mat(p.power === 'fire' ? 0xff5d2e : p.power === 'glide' ? 0x46c8ff : 0x2f6cff);
+      // salopette teintée selon le pouvoir (texturée)
+      if (g.userData.torso) g.userData.torso.material = texMat(p.power === 'fire' ? 'overalls_fire' : p.power === 'glide' ? 'overalls_glide' : 'overalls');
       // anim jambes
       const ph = Math.sin(p.walkT * 1.2) * 0.4 * (Math.abs(p.vx) > 6 ? 1 : 0);
       if (g.userData.lL) { g.userData.lL.rotation.x = ph; g.userData.lR.rotation.x = -ph; }
