@@ -130,8 +130,9 @@ export class Boss {
 
     const rage = 1 + (this.maxHp - this.hp) * 0.12; // plus rapide en perdant des PV
     this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+    const preVx = this.vx;
     const r = level.moveAndCollide(this, dt);
-    if (r.hitX) { this.vx = -this.vx; this.dir = -this.dir; }
+    if (r.hitX) { const sp = Math.abs(preVx) || 42; this.dir = preVx > 0 ? -1 : 1; this.vx = sp * this.dir; }
     // onde de choc à l'atterrissage d'un saut
     if (r.onGround && !this.wasGround && scene.spawnHazard) {
       scene.addShake?.(5);
@@ -279,9 +280,9 @@ export class Enemy {
     }
 
     if (this.gravity) this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
-    const speed = this.state === 'shell' ? this.vx : this.vx;
+    const preVx = this.vx; // moveAndCollide met vx à 0 en cas de mur -> on garde la vitesse d'avant
     const r = level.moveAndCollide(this, dt);
-    if (r.hitX) { this.vx = -this.vx; this.dir = -this.dir; }
+    if (r.hitX) { const sp = Math.abs(preVx) || 34; this.dir = preVx > 0 ? -1 : 1; this.vx = sp * this.dir; }
     // éviter de tomber des bords (sauf carapace lancée)
     if (r.onGround && !(this.state === 'shell' && Math.abs(this.vx) > 10)) {
       const aheadX = this.vx > 0 ? this.x + this.w + 1 : this.x - 1;
