@@ -2,10 +2,10 @@
 import { TILE, VIEW_W, VIEW_H } from './core.js';
 import { tileCanvas } from './art.js';
 
-const SOLID = new Set(['X', 'H', 'B', '?', 'M', 'U', 'L', 'W', 'D', 'p', 'P', 'T']);
+const SOLID = new Set(['X', 'H', 'B', '?', 'M', 'U', 'L', 'W', 'D', 'p', 'P', 'T', 'Q']);
 const SEMI = new Set(['=']); // solide seulement par le dessus
 const HAZARD = new Set(['^']);
-const ENEMY_CHARS = { g: 'goon', k: 'shell', f: 'fly', z: 'spiky', O: 'boss' };
+const ENEMY_CHARS = { g: 'goon', k: 'shell', f: 'fly', z: 'spiky', O: 'boss', v: 'plant', t: 'lob' };
 const ITEM_QUESTION = { '?': 'coin', 'M': 'mushroom', 'U': 'star', 'L': 'oneup', 'W': 'feather' };
 
 export class Level {
@@ -27,6 +27,8 @@ export class Level {
     this.gems = [];        // gemmes cachées issues de 'j'
     this.platforms = [];   // plateformes mobiles issues de 'm'(horiz) / 'n'(vert)
     this.checkpoints = []; // {tx,ty}
+    this.warps = [];       // entrées 'Q' {tx,ty}
+    this.warpDests = [];   // destinations 'q' {tx,ty}
     this.hasBoss = false;
     this._extract();
     this._bgCache = null;
@@ -43,6 +45,8 @@ export class Level {
         else if (ch === 'm') { this.platforms.push({ x, y, axis: 'h' }); this.rows[ty][tx] = ' '; }
         else if (ch === 'n') { this.platforms.push({ x, y, axis: 'v' }); this.rows[ty][tx] = ' '; }
         else if (ch === 'C') { this.checkpoints.push({ tx, ty }); }
+        else if (ch === 'Q') { this.warps.push({ tx, ty }); } // entrée de tuyau-warp (reste solide)
+        else if (ch === 'q') { this.warpDests.push({ tx, ty }); this.rows[ty][tx] = ' '; }
         else if (ENEMY_CHARS[ch]) { if (ch === 'O') this.hasBoss = true; this.spawns.push({ type: ENEMY_CHARS[ch], x, y }); this.rows[ty][tx] = ' '; }
         else if (ch === 'G') { if (!this.goal) this.goal = { x: x + 4, y: 0, tx }; }
       }

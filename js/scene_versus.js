@@ -14,6 +14,8 @@ export class VersusScene {
   constructor(game, opts = {}) {
     this.game = game;
     this.mode = opts.mode || 'local'; // 'local' | 'bot' | 'rival' | 'online'
+    this.coop = !!opts.coop;          // co-op : pas de combat, collecte commune
+    this.coopCoins = 0;
     this.net = opts.net || null;
     this.localId = opts.localId ?? 0; // index du joueur contrôlé en ligne
     this.arenaIdx = opts.arenaIdx ?? 0;
@@ -172,12 +174,11 @@ export class VersusScene {
       this.applyRemote(dt);
       // détecte si JE me fais écraser par l'adversaire (autorité locale sur ma propre mort)
       const other = this.players[1 - this.localId];
-      if (!me.dead && me.invuln <= 0 && aabb(me, other)) {
+      if (!this.coop && !me.dead && me.invuln <= 0 && aabb(me, other)) {
         const fromAbove = (other.y + other.h) - me.y < 12 && other.vy > 30 && other.y < me.y;
         if (fromAbove) { this.localKO(me); }
       }
-      // boules adverses qui me touchent
-      for (const fb of this.fireballs) {
+      if (!this.coop) for (const fb of this.fireballs) {
         if (fb.owner !== this.localId && !me.dead && me.invuln <= 0 && aabb(fb, me)) { fb.dead = true; this.localKO(me); }
       }
       this.sendState(dt);
@@ -185,7 +186,7 @@ export class VersusScene {
 
     // objets/pièces/particules communs
     for (const it of this.items) { it.update(dt, this.level); for (const p of this.players) if (!p.dead && aabb(p, it)) { p.grow(it.kind, this); it.dead = true; } }
-    for (const co of this.coins) { co.update(dt); for (const p of this.players) if (!p.dead && aabb(p, co)) { co.dead = true; SFX.coin(); } }
+    for (const co of this.coins) { co.update(dt); for (const p of this.players) if (!p.dead && aabb(p, co)) { co.dead = true; SFX.coin(); this.coopCoins++; } }
     for (const fb of this.fireballs) fb.update(dt, this.level);
     for (const p of this.particles) p.update(dt);
     for (const f of this.floats) f.update(dt);
@@ -205,6 +206,7 @@ export class VersusScene {
   }
 
   resolveCombat(aIdx, bIdx) {
+    if (this.coop) return; // co-op : aucun KO entre joueurs
     const a = this.players[aIdx], b = this.players[bIdx];
     if (a.dead || b.dead) return;
     if (b.invuln > 0) return;
@@ -284,7 +286,7 @@ export class VersusScene {
   drawOverlay(c) {
     this.drawHUD(c);
     if (this.over) {
-      const txt = this.winner < 0 ? 'ÉGALITÉ !' : (this.mode === 'online'
+      const txt = this.coop ? `COOP : ${this.coopCoins} ●` : this.winner < 0 ? 'ÉGALITÉ !' : (this.mode === 'online'
         ? (this.winner === this.localId ? 'VICTOIRE !' : 'DÉFAITE')
         : (this.mode === 'bot' || this.mode === 'rival')
         ? (this.winner === 0 ? 'VICTOIRE !' : (this.mode === 'rival' ? 'LE RIVAL GAGNE' : 'L\'IA GAGNE'))
@@ -298,9 +300,14 @@ export class VersusScene {
   drawHUD(c) {
     c.fillStyle = '#000'; c.globalAlpha = 0.4; c.fillRect(0, 0, VIEW_W, 16); c.globalAlpha = 1;
     c.font = '9px monospace';
-    c.fillStyle = '#7fc6ff'; c.textAlign = 'left'; c.fillText('J1  ' + this.kos[0] + ' KO', 6, 11);
-    const p2label = this.mode === 'bot' ? 'IA' : this.mode === 'rival' ? '👻RIVAL' : 'J2';
-    c.fillStyle = '#37c24a'; c.textAlign = 'right'; c.fillText(this.kos[1] + ' KO  ' + p2label, VIEW_W - 6, 11);
+    if (this.coop) {
+      c.fillStyle = '#37c24a'; c.textAlign = 'left'; c.fillText('🤝 CO-OP', 6, 11);
+      c.fillStyle = '#ffd23b'; c.textAlign = 'right'; c.fillText('● ' + this.coopCoins, VIEW_W - 6, 11);
+    } else {
+      c.fillStyle = '#7fc6ff'; c.textAlign = 'left'; c.fillText('J1  ' + this.kos[0] + ' KO', 6, 11);
+      const p2label = this.mode === 'bot' ? 'IA' : this.mode === 'rival' ? '👻RIVAL' : 'J2';
+      c.fillStyle = '#37c24a'; c.textAlign = 'right'; c.fillText(this.kos[1] + ' KO  ' + p2label, VIEW_W - 6, 11);
+    }
     c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(String(this.timeLeft).padStart(2,'0'), VIEW_W/2, 11);
     c.textAlign = 'left';
   }

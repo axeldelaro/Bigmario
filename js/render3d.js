@@ -206,6 +206,28 @@ function skyTexture(theme) {
   R.skyCache.set(theme, t); return t;
 }
 
+// décor 3D d'arrière-plan (parallaxe), construit une fois par thème
+function buildBg(theme) {
+  const g = new THREE.Group();
+  const M = (hex) => new THREE.MeshStandardMaterial({ color: hex, roughness: 1, metalness: 0 });
+  if (theme === 'overworld') {
+    for (let i = -3; i < 5; i++) { const m = new THREE.Mesh(new THREE.ConeGeometry(4 + (i % 2 ? 1.2 : 0), 6.5, 5), M(0x6f8fc0)); m.position.set(i * 7, 1.2, 0); g.add(m); const sn = new THREE.Mesh(new THREE.ConeGeometry(1.4, 2, 5), M(0xffffff)); sn.position.set(i * 7, 4.2, 0.1); g.add(sn); }
+    for (let i = -2; i < 4; i++) { const c = new THREE.Mesh(new THREE.SphereGeometry(1.7, 10, 7), M(0xffffff)); c.scale.set(2.2, 0.8, 0.4); c.position.set(i * 10 + 3, 8, 3); g.add(c); }
+  } else if (theme === 'underground') {
+    for (let i = -3; i < 5; i++) { const m = new THREE.Mesh(new THREE.ConeGeometry(2.6, 5, 4), M(0x223a5a)); m.position.set(i * 6, 9, 0); m.rotation.z = Math.PI; g.add(m); const m2 = new THREE.Mesh(new THREE.ConeGeometry(2.2, 4, 4), M(0x1a2e48)); m2.position.set(i * 6 + 3, -0.5, 0); g.add(m2); }
+  } else {
+    for (let i = -3; i < 5; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(3.2, 10, 1), M(0x3a2630)); m.position.set(i * 5, 3.5, 0); g.add(m); const cap = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.8, 1.4), M(0x523644)); cap.position.set(i * 5, 8.6, 0); g.add(cap); }
+  }
+  g.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } });
+  return g;
+}
+function updateBg3D(theme, cx, cy) {
+  R.bgCache = R.bgCache || {};
+  if (!R.bgCache[theme]) { R.bgCache[theme] = buildBg(theme); R.scene.add(R.bgCache[theme]); }
+  for (const k in R.bgCache) R.bgCache[k].visible = (k === theme);
+  R.bgCache[theme].position.set(cx * 0.55, cy * 0.3 - 2, -24); // parallaxe + loin derrière
+}
+
 // ---- pools ----
 function tileMesh() {
   const m = new THREE.Mesh(R.boxGeo, R.mat(0xffffff));
@@ -281,6 +303,9 @@ function drawEnt(c, S, name) {
     case 'fly_body': R_(0, 0, 16, 16, '#e2483b'); R_(0, 11, 16, 5, '#a3261d'); for (let i = 0; i < 18; i++) R_(rnd(1, 15), rnd(1, 11), 0.5, rnd(1, 2), '#c2382c'); eyes('#200'); break;
     case 'wing': { const g = c.createLinearGradient(0, 0, S, 0); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#cfe0ff'); c.fillStyle = g; c.fillRect(0, 0, S, S); c.strokeStyle = '#b0c4e8'; c.lineWidth = u * 0.5; for (let i = 2; i < 16; i += 3) { c.beginPath(); c.moveTo(0, i * u); c.lineTo(S, (i - 2) * u); c.stroke(); } break; }
     case 'spiky_body': R_(0, 0, 16, 16, '#b06ad8'); R_(0, 11, 16, 5, '#7a3aa0'); speck(20, '#9a52c8'); eyes('#1a0a24'); R_(4, 11, 8, 4, '#e0c0ff'); for (let i = 0; i < 4; i++) R_(4.5 + i * 2, 11, 0.5, 4, '#7a3aa0'); break;
+    case 'plant_head': R_(0, 0, 16, 16, '#46c24a'); for (let i = 0; i < 30; i++) R_(rnd(0, 16), rnd(0, 16), 0.4, rnd(1, 2), pick('#2a8a30', '#9be0a0')); R_(4, 6, 8, 4, '#fff'); R_(4, 6, 8, 1, '#e23b3b'); for (let i = 0; i < 4; i++) R_(4.5 + i * 2, 6, 0.6, 4, '#e23b3b'); eyes('#0c3a16'); break;
+    case 'lob_body': R_(0, 0, 16, 16, '#7a4ad0'); R_(0, 11, 16, 5, '#5a2fa0'); speck(18, '#9a6ae0'); eyes('#120'); R_(5, 11, 6, 3, '#e0c0ff'); break;
+    case 'lob_face': R_(0, 0, 16, 16, '#7a4ad0'); for (let i = 0; i < 16; i++) R_(rnd(1, 15), rnd(1, 10), 0.5, rnd(1, 2), '#5a2fa0'); eyes('#120'); R_(5, 11, 6, 2, '#e0c0ff'); break;
     case 'boss_body':
       R_(0, 0, 16, 16, '#37c24a');
       c.strokeStyle = '#1f8a30'; c.lineWidth = u * 0.7; for (let yy = 1; yy < 16; yy += 3) for (let xx = 1; xx < 16; xx += 3) { c.beginPath(); c.arc((xx + (yy % 6 === 1 ? 0 : 1.5)) * u, yy * u, 1.5 * u, 0, 6.3); c.stroke(); }
@@ -363,6 +388,21 @@ function makeSpiky() {
   for (let i = -1; i <= 1; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.34, 5), R.mat(0xe0c0ff)); s.castShadow = true; s.position.set(i * 0.26, 0.78, 0); g.add(s); }
   return g;
 }
+function makePlant() {
+  const g = new THREE.Group();
+  g.add(texBox(0.18, 0.7, 0.18, 'fly_body', null, 0, 0.0, 0));            // tige (placeholder vert via mat)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10), texMat('plant_head'));
+  head.position.y = 0.55; head.castShadow = true; g.add(head);
+  for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; const t = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.2, 4), R.mat(0xffffff)); t.position.set(Math.cos(a) * 0.32, 0.55, Math.sin(a) * 0.32); t.rotation.x = Math.PI; g.add(t); }
+  return g;
+}
+function makeLob() {
+  const g = new THREE.Group();
+  g.add(texBox(0.85, 0.7, 0.8, 'lob_body', 'lob_face', 0, 0.4, 0));
+  g.add(texBox(0.3, 0.18, 0.5, 'shoe', null, -0.24, -0.05, 0));
+  g.add(texBox(0.3, 0.18, 0.5, 'shoe', null, 0.24, -0.05, 0));
+  return g;
+}
 function makeBoss() {
   const g = new THREE.Group();
   g.add(texBox(2.5, 2.1, 2.1, 'boss_body', 'boss_body', 0, 1.05, 0));
@@ -402,6 +442,7 @@ function drawScene(scene) {
   // caméra suit le centre de vue
   const cx = U(cam.x) + VW / 2;
   const cy = -(U(cam.y) + VH / 2);
+  updateBg3D(lvl.theme, cx, cy);
   R.cam.position.set(cx, cy + 4.6, 15);
   R.cam.lookAt(cx, cy, 0);
   // la lumière (ombres) suit la zone visible
@@ -455,11 +496,13 @@ function drawScene(scene) {
   for (const e of scene.enemies || []) {
     if (e.removed) continue;
     const key = e.type;
-    const fac = e.type === 'shell' ? makeShell : e.type === 'fly' ? makeFly : e.type === 'spiky' ? makeSpiky : makeGoon;
+    const fac = e.type === 'shell' ? makeShell : e.type === 'fly' ? makeFly : e.type === 'spiky' ? makeSpiky : e.type === 'plant' ? makePlant : e.type === 'lob' ? makeLob : makeGoon;
     place(key, fac, e.x, e.y, e.w, e.h, (g) => {
       g.scale.x = e.dir < 0 ? -1 : 1; g.rotation.set(0, 0, 0);
       if (e.dead) { g.rotation.z = Math.PI; return; }
       if (e.type === 'fly') { if (g.userData.w1) { const f = 0.4 + Math.sin(e.t * 16) * 0.6; g.userData.w1.rotation.z = f; g.userData.w2.rotation.z = -f; } g.position.y += Math.sin(e.t * 4) * 0.06; }
+      else if (e.type === 'plant') { g.rotation.z = Math.sin(e.t * 4) * 0.1; }
+      else if (e.type === 'lob') { g.rotation.z = Math.sin(e.t * 7) * 0.1; }
       else if (e.type === 'shell' && e.state === 'shell' && Math.abs(e.vx) > 10) { g.rotation.x = e.t * 9 * (e.vx > 0 ? 1 : -1); } // carapace qui roule
       else { g.rotation.z = Math.sin(e.t * 9) * 0.13; g.position.y += Math.abs(Math.sin(e.t * 9)) * 0.04; } // dandinement
     });

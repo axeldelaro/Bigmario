@@ -77,7 +77,9 @@ function L13() { // 1-3 Collines fleuries — reliefs en escalier, ressorts, plu
   stairs(g, 40, 9, 3, 1); // petit escalier
   // bloc plume (nouveau power-up) bien visible
   put(g, 5, 46, 'W');
-  pipe(g, 52, 8);
+  pipe(g, 52, 8); put(g, 7, 52, 'v'); // plante de tuyau
+  // tuyau-warp -> petite salle secrète en hauteur (pièces)
+  put(g, 8, 48, 'Q'); put(g, 9, 48, 'p'); put(g, 2, 48, 'q'); coins(g, 1, 46, 3);
   // parcours haut : plateformes + gemme
   plat(g, 4, 62, 5); put(g, 3, 64, 'j'); plat(g, 5, 72, 4);
   // ressort vers gemme très haute
@@ -120,9 +122,9 @@ function L22() { // 2-2 Château — pics, colonnes, plateformes mobiles
   // étage haut bonus
   plat(g, 4, 30, 6); put(g, 3, 32, 'j'); plat(g, 4, 80, 6); coins(g, 3, 81, 3);
   put(g, 6, 34, 'B?B'); put(g, 6, 68, 'BMB');
-  pipe(g, 44, 8); pipe(g, 58, 8);
-  // ennemis
-  put(g, 9, 12, 'k'); put(g, 9, 34, 'g'); put(g, 9, 56, 'k'); put(g, 9, 70, 'g'); put(g, 9, 88, 'k');
+  pipe(g, 44, 8); pipe(g, 58, 8); put(g, 7, 44, 'v'); // plante de tuyau
+  // ennemis (dont un lanceur)
+  put(g, 9, 12, 'k'); put(g, 9, 34, 't'); put(g, 9, 56, 'k'); put(g, 9, 70, 'g'); put(g, 9, 88, 'k');
   put(g, 6, 49, 'g'); // sur plateforme
   return { name: '2-2 Château', theme: 'castle', time: 340, map: rows(g) };
 }
@@ -211,9 +213,9 @@ function L42() { // 4-2 Donjon — château exigeant, pics, colonnes, deux route
   plat(g, 7, 24, 4); plat(g, 7, 50, 5); plat(g, 6, 78, 5);                          // passerelles
   plat(g, 4, 32, 6); put(g, 3, 34, 'j'); plat(g, 4, 86, 6); coins(g, 3, 87, 3);     // route haute
   put(g, 6, 36, 'B?B'); put(g, 6, 66, 'BMB'); put(g, 5, 58, 'W');
-  pipe(g, 40, 8); pipe(g, 62, 8);
+  pipe(g, 40, 8); pipe(g, 62, 8); put(g, 7, 40, 'v'); put(g, 7, 62, 'v'); // plantes de tuyau
   put(g, 8, 56, 'C');
-  put(g, 9, 14, 'k'); put(g, 9, 36, 'z'); put(g, 9, 58, 'k'); put(g, 9, 70, 'z'); put(g, 9, 96, 'k');
+  put(g, 9, 14, 'k'); put(g, 9, 36, 't'); put(g, 9, 58, 'k'); put(g, 9, 70, 'z'); put(g, 9, 96, 't');
   put(g, 6, 51, 'g');
   return { name: '4-2 Donjon', theme: 'castle', time: 360, map: rows(g) };
 }

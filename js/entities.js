@@ -244,6 +244,8 @@ export class Enemy {
     this.state = 'walk'; this.stateT = 0; this.gravity = true;
     if (type === 'fly') { this.gravity = false; this.baseY = y; this.w = 16; this.h = 14; }
     if (type === 'shell') { this.h = 14; }
+    if (type === 'plant') { this.gravity = false; this.baseY = y; this.w = 14; this.h = 16; this.vx = 0; } // plante de tuyau
+    if (type === 'lob') { this.lobCd = 1.6 + Math.random(); }                                            // lanceur
   }
   // appelé quand stompé par le dessus
   stomp() {
@@ -279,6 +281,21 @@ export class Enemy {
       return;
     }
 
+    if (this.type === 'plant') { // plante de tuyau : monte/descend
+      this.y = this.baseY - (Math.max(0, Math.sin(this.t * 1.6)) * 18);
+      return;
+    }
+
+    // lanceur : envoie un projectile en cloche vers le joueur
+    if (this.type === 'lob') {
+      this.lobCd -= dt;
+      if (this.lobCd <= 0 && scene && scene.player && scene.spawnHazard) {
+        this.lobCd = 1.8 + Math.random();
+        const dir = (scene.player.x - this.x) > 0 ? 1 : -1;
+        scene.spawnHazard(new EnemyShot(this.x + this.w / 2, this.y, dir * 80, -220));
+      }
+    }
+
     if (this.gravity) this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
     const preVx = this.vx; // moveAndCollide met vx à 0 en cas de mur -> on garde la vitesse d'avant
     const r = level.moveAndCollide(this, dt);
@@ -298,6 +315,8 @@ export class Enemy {
     if (!this.dead) shadow(c, this.x + this.w / 2 - cam.x, this.y + this.h - cam.y, this.w * 0.7, this.type === 'fly' ? 0.4 : 1);
     let img;
     if (this.type === 'fly') img = (Math.floor(this.t * 12) % 2) ? ART.fly.a : ART.fly.b;
+    else if (this.type === 'plant') img = (Math.floor(this.t * 6) % 2) ? ART.plant.a : ART.plant.b;
+    else if (this.type === 'lob') img = (Math.floor(this.t * 4) % 2) ? ART.lob.a : ART.lob.b;
     else if (this.type === 'spiky') img = (Math.floor(this.t * 8) % 2) ? ART.spiky.a : ART.spiky.b;
     else if (this.type === 'shell') img = this.state === 'shell' ? ART.shell.hide : ART.shell.a;
     else if (this.state === 'flat') img = ART.goon.flat;
