@@ -14,6 +14,7 @@ en ligne.
 - 🕹️ **Jouable au clavier, à la manette, et au tactile** (overlay en mode paysage sur téléphone, vibration).
 - 🎨 **Décors détaillés** : ciel en dégradé, parallaxe multi-couches (montagnes, collines, arbres, nuages), cristaux scintillants et torches animées ; ombres au sol et menus animés.
 - 🗺️ **Carte du monde** animée pour choisir ses niveaux.
+- ✅ **Niveaux garantis franchissables** : un validateur physique headless (`test/solve.mjs`) simule le moteur réel et vérifie qu'un auto-joueur atteint l'arrivée de chaque niveau.
 - 🧩 **Aventure solo** : 3 mondes / **9 niveaux**, **combat de boss**, ennemis variés (marcheur, carapace, volant, **à pics**), power-ups (champignon / fleur de feu / étoile), blocs, tuyaux, drapeau d'arrivée.
 - ⏱️ **Contre-la-montre** : chrono au **millième de seconde**, retry instantané, **meilleurs temps locaux** et **classements en ligne**.
 - 🏁 **Marathon** : les 9 niveaux d'affilée, un seul chrono, classement dédié.
