@@ -2,6 +2,7 @@
 // simulation 2D existante (style 2.5D). Chargé dynamiquement ; en cas d'échec
 // (pas de réseau / WebGL indisponible), l'appelant retombe sur le rendu 2D.
 import { TILE, VIEW_W, VIEW_H } from './core.js';
+import { tileCanvas } from './art.js';
 
 const THREE_URL = 'https://unpkg.com/three@0.160.0/build/three.module.js';
 let THREE = null;
@@ -47,38 +48,82 @@ function buildRenderer() {
   canvas.id = 'screen3d';
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setClearColor(0x7ec8ff, 1);
+  if ('outputColorSpace' in renderer) renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x9fd6ff, 18, 46);
+  scene.fog = new THREE.Fog(0x9fd6ff, 22, 52);
 
   // caméra orthographique inclinée -> cadrage stable + profondeur visible
-  const cam = new THREE.OrthographicCamera(-VW / 2, VW / 2, VH / 2, -VH / 2, -50, 100);
-  cam.position.set(0, 4.2, 14);
+  const cam = new THREE.OrthographicCamera(-VW / 2, VW / 2, VH / 2, -VH / 2, -60, 120);
+  cam.position.set(0, 4.6, 15);
   cam.up.set(0, 1, 0);
 
-  // lumières
-  const amb = new THREE.HemisphereLight(0xffffff, 0x4a5a3a, 0.95);
+  // lumières : ambiant doux + clé directionnelle (ombres) + contre-jour
+  const amb = new THREE.HemisphereLight(0xfdfbff, 0x404a55, 0.85);
   scene.add(amb);
-  const dir = new THREE.DirectionalLight(0xfff4d6, 0.9);
-  dir.position.set(-6, 12, 8);
-  scene.add(dir);
+  const key = new THREE.DirectionalLight(0xfff1d0, 1.25);
+  key.position.set(-7, 14, 9);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  const sc = key.shadow.camera;
+  sc.left = -16; sc.right = 16; sc.top = 12; sc.bottom = -12; sc.near = 1; sc.far = 60;
+  key.shadow.bias = -0.0006;
+  scene.add(key); scene.add(key.target);
+  const fill = new THREE.DirectionalLight(0x9fc0ff, 0.35);
+  fill.position.set(8, 6, 6); scene.add(fill);
 
   const root = new THREE.Group(); scene.add(root);
 
-  const boxGeo = new THREE.BoxGeometry(1, 1, 1.2);
+  const boxGeo = new THREE.BoxGeometry(1, 1, 1.15);
   const matCache = new Map();
-  const mat = (hex) => { if (!matCache.has(hex)) matCache.set(hex, new THREE.MeshLambertMaterial({ color: hex })); return matCache.get(hex); };
+  const mat = (hex) => { if (!matCache.has(hex)) matCache.set(hex, new THREE.MeshStandardMaterial({ color: hex, roughness: 0.7, metalness: 0.05 })); return matCache.get(hex); };
+
+  // sprite (canvas pixel-art) -> texture nette
+  const texCache = new Map();
+  const tex = (canvasEl, key2) => {
+    if (texCache.has(key2)) return texCache.get(key2);
+    const t = new THREE.CanvasTexture(canvasEl);
+    t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+    if ('colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4; texCache.set(key2, t); return t;
+  };
+  // matériau texturé par type de tuile + thème (réutilise l'art 2D)
+  const tileMatCache = new Map();
+  const tileMat = (type, theme) => {
+    const k = type + '|' + theme;
+    if (tileMatCache.has(k)) return tileMatCache.get(k);
+    const map = tex(tileCanvas(type, theme), k);
+    const emissive = (type === '?' || type === 'M' || type === 'U' || type === 'L' || type === 'W');
+    const m = new THREE.MeshStandardMaterial({ map, roughness: 0.85, metalness: 0.02, emissive: emissive ? 0x222000 : 0x000000, emissiveMap: emissive ? map : null });
+    tileMatCache.set(k, m); return m;
+  };
 
   return {
-    THREE, renderer, scene, cam, root, boxGeo, mat,
+    THREE, renderer, scene, cam, root, boxGeo, mat, tex, tileMat, key,
     pools: { tile: [], ti: 0, ent: new Map() },
-    models: {},
-    sky: new THREE.Color(0x7ec8ff),
+    models: {}, skyCache: new Map(),
   };
+}
+
+// texture de ciel en dégradé (par thème) pour le fond 3D
+function skyTexture(theme) {
+  if (R.skyCache.has(theme)) return R.skyCache.get(theme);
+  const cv = document.createElement('canvas'); cv.width = 16; cv.height = 256;
+  const c = cv.getContext('2d'); const g = c.createLinearGradient(0, 0, 0, 256);
+  if (theme === 'underground') { g.addColorStop(0, '#10325a'); g.addColorStop(1, '#03060f'); }
+  else if (theme === 'castle') { g.addColorStop(0, '#3a1622'); g.addColorStop(1, '#0a0508'); }
+  else { g.addColorStop(0, '#5aa8ff'); g.addColorStop(0.55, '#9fd6ff'); g.addColorStop(1, '#dff0ff'); }
+  c.fillStyle = g; c.fillRect(0, 0, 16, 256);
+  const t = new THREE.CanvasTexture(cv); if ('colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace;
+  R.skyCache.set(theme, t); return t;
 }
 
 // ---- pools ----
 function tileMesh() {
   const m = new THREE.Mesh(R.boxGeo, R.mat(0xffffff));
+  m.castShadow = true; m.receiveShadow = true;
   R.root.add(m); R.pools.tile.push(m); return m;
 }
 function getTile() {
@@ -98,6 +143,7 @@ function entGroup(key, factory) {
 
 function box(w, h, d, hex, x = 0, y = 0, z = 0) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), R.mat(hex));
+  m.castShadow = true; m.receiveShadow = true;
   m.position.set(x, y, z); return m;
 }
 
@@ -148,15 +194,18 @@ export function renderScene(scene) {
 function drawScene(scene) {
   const lvl = scene.level, cam = scene.cam;
   // ciel + brouillard selon thème
-  const sky = THEME_SKY[lvl.theme] ?? 0x7ec8ff;
-  R.renderer.setClearColor(sky, 1);
+  R.scene.background = skyTexture(lvl.theme);
   R.scene.fog.color.setHex(THEME_FOG[lvl.theme] ?? 0x9fd6ff);
 
   // caméra suit le centre de vue
   const cx = U(cam.x) + VW / 2;
   const cy = -(U(cam.y) + VH / 2);
-  R.cam.position.set(cx, cy + 4.2, 14);
+  R.cam.position.set(cx, cy + 4.6, 15);
   R.cam.lookAt(cx, cy, 0);
+  // la lumière (ombres) suit la zone visible
+  R.key.position.set(cx - 7, cy + 14, 9);
+  R.key.target.position.set(cx, cy, 0);
+  R.key.target.updateMatrixWorld();
 
   // ---- tuiles visibles ----
   R.pools.ti = 0;
@@ -168,11 +217,12 @@ function drawScene(scene) {
     for (let tx = tx0; tx <= tx1; tx++) {
       const ch = lvl.rows[ty][tx];
       if (ch === ' ' || ch === 'G' || ch === 'C' || ch === 'c') continue;
-      const col = TILE_COL[ch]; if (!col) continue;
+      if (!TILE_COL[ch]) continue; // type connu
       const m = getTile();
-      m.material = R.mat(col.side);
+      m.material = R.tileMat(ch, lvl.theme);
       m.position.set(tx + 0.5, -(ty + 0.5), 0);
-      m.scale.set(1, 1, 1);
+      // plateformes fines vs blocs pleins
+      if (ch === '=') m.scale.set(1, 0.38, 0.9); else m.scale.set(1, 1, 1);
     }
   }
   // drapeau d'arrivée (mât)
