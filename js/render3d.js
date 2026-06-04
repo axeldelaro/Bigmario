@@ -489,24 +489,24 @@ function drawScene(scene) {
       g.scale.set((p.dir < 0 ? -1 : 1) * sx, sy, 1);
       g.rotation.z = 0;
       const L = ud.lL, R = ud.lR, AL = ud.aL, AR = ud.aR;
+      // IMPORTANT : le pas se fait autour de l'axe Z (visible de profil), pas X.
+      L.rotation.set(0, 0, 0); R.rotation.set(0, 0, 0); AL.rotation.set(0, 0, 0); AR.rotation.set(0, 0, 0);
       if (!p.onGround && !p.dead) { // saut / chute / plané / slam
-        if (p.pounding) { L.rotation.x = 0.15; R.rotation.x = 0.15; AL.rotation.x = -2.4; AR.rotation.x = -2.4; AL.rotation.z = AR.rotation.z = 0; }
-        else if (p.gliding) { L.rotation.x = -0.3; R.rotation.x = 0.3; AL.rotation.x = 0.2; AR.rotation.x = 0.2; AL.rotation.z = 1.1; AR.rotation.z = -1.1; }
-        else { L.rotation.x = -0.6; R.rotation.x = -0.35; AL.rotation.x = -1.5; AR.rotation.x = -1.2; AL.rotation.z = AR.rotation.z = 0; }
-        ud.head.rotation.x = 0;
-      } else if (moving) { // course
-        const ph = p.walkT * 1.1, amp = 0.3 + 0.55 * sp;
-        L.rotation.x = Math.sin(ph) * amp; R.rotation.x = Math.sin(ph + Math.PI) * amp;
-        AL.rotation.x = Math.sin(ph + Math.PI) * amp * 0.85; AR.rotation.x = Math.sin(ph) * amp * 0.85;
-        AL.rotation.z = AR.rotation.z = 0;
-        g.position.y += Math.abs(Math.sin(ph)) * 0.06 * sp;     // bob vertical
-        g.rotation.z = -0.13 * sp * (p.dir >= 0 ? 1 : -1);       // se penche dans la course
-        ud.head.rotation.x = 0.08 * sp;
-      } else { // repos : respiration
+        if (p.pounding) { L.rotation.z = 0.1; R.rotation.z = -0.1; AL.rotation.z = 2.7; AR.rotation.z = -2.7; }
+        else if (p.gliding) { L.rotation.z = 0.5; R.rotation.z = -0.5; AL.rotation.z = 1.4; AR.rotation.z = -1.4; }
+        else { L.rotation.z = 0.55; R.rotation.z = -0.35; AL.rotation.z = -0.6; AR.rotation.z = 0.6; } // course en l'air
+        ud.head.rotation.z = 0;
+      } else if (moving) { // course : grandes foulées
+        const ph = p.walkT * 1.5, amp = 0.5 + 0.7 * sp, s = Math.sin(ph);
+        L.rotation.z = s * amp; R.rotation.z = -s * amp;                 // jambes opposées
+        AL.rotation.z = -s * amp * 0.8; AR.rotation.z = s * amp * 0.8;   // bras opposés aux jambes
+        g.position.y += Math.abs(Math.cos(ph)) * 0.07 * sp;             // bob (haut quand jambes croisées)
+        g.rotation.z = -0.14 * sp * (p.dir >= 0 ? 1 : -1);               // se penche dans la course
+        ud.head.rotation.z = 0.06 * sp * (p.dir >= 0 ? 1 : -1);
+      } else { // repos : respiration légère
         const br = Math.sin(p.t * 2.2);
-        L.rotation.x = R.rotation.x = 0;
-        AL.rotation.x = 0.05 + br * 0.05; AR.rotation.x = 0.05 - br * 0.05; AL.rotation.z = AR.rotation.z = 0;
-        ud.head.rotation.x = 0; g.position.y += br * 0.015;
+        AL.rotation.z = -0.06 + br * 0.04; AR.rotation.z = 0.06 - br * 0.04;
+        g.position.y += br * 0.015;
       }
       g.visible = !(p.invuln > 0 && Math.floor(p.t * 20) % 2 && !p.dead);
     });
