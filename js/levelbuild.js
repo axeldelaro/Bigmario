@@ -39,7 +39,7 @@ function L11() { // 1-1 Premiers pas — intro douce, un parcours haut bonus
   // plateau surélevé avec ennemis + escalier
   mesa(g, 18, 28, 8); put(g, 7, 20, 'g'); put(g, 7, 24, 'g'); coins(g, 6, 30, 2);
   // tuyaux de hauteurs variées
-  pipe(g, 44, 7); pipe(g, 54, 8);
+  pipe(g, 44, 8); pipe(g, 54, 8);
   // parcours haut bonus (plateformes) au-dessus d'un trou
   plat(g, 5, 40, 5); plat(g, 4, 48, 4); put(g, 3, 49, 'j'); plat(g, 5, 58, 4);
   // ressort + gemme haute
@@ -61,7 +61,7 @@ function L12() { // 1-2 Cavernes — vertical, deux niveaux, plafonds
   // étage bas : plateformes intermédiaires
   plat(g, 7, 10, 4); plat(g, 7, 30, 5); plat(g, 7, 56, 5); plat(g, 7, 82, 4);
   put(g, 5, 11, 'o o'); put(g, 5, 57, 'o o');
-  pipe(g, 26, 7); pipe(g, 62, 8);
+  pipe(g, 26, 8); pipe(g, 62, 8);
   put(g, 6, 35, 'B?B'); put(g, 6, 70, 'BMB');
   // ennemis
   put(g, 9, 16, 'g'); put(g, 9, 34, 'k'); put(g, 9, 50, 'g'); put(g, 9, 64, 'k'); put(g, 9, 84, 'g');
@@ -77,7 +77,7 @@ function L13() { // 1-3 Collines fleuries — reliefs en escalier, ressorts, plu
   stairs(g, 40, 9, 3, 1); // petit escalier
   // bloc plume (nouveau power-up) bien visible
   put(g, 5, 46, 'W');
-  pipe(g, 52, 7);
+  pipe(g, 52, 8);
   // parcours haut : plateformes + gemme
   plat(g, 4, 62, 5); put(g, 3, 64, 'j'); plat(g, 5, 72, 4);
   // ressort vers gemme très haute
@@ -97,7 +97,7 @@ function L21() { // 2-1 Remparts — escaliers montants/descendants, route haute
   stairs(g, 8, 9, 4, 1); mesa(g, 12, 22, 6); put(g, 5, 16, 'g'); put(g, 5, 19, 'g');
   stairs(g, 26, 6, 4, 1); // remonte plus haut -> route haute
   plat(g, 3, 30, 8); put(g, 2, 33, 'U'); coins(g, 2, 38, 2); // étoile en haut
-  pipe(g, 48, 7); pipe(g, 60, 8);
+  pipe(g, 48, 8); pipe(g, 60, 8);
   put(g, 6, 52, 'BMB');
   // pont de plateformes au-dessus d'un trou
   plat(g, 7, 66, 3); plat(g, 6, 74, 3); plat(g, 7, 82, 3); put(g, 5, 75, 'j');
@@ -120,7 +120,7 @@ function L22() { // 2-2 Château — pics, colonnes, plateformes mobiles
   // étage haut bonus
   plat(g, 4, 30, 6); put(g, 3, 32, 'j'); plat(g, 4, 80, 6); coins(g, 3, 81, 3);
   put(g, 6, 34, 'B?B'); put(g, 6, 68, 'BMB');
-  pipe(g, 44, 7); pipe(g, 58, 8);
+  pipe(g, 44, 8); pipe(g, 58, 8);
   // ennemis
   put(g, 9, 12, 'k'); put(g, 9, 34, 'g'); put(g, 9, 56, 'k'); put(g, 9, 70, 'g'); put(g, 9, 88, 'k');
   put(g, 6, 49, 'g'); // sur plateforme
@@ -136,7 +136,7 @@ function L23() { // 2-3 Souterrain profond — deux routes, puits, plumes & éto
   // route basse (plateformes)
   plat(g, 7, 10, 4); plat(g, 7, 30, 5); plat(g, 7, 58, 5); plat(g, 7, 84, 4);
   put(g, 5, 11, 'o o'); put(g, 5, 85, 'o o');
-  pipe(g, 26, 7); pipe(g, 40, 8); pipe(g, 66, 7);
+  pipe(g, 26, 8); pipe(g, 40, 8); pipe(g, 66, 8);
   put(g, 6, 34, 'B?B'); put(g, 6, 70, 'BUB');
   // ennemis (dont à pics)
   put(g, 9, 16, 'z'); put(g, 9, 36, 'g'); put(g, 9, 50, 'z'); put(g, 9, 62, 'g'); put(g, 9, 90, 'z');
