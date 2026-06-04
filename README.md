@@ -24,7 +24,9 @@ en ligne.
 - 👥 **Fantôme d'ami** : partage un run par **code court** (serveur) ou **fichier .bmr**, charge celui d'un ami pour le **revoir** ou **courir contre**.
 - 🥇 **Médailles** (or/argent/bronze) par temps de référence, **succès** à débloquer.
 - ⏸️ **Menu pause tactile** (Reprendre / Recommencer / Son / Menu) et **réglage son mémorisé**.
-- 🪜 **Mécaniques** : **ressorts**, **plateformes mobiles**, **checkpoints**, **gemmes cachées** (3/niveau, sauvegardées).
+- 🪜 **Mécaniques** : **ressorts**, **plateformes mobiles**, **checkpoints**, **gemmes cachées** (3/niveau, sauvegardées), **1-UP** et **plume** (vol plané : maintiens Saut en l'air).
+- 🎮 **Boutons tactiles personnalisables** (taille, opacité, gaucher/droitier) dans les Options.
+- 🗺️ **Niveaux avec relief** : plateaux, escaliers, doubles parcours (route basse sûre + route haute à récompenses), tous validés franchissables.
 - ✨ **Game feel** : screen-shake, hit-stop, cartes d'intro de niveau, particules.
 - ⚔️ **Versus** : **contre l'IA**, à 2 sur le même écran, **ou en ligne** (premier à 5 KO), 3 arènes.
 - 📲 **PWA** : installable sur l'écran d'accueil et **jouable hors-ligne**.

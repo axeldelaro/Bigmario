@@ -106,7 +106,8 @@ export class GameScene {
       SFX.bump();
       if (ev.item === 'coin') { player.addCoin(this); this.addFloat(wx, wy - 6, '+1', '#ffd23b'); SFX.coin(); }
       else {
-        const kind = ev.item === 'star' ? 'star' : ev.item === 'oneup' ? 'oneup' : (player.power === 'small' ? 'mushroom' : 'flower');
+        const kind = ev.item === 'star' ? 'star' : ev.item === 'oneup' ? 'oneup' : ev.item === 'feather' ? 'feather'
+          : (player.power === 'small' ? 'mushroom' : 'flower');
         this.items.push(new PowerUp(wx - 7, wy - 4, kind));
       }
     }
@@ -416,15 +417,15 @@ export class GameScene {
     if (pose.air) img = set.jump;
     else if (pose.moving) img = (Math.floor(this.runMs / 120) % 2) ? set.walk : set.idle;
     else img = set.idle;
-    const x = Math.round(pose.x - this.cam.x) - 2;
-    const y = Math.round(pose.y - this.cam.y) - (big ? 12 : 1);
+    const h = big ? 26 : 14;
+    const centerX = Math.round(pose.x + 6 - this.cam.x);
+    const feetY = Math.round(pose.y + h - this.cam.y);
+    const baseY = big ? 1.55 : 1.0, baseX = big ? 1.18 : 1.0;
     c.save();
-    c.globalAlpha = 0.42;
-    c.shadowColor = entry.glow; c.shadowBlur = 6;
-    if (pose.dir < 0) { c.translate(x + 8, 0); c.scale(-1, 1); c.translate(-(x + 8), 0); }
-    c.drawImage(img, x, y);
-    c.restore();
-    c.globalAlpha = 1;
+    c.globalAlpha = 0.42; c.shadowColor = entry.glow; c.shadowBlur = 6;
+    c.translate(centerX, feetY); c.scale(pose.dir < 0 ? -baseX : baseX, baseY);
+    c.drawImage(img, -8, -16);
+    c.restore(); c.globalAlpha = 1;
   }
 
   drawHUD(c) {
