@@ -56,7 +56,7 @@ export class MapScene {
   confirm() {
     const n = this.selectable[this.cursor]; if (!n) return;
     SFX.power();
-    if (this.mode === 'speedrun') this.game.startSpeedrun(n.w, n.l);
+    if (this.mode === 'speedrun') this.game.showGhostPick(n.w, n.l);
     else this.game.startSolo(n.w, n.l);
   }
 

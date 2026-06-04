@@ -60,15 +60,21 @@ const server = http.createServer((req, res) => {
     const level = String(url.searchParams.get('level') || '');
     const limit = Math.min(50, parseInt(url.searchParams.get('limit') || '10', 10) || 10);
     const list = (scores[level] || []).slice(0, limit);
-    const wr = ghosts[level];
-    return sendJSON(res, 200, { level, scores: list, hasGhost: !!wr, ghostName: wr ? wr.name : null });
+    const gl = ghosts[level] || [];
+    return sendJSON(res, 200, { level, scores: list, hasGhost: gl.length > 0, ghostName: gl[0] ? gl[0].name : null });
   }
 
   if (url.pathname === '/api/ghost' && req.method === 'GET') {
     const level = String(url.searchParams.get('level') || '');
-    const g = ghosts[level];
-    if (!g) return sendJSON(res, 200, { ghost: null });
-    return sendJSON(res, 200, { ghost: g.data, name: g.name, ms: g.ms });
+    const list = ghosts[level] || [];
+    const rankStr = url.searchParams.get('rank');
+    if (rankStr != null) { // données d'un fantôme précis (top 1-3)
+      const g = list[Math.max(0, (parseInt(rankStr, 10) || 1) - 1)];
+      if (!g) return sendJSON(res, 200, { ghost: null });
+      return sendJSON(res, 200, { ghost: g.data, name: g.name, ms: g.ms });
+    }
+    // sinon: métadonnées du top-3 (nom + temps, sans les données)
+    return sendJSON(res, 200, { list: list.slice(0, 3).map((g, i) => ({ rank: i + 1, name: g.name, ms: g.ms })) });
   }
 
   // Partage d'un replay par code court
@@ -119,9 +125,14 @@ const server = http.createServer((req, res) => {
       else list.push({ name, ms, ts: Date.now() });
       list.sort((a, b) => a.ms - b.ms);
       if (list.length > MAX_PER_LEVEL) list.length = MAX_PER_LEVEL;
-      // si ce temps devient le record du niveau, on garde son fantôme
-      if (list[0].name === name && list[0].ms === ms && validGhost(m.ghost)) {
-        ghosts[level] = { name, ms, data: { dt: Math.round(m.ghost.dt), f: m.ghost.f } };
+      // garde le fantôme dans le TOP 3 du niveau (un seul par pseudo)
+      if (validGhost(m.ghost)) {
+        const gl = ghosts[level] || (ghosts[level] = []);
+        const gi = gl.findIndex((x) => x.name === name);
+        const entry = { name, ms, data: { dt: Math.round(m.ghost.dt), f: m.ghost.f } };
+        if (gi >= 0) { if (ms <= gl[gi].ms) gl[gi] = entry; } else gl.push(entry);
+        gl.sort((a, b) => a.ms - b.ms);
+        if (gl.length > 3) gl.length = 3; // on ne garde que les 3 meilleurs
       }
       persist();
       const rank = list.findIndex((s) => s.name === name) + 1;

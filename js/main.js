@@ -251,20 +251,41 @@ class Game {
     p.querySelector('#ed').onclick = () => this.startEditor();
     p.querySelector('#menu').onclick = () => this.returnToMenu();
   }
-  startSpeedrun(worldIdx = 0, levelIdx = 0) {
+  // Choix du fantôme à affronter (top-3 en ligne + ton record), avant la course
+  async showGhostPick(worldIdx, levelIdx) {
+    const levelId = `${worldIdx}-${levelIdx}`;
+    const pb = Leaderboard.getLocalBest(levelId);
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:24px">FANTÔME À AFFRONTER</span><span class="sub">${worldIdx + 1}-${levelIdx + 1}</span></div>
+      <div class="status" id="st">Chargement du top 3…</div>
+      <div class="menu-list" id="opts"></div>
+      <div class="row" style="margin-top:10px"><button class="btn ghost" id="back">← Retour</button></div>`);
+    const opts = p.querySelector('#opts'), st = p.querySelector('#st');
+    const add = (label, cls, cb) => { const b = document.createElement('button'); b.className = 'btn ' + (cls || ''); b.innerHTML = label; b.onclick = cb; opts.appendChild(b); };
+    add('🚫 Aucun fantôme', 'ghost', () => this.startSpeedrun(worldIdx, levelIdx, { none: true }));
+    if (pb != null) add(`🔵 Ton record · ${fmtTime(pb)}`, 'secondary', () => this.startSpeedrun(worldIdx, levelIdx, {}));
+    const list = await Leaderboard.fetchGhostList(levelId);
+    st.textContent = list.length ? 'Choisis qui affronter :' : (Leaderboard.apiBase() ? 'Aucun fantôme en ligne pour ce niveau.' : 'Serveur non configuré (fantômes en ligne indispo).');
+    const medal = ['🥇', '🥈', '🥉'];
+    list.forEach((g) => add(`${medal[g.rank - 1] || '🏅'} ${escapeHtml(g.name)} · ${fmtTime(g.ms)}`, '', () => this.startSpeedrun(worldIdx, levelIdx, { onlineRank: g.rank, onlineName: g.name })));
+    p.querySelector('#back').onclick = () => this.showMap('speedrun');
+  }
+
+  startSpeedrun(worldIdx = 0, levelIdx = 0, pick = {}) {
     this.clearUI(); this.mode = 'game'; this.paused = false;
-    this._restart = () => this.startSpeedrun(worldIdx, levelIdx);
+    this._restart = () => this.startSpeedrun(worldIdx, levelIdx, pick);
     this.scene = new GameScene(this, worldIdx, levelIdx, null, { speedrun: true });
     this.checkOrientation();
-    // fantôme d'ami chargé localement (mauve)
     const levelId = `${worldIdx}-${levelIdx}`;
+    if (pick.none) { this.scene.ghosts = []; return; } // course sans fantôme
+    // fantôme d'ami chargé localement (mauve)
     const fr = GhostStore.load(`fghost.${levelId}`);
     if (fr) this.scene.addGhost(fr, { glow: '#b06ad8', label: 'AMI' });
-    // fantôme du record en ligne (asynchrone)
-    Leaderboard.fetchGhost(levelId).then((res) => {
+    // fantôme en ligne choisi (par rang dans le top 3) — défaut: le record (#1)
+    Leaderboard.fetchGhost(levelId, pick.onlineRank || 1).then((res) => {
       const s = this.scene;
       if (res && res.data && s && s.speedrun && s.worldIdx === worldIdx && s.levelIdx === levelIdx) {
-        s.addGhost(res.data, { glow: '#ffd23b', label: 'WR ' + (res.name || '').slice(0, 8) });
+        s.addGhost(res.data, { glow: '#ffd23b', label: (res.name || 'WR').slice(0, 8) });
       }
     });
   }
