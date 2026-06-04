@@ -19,7 +19,8 @@ export class GameScene {
     this.combo = 0; this.lookAhead = 0; this.warpCd = 0;
     this.recorder = new GhostRecorder();        // toujours actif -> fantôme auto à chaque niveau
     this.ghosts = []; // [{g:GhostPlayer, glow, label}]
-    if (this.speedrun) {
+    // affiche le fantôme (PB) dans TOUS les modes solo (sauf marathon/custom où le chrono cumule)
+    if (!this.marathon && !this.customDef) {
       const data = GhostStore.load(`${worldIdx}-${levelIdx}`);
       if (data) { const g = new GhostPlayer(data); if (g.valid) this.ghosts.push({ g, glow: '#46d8ff', label: 'PB' }); }
     }

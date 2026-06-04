@@ -361,6 +361,19 @@ function makeHero() {
   g.userData = { torso, head, cap, lL, lR, aL, aR };
   return g;
 }
+// silhouette de fantôme translucide (matériau propre -> ne touche pas le joueur)
+function makeGhostModel() {
+  const mat = new THREE.MeshBasicMaterial({ color: 0x46d8ff, transparent: true, opacity: 0.4, depthWrite: false });
+  const g = new THREE.Group();
+  const part = (w, h, d, x, y, parent) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, 0); parent.add(m); return m; };
+  part(0.95, 0.55, 0.85, 0, 0.28, g);    // torse
+  part(0.9, 0.62, 0.84, 0, 0.82, g);     // tête
+  part(1.0, 0.3, 0.96, 0, 1.12, g);      // casquette
+  const lL = new THREE.Group(); lL.position.set(-0.22, 0, 0); part(0.36, 0.5, 0.52, 0, -0.25, lL); g.add(lL);
+  const lR = new THREE.Group(); lR.position.set(0.22, 0, 0); part(0.36, 0.5, 0.52, 0, -0.25, lR); g.add(lR);
+  g.userData = { mat, lL, lR };
+  return g;
+}
 function makeGoon() {
   const g = new THREE.Group();
   g.add(texBox(0.95, 0.78, 0.85, 'fur', 'goon_face', 0, 0.4, 0));
@@ -513,6 +526,19 @@ function drawScene(scene) {
     const b = scene.boss;
     place('boss', makeBoss, b.x, b.y, b.w, b.h, (g) => { g.scale.x = b.dir < 0 ? -1 : 1; g.visible = !(b.flash > 0 && Math.floor(b.t * 30) % 2); });
   }
+
+  // fantômes (translucides) — synchronisés sur le chrono du run
+  (scene.ghosts || []).forEach((gh, gi) => {
+    const pose = gh.g.poseAt(scene.runMs || 0);
+    if (!pose) return;
+    const g = entGroup('ghost' + gi, makeGhostModel);
+    const big = pose.power >= 1, h = big ? 26 : 14;
+    g.position.set(U(pose.x + 6), -(U(pose.y + h / 2)), 0.25); // même repère que le héros
+    g.scale.set((pose.dir < 0 ? -1 : 1), big ? 1.25 : 1, 1);
+    try { g.userData.mat.color.set(gh.glow || '#46d8ff'); g.userData.mat.opacity = 0.32 + 0.12 * Math.sin((scene.runMs || 0) / 200 + gi); } catch {}
+    const ph = (scene.runMs || 0) / 90, amp = pose.moving ? 0.6 : 0;
+    g.userData.lL.rotation.z = Math.sin(ph) * amp; g.userData.lR.rotation.z = -Math.sin(ph) * amp;
+  });
 
   // joueur(s)
   const players = scene.players ? scene.players : (scene.player ? [scene.player] : []);
