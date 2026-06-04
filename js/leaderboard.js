@@ -54,12 +54,23 @@ export const Leaderboard = {
     } catch { return null; }
   },
 
-  // Récupère le fantôme du record en ligne pour un niveau.
-  async fetchGhost(levelId) {
+  // Liste des 3 meilleurs fantômes (métadonnées : rang, nom, temps).
+  async fetchGhostList(levelId) {
+    const base = this.apiBase();
+    if (!base) return [];
+    try {
+      const r = await fetch(`${base}/api/ghost?level=${encodeURIComponent(levelId)}`, { cache: 'no-store' });
+      if (!r.ok) return [];
+      const data = await r.json();
+      return Array.isArray(data.list) ? data.list : [];
+    } catch { return []; }
+  },
+  // Données d'un fantôme précis (rang 1-3). rank omis = meilleur.
+  async fetchGhost(levelId, rank = 1) {
     const base = this.apiBase();
     if (!base) return null;
     try {
-      const r = await fetch(`${base}/api/ghost?level=${encodeURIComponent(levelId)}`, { cache: 'no-store' });
+      const r = await fetch(`${base}/api/ghost?level=${encodeURIComponent(levelId)}&rank=${rank}`, { cache: 'no-store' });
       if (!r.ok) return null;
       const data = await r.json();
       return data && data.ghost ? { data: data.ghost, name: data.name, ms: data.ms } : null;

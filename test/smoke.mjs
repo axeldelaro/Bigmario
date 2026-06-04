@@ -101,7 +101,7 @@ function fakeGame(input) {
     togglePause() {}, gameOver() { this._go = true; }, gameComplete() { this._gc = true; },
     saveProgress() {}, endVersus() { this._ev = true; },
     getGems(k) { return gemStore[k] || 0; }, setGems(k, n) { gemStore[k] = n; },
-    startSolo() { this._solo = true; }, startSpeedrun() { this._sr = true; },
+    startSolo() { this._solo = true; }, startSpeedrun() { this._sr = true; }, showGhostPick() { this._gp = true; },
     startMarathon() { this._mar = true; }, onMarathonFinish() { this._marfin = true; },
     returnToMenu() { this._menu = true; }, onSpeedrunFinish() { this._fin = true; },
     watchReplay() { this._rep = true; }, endReplay() { this._endrep = true; },
