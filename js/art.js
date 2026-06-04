@@ -277,6 +277,25 @@ const FLY_2 = [
 // OBJETS
 const P_ITEM = { '.': null, 'k': '#3a1d06', 'r': '#ff5d3b', 'R': '#c12d12', 'w': '#fff', 'm': '#ffe2b0', 's': '#ffd23b', 'g': '#37c24a', 'o': '#ff9b3b', 'p': '#ff7bd5', 'P': '#c23a9a' };
 const P_ONEUP = { ...P_ITEM, 'r': '#46d84a', 'R': '#1f8a30' }; // champignon 1UP (vert)
+const P_FEATHER = { '.': null, 'k': '#1f4a6a', 'w': '#ffffff', 'c': '#9be0ff', 'C': '#46c8ff', 'y': '#ffd23b' };
+const FEATHER = [
+  '......kk........',
+  '.....kwwk.......',
+  '....kwwwck......',
+  '...kwwwccCk.....',
+  '..kwwwcccCk.....',
+  '..kwwcccCCk.....',
+  '.kwwcccCCk......',
+  '.kwccccCCk......',
+  '.kwcccCCk.......',
+  '..kccCCk........',
+  '...kkCk.........',
+  '....kyk.........',
+  '....kyk.........',
+  '....kkk.........',
+  '................',
+  '................',
+];
 const MUSHROOM = [
   '................',
   '.....kkkkk......',
@@ -429,6 +448,7 @@ export function buildArt() {
   A.item = {
     mushroom: makeSprite('mush', MUSHROOM, P_ITEM),
     oneup: makeSprite('oneup', MUSHROOM, P_ONEUP),
+    feather: makeSprite('feather', FEATHER, P_FEATHER),
     flower: makeSprite('flow', FLOWER, P_ITEM),
     star: makeSprite('star', STAR, P_ITEM),
   };
@@ -495,6 +515,13 @@ function drawTile(c, type, theme) {
       px(c,1,1,14,14,'#46d84a'); px(c,1,1,14,2,'#9bf0a0'); px(c,1,13,14,2,'#1f8a30');
       px(c,2,2,2,2,'#fff'); px(c,12,2,2,2,'#fff'); px(c,2,12,2,2,'#fff'); px(c,12,12,2,2,'#fff');
       px(c,6,5,1,6,'#0c4a18'); px(c,7,5,2,2,'#0c4a18'); px(c,9,5,1,6,'#0c4a18'); // motif "1"
+      break;
+    case 'W': // bloc plume (vol plané)
+      px(c,0,0,16,16,'#1f6a9a');
+      px(c,1,1,14,14,'#46c8ff'); px(c,1,1,14,2,'#bfeaff'); px(c,1,13,14,2,'#1f6a9a');
+      px(c,2,2,2,2,'#fff'); px(c,12,2,2,2,'#fff'); px(c,2,12,2,2,'#fff'); px(c,12,12,2,2,'#fff');
+      // petite aile blanche
+      px(c,5,6,6,1,'#fff'); px(c,6,7,5,1,'#eaffff'); px(c,7,8,4,1,'#fff'); px(c,8,9,3,1,'#eaffff');
       break;
     case 'D': // bloc mystère épuisé
       px(c,0,0,16,16,'#9a7a3a'); px(c,1,1,14,14,'#7a5a2a'); px(c,1,1,14,2,'#a98a4a');

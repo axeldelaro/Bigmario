@@ -67,11 +67,20 @@ class Game {
 
   checkOrientation() {
     const portrait = innerHeight > innerWidth;
-    const showHint = isTouch && portrait && this.mode !== 'menu';
+    const playMode = this.mode === 'game' || this.mode === 'versus' || this.mode === 'replay';
+    const showHint = isTouch && portrait && playMode;
     rotateHint.classList.toggle('hidden', !showHint);
-    const showTouch = isTouch && this.mode !== 'menu' && !portrait;
+    const showTouch = isTouch && playMode && !portrait;
     touchLayer.classList.toggle('hidden', !showTouch);
-    // bouton tir masqué si petit perso (toujours visible, c'est ok)
+    this.applyTouchSettings();
+  }
+
+  applyTouchSettings() {
+    const sizes = { s: 0.82, m: 1.0, l: 1.25 };
+    const sz = Save.get('touchSize', 'm');
+    touchLayer.style.setProperty('--tscale', sizes[sz] || 1);
+    touchLayer.style.setProperty('--topacity', String(Save.get('touchOpacity', 0.85)));
+    touchLayer.classList.toggle('left-handed', Save.get('touchHand', 'right') === 'left');
   }
 
   // ---------- Boucle ----------
@@ -537,22 +546,49 @@ class Game {
         <button class="btn secondary" id="friend">👥 Fantôme d'ami / Replay</button>
         <button class="btn secondary" id="mute">${isMuted() ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'}</button>
         <button class="btn secondary" id="motion">${this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'}</button>
+        <button class="btn secondary" id="touch">🎮 Boutons tactiles</button>
         ${this._installPrompt ? '<button class="btn" id="install">📲 Installer l\'appli</button>' : ''}
         <button class="btn ghost" id="fs">⛶ Plein écran</button>
         <button class="btn danger" id="reset">🗑 Réinitialiser la progression</button>
         <button class="btn ghost" id="back">← Retour</button>
       </div>
-      <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• Champignon = grandir, Fleur = tir, Étoile = invincible, 🟢 = 1 vie.<br>• Enchaîne les écrasements en l'air pour des combos.<br>• Manette : A saut, X tir, Start pause.</p>
+      <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• 🍄 grandir · 🔥 tir · ⭐ invincible · 🟢 1 vie · 🪶 <b>plume</b> = maintiens Saut en l'air pour <b>planer</b>.<br>• Enchaîne les écrasements en l'air pour des combos.<br>• Manette : A saut, X tir, Start pause.</p>
     `);
     p.querySelector('#ach').onclick = () => this.showAchievements();
     p.querySelector('#friend').onclick = () => this.showFriend();
     p.querySelector('#mute').onclick = (e) => { const m = toggleMute(); Save.set('muted', m); e.target.textContent = m ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'; };
     p.querySelector('#motion').onclick = (e) => { this.reduceMotion = !this.reduceMotion; Save.set('reduceMotion', this.reduceMotion); e.target.textContent = this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'; };
+    p.querySelector('#touch').onclick = () => this.showTouchSettings();
     const ib = p.querySelector('#install');
     if (ib) ib.onclick = async () => { const pr = this._installPrompt; if (!pr) return; pr.prompt(); try { await pr.userChoice; } catch {} this._installPrompt = null; this.showOptions(); };
     p.querySelector('#fs').onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };
     p.querySelector('#reset').onclick = () => { Save.set('unlocked', 0); Save.set('best', 0); this.showOptions(); };
     p.querySelector('#back').onclick = () => this.showTitle();
+  }
+
+  showTouchSettings() {
+    const sizeLbl = { s: 'PETITE', m: 'MOYENNE', l: 'GRANDE' };
+    const op = Math.round(Save.get('touchOpacity', 0.85) * 100);
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:24px">BOUTONS TACTILES</span></div>
+      <p class="hint">Personnalise les commandes à l'écran (mobile, mode paysage). Un aperçu s'affiche en bas.</p>
+      <div class="menu-list">
+        <button class="btn secondary" id="size">Taille : ${sizeLbl[Save.get('touchSize', 'm')]}</button>
+        <button class="btn secondary" id="op">Opacité : ${op}%</button>
+        <button class="btn secondary" id="hand">Disposition : ${Save.get('touchHand', 'right') === 'left' ? 'GAUCHER' : 'DROITIER'}</button>
+        <button class="btn ghost" id="back">← Retour</button>
+      </div>
+      <p class="hint" id="prev"></p>
+    `);
+    // aperçu : on affiche temporairement les boutons tactiles
+    const prevOn = !touchLayer.classList.contains('hidden');
+    touchLayer.classList.remove('hidden');
+    this.applyTouchSettings();
+    const refresh = () => { this.applyTouchSettings(); this.showTouchSettings(); };
+    p.querySelector('#size').onclick = () => { const o = ['s', 'm', 'l']; const i = o.indexOf(Save.get('touchSize', 'm')); Save.set('touchSize', o[(i + 1) % 3]); refresh(); };
+    p.querySelector('#op').onclick = () => { let v = Save.get('touchOpacity', 0.85) + 0.15; if (v > 1.01) v = 0.4; Save.set('touchOpacity', Math.round(v * 100) / 100); refresh(); };
+    p.querySelector('#hand').onclick = () => { Save.set('touchHand', Save.get('touchHand', 'right') === 'left' ? 'right' : 'left'); refresh(); };
+    p.querySelector('#back').onclick = () => { if (!prevOn) touchLayer.classList.add('hidden'); this.showOptions(); };
   }
 
   showAchievements() {

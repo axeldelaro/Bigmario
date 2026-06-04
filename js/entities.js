@@ -178,7 +178,7 @@ export class PowerUp {
     if (this.kind === 'star' && r.onGround) this.vy = -240; // étoile rebondit
   }
   draw(c, cam) {
-    const img = this.kind === 'mushroom' ? ART.item.mushroom : this.kind === 'oneup' ? ART.item.oneup : this.kind === 'flower' ? ART.item.flower : ART.item.star;
+    const img = this.kind === 'mushroom' ? ART.item.mushroom : this.kind === 'oneup' ? ART.item.oneup : this.kind === 'feather' ? ART.item.feather : this.kind === 'flower' ? ART.item.flower : ART.item.star;
     c.drawImage(img, Math.round(this.x - cam.x) - 1, Math.round(this.y - cam.y) - 2);
   }
 }
@@ -321,6 +321,7 @@ export class Player {
     if (kind === 'mushroom') { if (this.power === 'small') { this.power = 'big'; this.setSize(true); this.unstick(scene && scene.level); SFX.power(); } else this.addScore(1000, scene); }
     else if (kind === 'flower') { const was = this.power; this.power = 'fire'; this.setSize(true); if (was === 'small') this.unstick(scene && scene.level); SFX.power(); }
     else if (kind === 'star') { this.star = 9; SFX.power(); }
+    else if (kind === 'feather') { const was = this.power; this.power = 'glide'; this.setSize(true); if (was === 'small') this.unstick(scene && scene.level); SFX.power(); }
     else if (kind === 'oneup') { this.lives++; SFX.win(); if (scene) scene.addFloat(this.x, this.y - 8, '1UP', '#37c24a'); }
     this.invuln = Math.max(this.invuln, 0.2);
   }
@@ -330,7 +331,7 @@ export class Player {
 
   hurt(scene) {
     if (this.invuln > 0 || this.star > 0 || this.dead) return false;
-    if (this.power === 'fire' || this.power === 'big') {
+    if (this.power !== 'small') { // grand / feu / plume -> petit
       this.power = 'small'; this.setSize(false); this.invuln = 1.6; SFX.hurt();
       return false;
     }
@@ -404,6 +405,11 @@ export class Player {
 
     // gravité
     this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
+    // vol plané (plume): maintenir Saut en chute ralentit fortement la descente
+    this.gliding = false;
+    if (this.power === 'glide' && !this.onGround && this.vy > 0 && input.jump) {
+      this.vy = Math.min(this.vy, 95); this.gliding = true;
+    }
 
     const fallV = this.vy;
     const r = level.moveAndCollide(this, dt, { dropThrough: input.down && input.jumpPressed });
@@ -445,41 +451,44 @@ export class Player {
 
   draw(c, cam) {
     if (this.invuln > 0 && Math.floor(this.t * 20) % 2 && !this.dead) return; // clignote
-    const x = Math.round(this.x - cam.x) - 2;
-    const y = Math.round(this.y - cam.y) - (this.big ? 12 : 1);
     const moving = Math.abs(this.vx) > 6;
     const set = this.power === 'fire'
       ? { idle: this.big ? ART.hero.fireBigIdle : ART.hero.fireSmallIdle, walk: this.big ? ART.hero.fireBigWalk : ART.hero.fireSmallWalk, jump: ART.hero.fireJump }
       : { idle: this.big ? ART.hero.bigIdle : ART.hero.smallIdle, walk: this.big ? ART.hero.bigWalk : ART.hero.smallWalk, jump: ART.hero.jump };
     let img;
-    if (this.ducking) img = ART.hero.duck;
+    if (this.ducking && !this.big) img = ART.hero.duck;
     else if (!this.onGround && !this.dead) img = set.jump;
     else if (moving) img = (Math.floor(this.walkT) % 2) ? set.walk : set.idle;
     else img = set.idle;
 
-    // ombre au sol
-    shadow(c, this.x + this.w / 2 - cam.x, this.y + this.h - cam.y, this.w * 0.7, this.onGround ? 1 : 0.5);
+    // ancrage aux PIEDS (corrige l'alignement des grands persos)
+    const centerX = Math.round(this.x + this.w / 2 - cam.x);
+    const feetY = Math.round(this.y + this.h - cam.y);
+
+    // cape de la plume (derrière le perso)
+    if (this.power === 'glide' && !this.dead) {
+      const dir = this.dir, back = centerX - dir * 5;
+      const spread = this.gliding ? 9 : 3, flap = Math.sin(this.t * (this.gliding ? 7 : 3)) * 2;
+      const topY = feetY - 22, botY = feetY - 8, tipX = back - dir * (spread + 3);
+      c.save(); c.globalAlpha = 0.95; c.fillStyle = '#46c8ff';
+      c.beginPath(); c.moveTo(back, topY); c.lineTo(tipX, topY + 3 + flap); c.lineTo(tipX, botY + flap); c.lineTo(back, botY - 2); c.closePath(); c.fill();
+      c.globalAlpha = 0.6; c.fillStyle = '#bfeaff'; c.fillRect(tipX, topY + 3 + flap, 2, 3); c.restore();
+    }
+
+    shadow(c, this.x + this.w / 2 - cam.x, this.y + this.h - cam.y, this.w * 0.8, this.onGround ? 1 : 0.5);
 
     c.save();
-    if (this.star > 0) { // halo d'invincibilité
-      const hue = (this.t * 600) % 360; c.globalAlpha = 0.9;
-      c.shadowColor = `hsl(${hue},90%,60%)`; c.shadowBlur = 8;
-    }
-    const drawX = x, drawY = y;
-    // squash & stretch (étirement au saut, écrasement à l'atterrissage), ancré aux pieds
+    if (this.star > 0) { const hue = (this.t * 600) % 360; c.globalAlpha = 0.95; c.shadowColor = `hsl(${hue},90%,60%)`; c.shadowBlur = 8; }
+    // les sprites "grands" (grand/feu/plume) sont agrandis pour remplir la hitbox
+    const baseY = this.big ? 1.55 : 1.0, baseX = this.big ? 1.18 : 1.0;
     const stretch = (!this.onGround && !this.dead ? 0.10 : 0);
-    const sy = 1 + stretch - this.squash * 0.22;
-    const sx = 1 - stretch + this.squash * 0.20;
-    if (sx !== 1 || sy !== 1) {
-      const fx = drawX + 8, fy = drawY + 16;
-      c.translate(fx, fy); c.scale(sx, sy); c.translate(-fx, -fy);
-    }
-    if (this.dir < 0) { c.translate(drawX + 8, 0); c.scale(-1, 1); c.translate(-(drawX + 8), 0); }
-    c.drawImage(img, drawX, drawY);
+    const sy = baseY * (1 + stretch) - this.squash * 0.22 * baseY;
+    const sx = baseX * (1 - stretch) + this.squash * 0.20 * baseX;
+    c.translate(centerX, feetY);
+    c.scale(this.dir < 0 ? -sx : sx, sy);
+    c.drawImage(img, -8, -16);
     c.restore();
-    if (this.skin === 'p2') {
-      // marqueur joueur 2 (petit triangle)
-      c.fillStyle = '#37c24a'; c.fillRect(Math.round(this.x - cam.x) + 2, y - 5, 6, 2);
-    }
+
+    if (this.skin === 'p2') { c.fillStyle = '#37c24a'; c.fillRect(centerX - 3, feetY - (this.big ? 28 : 18), 6, 2); }
   }
 }

@@ -123,23 +123,29 @@ button.btn.ghost { background: #2a1c52; color:#fff; box-shadow: 0 5px 0 #0000008
   position: fixed; inset: 0;
   z-index: 15;
   pointer-events: none;
+  --tscale: 1;       /* taille des boutons */
+  --topacity: 0.85;  /* opacité des boutons */
 }
 .touch-layer.hidden { display: none; }
 .touch-left { position:absolute; left: max(16px, env(safe-area-inset-left)); bottom: 22px; display:flex; gap:14px; }
 .touch-right { position:absolute; right: max(16px, env(safe-area-inset-right)); bottom: 22px; display:flex; gap:18px; align-items:flex-end; }
+/* mode gaucher : on échange les deux groupes */
+.touch-layer.left-handed .touch-left { left:auto; right: max(16px, env(safe-area-inset-right)); flex-direction: row-reverse; }
+.touch-layer.left-handed .touch-right { right:auto; left: max(16px, env(safe-area-inset-left)); }
 .tbtn {
   pointer-events: auto;
-  width: 64px; height: 64px;
+  width: calc(64px * var(--tscale)); height: calc(64px * var(--tscale));
   border-radius: 16px;
   border: 3px solid #000;
   background: rgba(255,255,255,0.18);
-  color: #fff; font-size: 26px; font-weight: 900;
+  color: #fff; font-size: calc(26px * var(--tscale)); font-weight: 900;
   display:flex; align-items:center; justify-content:center;
   backdrop-filter: blur(2px);
   touch-action: none;
+  opacity: var(--topacity);
 }
 .tbtn.round { border-radius: 50%; background: rgba(255,93,93,0.45); }
-.tbtn.big { width: 84px; height: 84px; font-size: 32px; background: rgba(80,200,120,0.5); }
+.tbtn.big { width: calc(84px * var(--tscale)); height: calc(84px * var(--tscale)); font-size: calc(32px * var(--tscale)); background: rgba(80,200,120,0.5); }
 .tbtn.pressed { background: rgba(255,255,255,0.5); transform: scale(0.94); }
 .pause-btn { pointer-events:auto; position:absolute; top: max(12px, env(safe-area-inset-top)); right: 14px; width:48px; height:40px; font-size:16px; border-radius:10px; }
 
