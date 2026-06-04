@@ -225,7 +225,7 @@ export class GameScene {
     this.particles = this.particles.filter((p) => !p.dead);
     this.floats = this.floats.filter((f) => !f.dead);
 
-    this.updateCamera();
+    this.updateCamera(dt);
     this.updateState(dt);
   }
 
@@ -307,16 +307,37 @@ export class GameScene {
     }
   }
 
-  updateCamera() {
+  updateCamera(dt = 1 / 120) {
     const p = this.player;
-    // look-ahead: la caméra regarde un peu devant le sens de déplacement
-    const want = (Math.abs(p.vx) > 20 ? p.dir : 0) * 30;
-    this.lookAhead += (want - this.lookAhead) * 0.05;
-    const target = p.x + p.w / 2 - VIEW_W / 2 + this.lookAhead;
-    this.cam.x += (target - this.cam.x) * 0.12;
-    this.cam.x = clamp(this.cam.x, 0, Math.max(0, this.level.pixelW - VIEW_W));
-    this.cam.y = clamp(p.y - VIEW_H * 0.55, 0, Math.max(0, this.level.pixelH - VIEW_H));
-    if (this.level.pixelH <= VIEW_H) this.cam.y = this.level.pixelH - VIEW_H;
+    const maxX = Math.max(0, this.level.pixelW - VIEW_W);
+    // look-ahead lissé dans le sens du déplacement
+    const lookTarget = (Math.abs(p.vx) > 15 ? Math.sign(p.vx) : 0) * 34;
+    this.lookAhead += (lookTarget - this.lookAhead) * Math.min(1, dt * 4);
+    // zone morte horizontale : la caméra ne bouge pas tant que le joueur reste au centre
+    const focus = p.x + p.w / 2 + this.lookAhead;
+    const center = this.cam.x + VIEW_W * 0.5;
+    const dz = 14;
+    let want = this.cam.x;
+    const dx = focus - center;
+    if (dx > dz) want = this.cam.x + (dx - dz);
+    else if (dx < -dz) want = this.cam.x + (dx + dz);
+    want = clamp(want, 0, maxX);
+    // lissage indépendant du frame-rate (catch-up rapide mais doux)
+    this.cam.x += (want - this.cam.x) * Math.min(1, dt * 10);
+    if (Math.abs(want - this.cam.x) < 0.05) this.cam.x = want;
+    this.cam.x = clamp(this.cam.x, 0, maxX);
+    // vertical : zone morte (évite le ballottement aux sauts) — utile sur niveaux hauts
+    const maxY = Math.max(0, this.level.pixelH - VIEW_H);
+    if (maxY <= 0) { this.cam.y = this.level.pixelH - VIEW_H; }
+    else {
+      const fy = p.y + p.h * 0.5;
+      const top = this.cam.y + VIEW_H * 0.42, bot = this.cam.y + VIEW_H * 0.66;
+      let wy = this.cam.y;
+      if (fy < top) wy = this.cam.y - (top - fy);
+      else if (fy > bot) wy = this.cam.y + (fy - bot);
+      this.cam.y += (clamp(wy, 0, maxY) - this.cam.y) * Math.min(1, dt * 8);
+      this.cam.y = clamp(this.cam.y, 0, maxY);
+    }
   }
 
   updateState(dt) {

@@ -141,4 +141,49 @@ function L23() { // 2-3 Souterrain profond — deux routes, puits, plumes & éto
   return { name: '2-3 Souterrain profond', theme: 'underground', time: 340, map: rows(g) };
 }
 
-export const BUILT = { L11: L11(), L12: L12(), L13: L13(), L21: L21(), L22: L22(), L23: L23() };
+// =================== MONDE 3 ===================
+function L31() { // 3-1 Cimes venteuses — pics, escaliers, ressorts, plume
+  const W = 116, g = grid(W); floorX(g, [[40, 42], [68, 70], [96, 98]]);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  stairs(g, 10, 9, 3, 1); mesa(g, 13, 22, 7); put(g, 6, 16, 'g'); put(g, 6, 20, 'g'); coins(g, 5, 15, 3);
+  mesa(g, 23, 30, 9);
+  put(g, 9, 34, 'T'); put(g, 2, 34, 'j');
+  plat(g, 5, 44, 5); put(g, 4, 46, 'W');
+  put(g, 8, 52, 'C');
+  stairs(g, 56, 9, 2, 1); mesa(g, 58, 66, 8); put(g, 7, 62, 'k'); put(g, 5, 60, 'n');
+  plat(g, 4, 72, 5); put(g, 3, 74, 'j');
+  put(g, 9, 80, 'T'); put(g, 2, 80, 'j'); put(g, 8, 86, 'o o');
+  stairs(g, 100, 9, 3, 1); mesa(g, 103, 110, 7); put(g, 6, 106, 'g');
+  put(g, 9, 38, 'g'); put(g, 9, 50, 'k'); put(g, 9, 78, 'g'); put(g, 9, 112, 'g');
+  return { name: '3-1 Cimes venteuses', theme: 'overworld', time: 340, map: rows(g) };
+}
+function L32() { // 3-2 Pont des cieux — piliers-ponts, plateformes mobiles, plume
+  const W = 116, g = grid(W); floorX(g, [[24, 26], [44, 46], [64, 66], [84, 86], [104, 105]]);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  mesa(g, 12, 18, 8); coins(g, 5, 13, 3);
+  plat(g, 4, 28, 4); plat(g, 4, 36, 4); put(g, 3, 30, 'j');
+  put(g, 9, 30, 'T'); put(g, 2, 30, 'j');
+  mesa(g, 48, 56, 8); put(g, 7, 52, 'k'); put(g, 5, 50, 'm');
+  put(g, 8, 40, 'C');
+  put(g, 5, 60, 'W');
+  plat(g, 4, 68, 4); plat(g, 4, 76, 4); put(g, 3, 78, 'j');
+  mesa(g, 88, 96, 8); put(g, 7, 92, 'g'); put(g, 5, 90, 'n');
+  put(g, 6, 100, '?'); put(g, 6, 102, '?');
+  put(g, 9, 36, 'g'); put(g, 9, 58, 'k'); put(g, 9, 80, 'g'); put(g, 9, 110, 'g');
+  return { name: '3-2 Pont des cieux', theme: 'overworld', time: 340, map: rows(g) };
+}
+function L33() { // 3-3 Antre du Gardien — combat de boss avec plateformes d'esquive
+  const W = 52, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S');
+  plat(g, 5, 8, 5); plat(g, 5, 38, 5); plat(g, 7, 22, 6);
+  put(g, 3, 10, 'M'); put(g, 3, 40, 'W');
+  put(g, 6, 24, 'j'); put(g, 6, 27, 'j');
+  coins(g, 8, 14, 3); coins(g, 8, 32, 3);
+  put(g, 9, 26, 'O');
+  return { name: '3-3 Antre du Gardien', theme: 'castle', time: 220, map: rows(g) };
+}
+
+export const BUILT = {
+  L11: L11(), L12: L12(), L13: L13(), L21: L21(), L22: L22(), L23: L23(),
+  L31: L31(), L32: L32(), L33: L33(),
+};
