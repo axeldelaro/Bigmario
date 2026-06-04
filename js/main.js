@@ -35,6 +35,7 @@ class Game {
     this.paused = false;
     this.mode = 'menu'; // menu | game | versus | map
     this.net = null;
+    this.fadeAlpha = 0; // fondu d'entrée des scènes
     if (Save.get('muted', false)) toggleMute(); // restaure le réglage son
     this.resize();
     addEventListener('resize', () => this.resize());
@@ -88,8 +89,14 @@ class Game {
     if (this.scene) this.scene.draw(ctx);
     else this.drawMenuBackdrop();
     if (this.paused) this.drawPauseOverlay();
+    if (this.fadeAlpha > 0) {
+      ctx.fillStyle = `rgba(0,0,0,${this.fadeAlpha})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      this.fadeAlpha = Math.max(0, this.fadeAlpha - dt / 0.3);
+    }
     requestAnimationFrame((tt) => this.loop(tt));
   }
+
+  fadeIn() { this.fadeAlpha = 1; }
 
   // décor animé derrière les menus
   drawMenuBackdrop() {
@@ -231,7 +238,7 @@ class Game {
     this.paused = false; this.mode = 'menu';
     this.scene?.dispose?.(); this.scene = null;
     if (this.net) { this.net.close(); this.net = null; }
-    stopMusic(); this.checkOrientation(); this.showTitle();
+    stopMusic(); this.checkOrientation(); this.fadeIn(); this.showTitle();
     if (this._pauseKeyHandler) { removeEventListener('keydown', this._pauseKeyHandler); this._pauseKeyHandler = null; }
   }
 
@@ -312,7 +319,7 @@ class Game {
   onSpeedrunFinishReopen(worldIdx, levelIdx, ms, ghostData) { this.onSpeedrunFinish(worldIdx, levelIdx, ms, ghostData); }
 
   // ---------- UI helpers ----------
-  clearUI() { this.scene?.dispose?.(); ui.classList.add('hidden'); ui.innerHTML = ''; }
+  clearUI() { this.scene?.dispose?.(); ui.classList.add('hidden'); ui.innerHTML = ''; this.fadeIn(); }
   panel(html) {
     ui.classList.remove('hidden');
     ui.innerHTML = `<div class="panel">${html}</div>`;

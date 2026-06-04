@@ -290,7 +290,9 @@ export class Player {
     this.fireCd = 0; this.lives = opts.lives ?? 3; this.coins = 0; this.score = 0;
     this.skin = opts.skin || 'p1'; this.id = opts.id || 0;
     this.spawn = { x, y };
-    this.bounce = 0; // anim écrasement saut
+    this.bounce = 0; // étirement au saut
+    this.squash = 0; // écrasement à l'atterrissage
+    this.wasGround = true; this.skidding = false;
     this.enterPipe = 0;
   }
 
@@ -402,8 +404,19 @@ export class Player {
     // gravité
     this.vy = Math.min(this.vy + GRAVITY * dt, MAX_FALL);
 
+    const fallV = this.vy;
     const r = level.moveAndCollide(this, dt, { dropThrough: input.down && input.jumpPressed });
     this.onGround = r.onGround;
+    // atterrissage: écrasement + poussière
+    if (!this.wasGround && this.onGround && fallV > 240) {
+      this.squash = Math.min(1, fallV / 480);
+      scene.dust?.(this.x + this.w / 2, this.y + this.h, Math.min(8, 3 + (fallV / 120) | 0));
+    }
+    this.wasGround = this.onGround;
+    // dérapage: changement de direction au sol à vive allure -> poussière
+    this.skidding = this.onGround && Math.abs(this.vx) > 60 && ((input.left && this.vx > 6) || (input.right && this.vx < -6));
+    if (this.skidding && Math.random() < 0.4) scene.dust?.(this.x + this.w / 2 - sign(this.vx) * 4, this.y + this.h, 1);
+    if (this.squash > 0) this.squash = Math.max(0, this.squash - dt * 6);
     if (r.ceiling && r.ceilTile) {
       const ev = level.hitBlock(r.ceilTile.tx, r.ceilTile.ty);
       if (ev) scene.onBlockHit?.(ev, this);
@@ -452,8 +465,15 @@ export class Player {
       c.shadowColor = `hsl(${hue},90%,60%)`; c.shadowBlur = 8;
     }
     const drawX = x, drawY = y;
+    // squash & stretch (étirement au saut, écrasement à l'atterrissage), ancré aux pieds
+    const stretch = (!this.onGround && !this.dead ? 0.10 : 0);
+    const sy = 1 + stretch - this.squash * 0.22;
+    const sx = 1 - stretch + this.squash * 0.20;
+    if (sx !== 1 || sy !== 1) {
+      const fx = drawX + 8, fy = drawY + 16;
+      c.translate(fx, fy); c.scale(sx, sy); c.translate(-fx, -fy);
+    }
     if (this.dir < 0) { c.translate(drawX + 8, 0); c.scale(-1, 1); c.translate(-(drawX + 8), 0); }
-    // squash & stretch léger au saut
     c.drawImage(img, drawX, drawY);
     c.restore();
     if (this.skin === 'p2') {

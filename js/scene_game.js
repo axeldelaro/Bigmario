@@ -60,6 +60,7 @@ export class GameScene {
     this.cam.x = clamp(ps.x - VIEW_W * 0.42, 0, Math.max(0, this.level.pixelW - VIEW_W));
     this.cam.y = 0;
     this.state = 'intro'; this.stateT = 0; this.pendingClear = 0;
+    this.game.fadeIn?.();
     playMusic(this.level.hasBoss ? 'castle' : def.theme === 'castle' ? 'castle' : def.theme === 'underground' ? 'underground' : 'overworld');
   }
 
@@ -72,6 +73,13 @@ export class GameScene {
   onSpring() { this.addShake(2); }
   burst(x, y, col, n = 8, spd = 120) {
     for (let i = 0; i < n; i++) this.particles.push(new Particle(x, y, rand(-spd, spd), rand(-spd, 20), col, rand(0.3, 0.7), 2));
+  }
+  // poussière au sol (atterrissage / dérapage)
+  dust(x, y, n = 4) {
+    for (let i = 0; i < n; i++) {
+      const col = i % 2 ? '#e8dcc0' : '#cbbfa0';
+      this.particles.push(new Particle(x, y - 1, rand(-50, 50), rand(-30, -5), col, rand(0.25, 0.5), 2, 180));
+    }
   }
 
   onBlockHit(ev, player) {
