@@ -8,6 +8,7 @@ import { GameScene } from './scene_game.js';
 import { VersusScene } from './scene_versus.js';
 import { MapScene } from './scene_map.js';
 import { ReplayScene } from './scene_replay.js';
+import { EditorScene } from './scene_editor.js';
 import { WORLDS, ARENAS } from './levels.js';
 import { NetClient } from './net.js';
 import { ensure3D, is3DReady, renderScene, resize3D, get3DCanvas } from './render3d.js';
@@ -229,6 +230,27 @@ class Game {
     this.scene = new MapScene(this, mode); playMusic('overworld');
     this.checkOrientation();
   }
+  // ---- Éditeur de niveaux ----
+  startEditor() {
+    this.clearUI(); this.mode = 'editor'; this.paused = false; resumeAudio();
+    this._restart = () => this.startEditor();
+    this.scene = new EditorScene(this); stopMusic();
+    this.checkOrientation();
+  }
+  startCustom(def) {
+    this.clearUI(); this.mode = 'game'; this.paused = false;
+    this._customDef = def; this._restart = () => this.startCustom(def);
+    this.scene = new GameScene(this, 0, 0, null, { customDef: def });
+    this.checkOrientation();
+  }
+  onCustomClear() {
+    this.mode = 'menu';
+    const p = this.panel(`<div class="title"><span class="big" style="font-size:30px;color:#ffd23b">NIVEAU RÉUSSI !</span></div>
+      <div class="menu-list"><button class="btn" id="rep">↻ Rejouer</button><button class="btn secondary" id="ed">🛠 Éditeur</button><button class="btn ghost" id="menu">Menu</button></div>`);
+    p.querySelector('#rep').onclick = () => this.startCustom(this._customDef);
+    p.querySelector('#ed').onclick = () => this.startEditor();
+    p.querySelector('#menu').onclick = () => this.returnToMenu();
+  }
   startSpeedrun(worldIdx = 0, levelIdx = 0) {
     this.clearUI(); this.mode = 'game'; this.paused = false;
     this._restart = () => this.startSpeedrun(worldIdx, levelIdx);
@@ -333,7 +355,7 @@ class Game {
   startVersusOnline(net, localId, arenaIdx) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
     this.net = net;
-    this.scene = new VersusScene(this, { mode: 'online', net, localId, arenaIdx });
+    this.scene = new VersusScene(this, { mode: 'online', coop: !!this._coopMode, net, localId, arenaIdx });
     this.checkOrientation();
   }
 
@@ -443,6 +465,7 @@ class Game {
         <button class="btn" id="b-solo">🗺 Aventure</button>
         <button class="btn" id="b-speed">⏱ Contre-la-montre</button>
         <button class="btn secondary" id="b-vs">⚔ Versus</button>
+        <button class="btn secondary" id="b-edit">🛠 Créer un niveau</button>
         <button class="btn ghost" id="b-options">⚙ Options & Aide</button>
       </div>
       <p class="hint">Clavier: ◀▶ déplacer • Espace sauter • J tir • Échap pause.<br>Manette et tactile détectés automatiquement.</p>
@@ -450,6 +473,7 @@ class Game {
     p.querySelector('#b-solo').onclick = () => { resumeAudio(); this.showMap('solo'); };
     p.querySelector('#b-speed').onclick = () => { resumeAudio(); this.showSpeedMenu(); };
     p.querySelector('#b-vs').onclick = () => { resumeAudio(); this.showVersusMenu(); };
+    p.querySelector('#b-edit').onclick = () => { resumeAudio(); this.startEditor(); };
     p.querySelector('#b-options').onclick = () => this.showOptions();
   }
 
@@ -461,13 +485,16 @@ class Game {
         <button class="btn" id="m-rival">🏁 Contre un Fantôme rival</button>
         <button class="btn secondary" id="m-local">👥 Local (2 joueurs)</button>
         <button class="btn secondary" id="m-online">🌐 En ligne</button>
+        <button class="btn secondary" id="m-coop">🤝 Co-op en ligne</button>
         <button class="btn ghost" id="m-back">← Retour</button>
       </div>
     `);
+    this._coopMode = false;
     p.querySelector('#m-bot').onclick = () => this.showArenaSelect('bot');
     p.querySelector('#m-rival').onclick = () => this.showArenaSelect('rival');
     p.querySelector('#m-local').onclick = () => this.showArenaSelect('local');
     p.querySelector('#m-online').onclick = () => this.showOnline();
+    p.querySelector('#m-coop').onclick = () => { this._coopMode = true; this.showOnline(); };
     p.querySelector('#m-back').onclick = () => this.showTitle();
   }
 
@@ -561,7 +588,7 @@ class Game {
         } else {
           // invité: attend que l'hôte choisisse l'arène
           st.innerHTML += '<br>En attente du choix de l’hôte…';
-          net.on('msg', (m) => { const d = m.d || m; if (d.t === 'arena') this.startVersusOnline(net, localId, d.i); });
+          net.on('msg', (m) => { const d = m.d || m; if (d.t === 'arena') { this._coopMode = !!d.coop; this.startVersusOnline(net, localId, d.i); } });
         }
         // l'hôte annonce l'arène via showArenaSelect (on patche startVersusOnline pour host)
         if (info.role === 'host') this._hostNet = net;
@@ -712,10 +739,10 @@ class Game {
   }
 }
 
-// patch: quand l'hôte choisit l'arène en ligne, l'annoncer à l'invité
+// patch: quand l'hôte choisit l'arène en ligne, l'annoncer à l'invité (+ flag coop)
 const _origStartOnline = Game.prototype.startVersusOnline;
 Game.prototype.startVersusOnline = function (net, localId, arenaIdx) {
-  if (localId === 0 && net) net.relay({ t: 'arena', i: arenaIdx });
+  if (localId === 0 && net) net.relay({ t: 'arena', i: arenaIdx, coop: !!this._coopMode });
   _origStartOnline.call(this, net, localId, arenaIdx);
 };
 

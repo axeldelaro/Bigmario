@@ -1,6 +1,6 @@
 // sw.js — service worker: met le jeu en cache pour une utilisation hors-ligne.
 // Incrémente CACHE à chaque mise à jour des fichiers pour forcer le rafraîchissement.
-const CACHE = 'bigmario-v18';
+const CACHE = 'bigmario-v19';
 const ASSETS = [
   './',
   './index.html',
@@ -19,6 +19,8 @@ const ASSETS = [
   './js/scene_game.js',
   './js/scene_versus.js',
   './js/scene_map.js',
+  './js/scene_replay.js',
+  './js/scene_editor.js',
   './js/net.js',
   './js/leaderboard.js',
   './js/ghost.js',

@@ -311,6 +311,34 @@ const FLY_2 = [
   '................',
   '................',
 ];
+// PLANTE DE TUYAU (bouton à dents) — instompable
+const P_PLANT = { '.': null, 'k': '#0c3a16', 'g': '#46c24a', 'G': '#2a8a30', 'w': '#fff', 'r': '#e23b3b', 's': '#9be0a0' };
+const PLANT_1 = [
+  '....kkkkkk......', '...kggGGggk.....', '..kgGwrrwGgk....', '..kGwrrrrwGk....',
+  '..kgwrwwrwgk....', '..kGwrrrrwGk....', '..kggGGGGggk....', '...kkggggkk.....',
+  '....kgGGgk......', '...kgGggGgk.....', '..kgG.gg.Ggk....', '...k..gg..k.....',
+  '......gg........', '......gg........', '................', '................',
+];
+const PLANT_2 = [
+  '....kkkkkk......', '...kggGGggk.....', '..kgGGGGGGgk....', '..kGGwwwwGGk....',
+  '..kgGwkkwGgk....', '..kGGwwwwGGk....', '..kggGGGGggk....', '...kkggggkk.....',
+  '....kgGGgk......', '...kgGggGgk.....', '..kgG.gg.Ggk....', '...k..gg..k.....',
+  '......gg........', '......gg........', '................', '................',
+];
+// LANCEUR (créature à fronde)
+const P_LOB = { '.': null, 'k': '#241430', 'b': '#7a4ad0', 'B': '#5a2fa0', 'w': '#fff', 'e': '#120', 'y': '#ffd23b', 'm': '#e0c0ff' };
+const LOB_1 = [
+  '................', '....kkkkkk......', '...kbbBBbbk.....', '..kbBbbbbBbk....',
+  '..kbwbkkbwbk....', '..kbwekewbbk....', '..kbBbbbbBbk....', '..kbbmyymbbk....',
+  '..kbbmmmmbbk....', '...kBbbbbBk.....', '...kbb..bbk.....', '..kkk....kkk....',
+  '..kk......kk....', '................', '................', '................',
+];
+const LOB_2 = [
+  '......yy........', '....kkkkkk......', '...kbbBBbbk.....', '..kbBbbbbBbk....',
+  '..kbwbkkbwbk....', '..kbwekewbbk....', '..kbBbbbbBbk....', '..kbbmyymbbk....',
+  '..kbbmmmmbbk....', '...kBbbbbBk.....', '...kbb..bbk.....', '...kk....kk.....',
+  '..kk........kk..', '................', '................', '................',
+];
 
 // OBJETS
 const P_ITEM = { '.': null, 'k': '#3a1d06', 'r': '#ff5d3b', 'R': '#c12d12', 'w': '#fff', 'm': '#ffe2b0', 's': '#ffd23b', 'g': '#37c24a', 'o': '#ff9b3b', 'p': '#ff7bd5', 'P': '#c23a9a' };
@@ -487,6 +515,8 @@ export function buildArt() {
   A.goon = { a: makeSprite('g1', GOON_1, P_GOON), b: makeSprite('g2', GOON_2, P_GOON), flat: makeSprite('gf', GOON_FLAT, P_GOON) };
   A.shell = { a: makeSprite('s1', SHELL_1, P_SHELL), hide: makeSprite('sh', SHELL_HIDE, P_SHELL) };
   A.fly = { a: makeSprite('f1', FLY_1, P_FLY), b: makeSprite('f2', FLY_2, P_FLY) };
+  A.plant = { a: makeSprite('pl1', PLANT_1, P_PLANT), b: makeSprite('pl2', PLANT_2, P_PLANT) };
+  A.lob = { a: makeSprite('lo1', LOB_1, P_LOB), b: makeSprite('lo2', LOB_2, P_LOB) };
   A.item = {
     mushroom: makeSprite('mush', MUSHROOM, P_ITEM),
     oneup: makeSprite('oneup', MUSHROOM, P_ONEUP),
@@ -573,6 +603,12 @@ function drawTile(c, type, theme) {
       if (type==='P'){ px(c,-1,0,18,5,'#37c24a'); px(c,1,1,14,3,'#7fe88a'); }
       else { px(c,1,0,14,16,'#37c24a'); px(c,2,0,3,16,'#7fe88a'); }
       px(c,11,0,2,16,'#1f8a30');
+      break;
+    case 'Q': // tuyau-warp (tête, descendre dedans) — violet brillant
+      px(c,0,0,16,16,'#5a1f8a');
+      px(c,-1,0,18,5,'#9a4ad0'); px(c,1,1,14,3,'#d89bf0');
+      px(c,11,0,2,16,'#5a1f8a');
+      px(c,6,7,4,2,'#ffd23b'); px(c,7,9,2,3,'#ffd23b'); // flèche bas
       break;
     case '^': // pics
       px(c,0,8,16,8,'#555');

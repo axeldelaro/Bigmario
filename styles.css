@@ -171,4 +171,20 @@ button.btn.ghost { background: #2a1c52; color:#fff; box-shadow: 0 5px 0 #0000008
 .rotate-icon { font-size: 64px; animation: rock 1.4s ease-in-out infinite; }
 @keyframes rock { 0%,100%{ transform: rotate(-12deg);} 50%{ transform: rotate(12deg);} }
 
+/* ---------- Éditeur ---------- */
+#editbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  background: rgba(18,10,38,0.95); border-top: 3px solid #000;
+  padding: 6px; display: flex; flex-direction: column; gap: 6px;
+}
+#editbar .ed-row { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 2px; }
+#editbar button {
+  font: inherit; font-size: 12px; font-weight: 700; white-space: nowrap;
+  color: #fff; background: #2a1c52; border: 2px solid #000; border-radius: 8px;
+  padding: 6px 9px; cursor: pointer;
+}
+#editbar #ed-pal button.sel { background: var(--accent); color: #222; }
+#editbar .ed-row:nth-child(2) button { background: #3a8fe0; }
+#editbar #ed-flash { color: #ffd23b; font: 12px monospace; align-self: center; }
+
 .hidden { display: none !important; }

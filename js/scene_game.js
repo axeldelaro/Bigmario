@@ -14,9 +14,10 @@ export class GameScene {
     this.worldIdx = worldIdx; this.levelIdx = levelIdx;
     this.speedrun = !!opts.speedrun;
     this.marathon = !!opts.marathon;
+    this.customDef = opts.customDef || null;   // niveau de l'éditeur
     this.runMs = 0; this.runFinished = false;
-    this.combo = 0; this.lookAhead = 0;
-    this.recorder = this.speedrun ? new GhostRecorder() : null;
+    this.combo = 0; this.lookAhead = 0; this.warpCd = 0;
+    this.recorder = new GhostRecorder();        // toujours actif -> fantôme auto à chaque niveau
     this.ghosts = []; // [{g:GhostPlayer, glow, label}]
     if (this.speedrun) {
       const data = GhostStore.load(`${worldIdx}-${levelIdx}`);
@@ -33,8 +34,7 @@ export class GameScene {
   }
 
   loadLevel() {
-    const world = WORLDS[this.worldIdx];
-    const def = world.levels[this.levelIdx];
+    const def = this.customDef || WORLDS[this.worldIdx].levels[this.levelIdx];
     this.level = new Level(def);
     this.coins = this.level.coins.map((cc) => new Coin(cc.tx, cc.ty));
     this.gems = this.level.gems
@@ -121,10 +121,18 @@ export class GameScene {
     player.addScore(Math.floor(this.timeLeft) * 10, this);
     this.saveGems();
     this.game.stat?.('clear', `${this.worldIdx}-${this.levelIdx}`);
+    this.autoSaveGhost();
     if (this.speedrun) this.finishRun();
   }
   onBossDefeated() { if (this.pendingClear <= 0) this.pendingClear = 1.6; this.addShake(8); this.game.stat?.('boss'); }
   onPlayerDeath() { if (this.state === 'play') { this.state = 'dying'; this.stateT = 0; this.freeze = 0.12; this.addShake(5); } }
+
+  // fantôme enregistré automatiquement à chaque fin de niveau (sauf custom)
+  autoSaveGhost() {
+    if (this.customDef || !this.recorder) return;
+    const d = this.recorder.data();
+    if (d && d.f && d.f.length >= 6) GhostStore.save(`${this.worldIdx}-${this.levelIdx}`, d);
+  }
 
   finishRun() {
     if (this.runFinished) return;
@@ -190,6 +198,20 @@ export class GameScene {
         SFX.gem(); this.addFloat(gm.x, gm.y - 6, '◆', '#46d8ff'); this.burst(gm.x + 6, gm.y + 6, '#46d8ff', 10);
       }
     }
+    // tuyaux-warp : descendre dedans (Bas) -> téléportation vers la destination
+    if (this.warpCd > 0) this.warpCd -= dt;
+    if (input.down && this.player.onGround && this.warpCd <= 0 && this.level.warps.length && this.level.warpDests.length) {
+      const ft = { tx: Math.floor((this.player.x + this.player.w / 2) / TILE), ty: Math.floor((this.player.y + this.player.h) / TILE) };
+      const wi = this.level.warps.findIndex((w) => Math.abs(w.tx - ft.tx) <= 1 && w.ty === ft.ty);
+      if (wi >= 0) {
+        const d = this.level.warpDests[Math.min(wi, this.level.warpDests.length - 1)];
+        this.burst(this.player.x + 6, this.player.y + this.player.h, '#9a4ad0', 12);
+        this.player.x = d.tx * TILE; this.player.y = d.ty * TILE - this.player.h; this.player.vx = this.player.vy = 0;
+        this.player.invuln = Math.max(this.player.invuln, 0.4); this.warpCd = 0.6;
+        SFX.power(); this.addShake(2);
+      }
+    }
+
     // checkpoints (désactivés en contre-la-montre)
     if (!this.speedrun) for (const cp of this.level.checkpoints) {
       if (this.level.tile(cp.tx, cp.ty) !== 'C') continue;
@@ -261,6 +283,7 @@ export class GameScene {
     this.state = 'levelclear'; this.stateT = 0; SFX.win(); playMusic('overworld');
     this.player.addScore(5000 + Math.floor(this.timeLeft) * 10, this); this.saveGems();
     this.game.stat?.('clear', `${this.worldIdx}-${this.levelIdx}`);
+    this.autoSaveGhost();
     if (this.speedrun) this.finishRun();
   }
 
@@ -277,7 +300,7 @@ export class GameScene {
       const prevFeet = p.prevFeet != null ? p.prevFeet : (p.y + p.h);
       const fromAbove = p.vy > 0 && prevFeet <= e.y + 8;
 
-      if (e.type === 'spiky') { if (!p.win) p.hurt(this); continue; } // instompable
+      if (e.type === 'spiky' || e.type === 'plant') { if (!p.win) p.hurt(this); continue; } // instompables
 
       if (e.type === 'shell') {
         const still = e.state === 'shell' && Math.abs(e.vx) < 10;
@@ -370,6 +393,7 @@ export class GameScene {
     } else if (this.state === 'levelclear') {
       if (this.speedrun) return; // fin gérée par l'UI du contre-la-montre
       if (this.stateT > (this.marathon ? 1.1 : 2.6)) {
+        if (this.customDef) { this.game.onCustomClear?.(); return; }
         const world = WORLDS[this.worldIdx];
         const carry = { lives: this.player.lives, score: this.player.score, coins: this.player.coins };
         this.collectedGems = new Set(); this.activeCheckpoint = null;
@@ -495,10 +519,10 @@ export class GameScene {
 
   drawIntro(c) {
     c.fillStyle = '#000'; c.globalAlpha = 0.55; c.fillRect(0, 0, VIEW_W, VIEW_H); c.globalAlpha = 1;
-    const def = WORLDS[this.worldIdx].levels[this.levelIdx];
+    const def = this.customDef || WORLDS[this.worldIdx].levels[this.levelIdx];
     c.textAlign = 'center';
     c.fillStyle = '#ffd23b'; c.font = '18px monospace';
-    c.fillText(`MONDE ${this.worldIdx + 1}-${this.levelIdx + 1}`, VIEW_W / 2, VIEW_H / 2 - 8);
+    c.fillText(this.customDef ? 'NIVEAU PERSO' : `MONDE ${this.worldIdx + 1}-${this.levelIdx + 1}`, VIEW_W / 2, VIEW_H / 2 - 8);
     c.fillStyle = '#fff'; c.font = '9px monospace';
     c.fillText((def.name || '').replace(/^[0-9-]+\s*/, ''), VIEW_W / 2, VIEW_H / 2 + 10);
     c.fillStyle = '#7fc6ff'; c.font = '8px monospace';

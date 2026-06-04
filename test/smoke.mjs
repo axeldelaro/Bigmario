@@ -26,7 +26,7 @@ function makeEl() {
     style: {}, dataset: {}, classList: { add() {}, remove() {}, toggle() {}, contains: () => false },
     set innerHTML(_) {}, get innerHTML() { return ''; },
     querySelector: () => makeEl(), querySelectorAll: () => [],
-    addEventListener() {}, removeEventListener() {}, appendChild() {}, onclick: null,
+    addEventListener() {}, removeEventListener() {}, appendChild() {}, remove() {}, onclick: null,
     getBoundingClientRect: () => ({ left: 0, top: 0, width: 320, height: 192 }),
   };
 }
@@ -105,6 +105,7 @@ function fakeGame(input) {
     startMarathon() { this._mar = true; }, onMarathonFinish() { this._marfin = true; },
     returnToMenu() { this._menu = true; }, onSpeedrunFinish() { this._fin = true; },
     watchReplay() { this._rep = true; }, endReplay() { this._endrep = true; },
+    startCustom() { this._custom = true; }, onCustomClear() { this._cc = true; },
     stat() {}, fadeIn() {}, reduceMotion: false,
     _go: false, _gc: false, _ev: false,
   };
@@ -181,6 +182,17 @@ import { GhostRecorder, GhostPlayer, GhostStore } from '../js/ghost.js';
   runScene((g) => new VersusScene(g, { mode: 'rival', arenaIdx: 0 }), 'VERSUS rival (ghost)', 1500);
   // rival sans fantôme -> repli IA (arène 1)
   runScene((g) => new VersusScene(g, { mode: 'rival', arenaIdx: 1 }), 'VERSUS rival (fallback IA)', 1200);
+  // co-op en ligne (additif, pas de combat)
+  runScene((g) => new VersusScene(g, { mode: 'online', coop: true, net: netStub, localId: 0, arenaIdx: 0 }), 'COOP online host', 1000);
+  runScene((g) => new VersusScene(g, { mode: 'local', coop: true, arenaIdx: 0 }), 'COOP local', 1000);
+  // éditeur de niveaux
+  { const { EditorScene } = await import('../js/scene_editor.js');
+    const game = fakeGame(makeInput(moveScript));
+    const ed = new EditorScene(game);
+    for (let i = 0; i < 60; i++) { game.input.update(); ed.update(1 / 120); ed.draw(ctxStub); }
+    ed.dispose();
+    console.log('EDITOR ran, level def width=', ed.def().map[0].length);
+  }
 
   // Replay viewer (niveau + arène)
   {
