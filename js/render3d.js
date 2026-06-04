@@ -27,6 +27,85 @@ const TILE_COL = {
   T: { top: 0xff5d5d, side: 0x9aa0b0 }, '=': { top: 0xe8c889, side: 0x7a5a2a },
 };
 
+// ---------------------------------------------------------------------------
+// Textures 3D détaillées (canvas 64px), générées par code. Bien plus riches
+// qu'un simple mapping des 16px du 2D. Dessous=dessus=côté selon le type.
+const TEX3D = new Map();
+const GP = {
+  overworld: { gT: '#62cf5b', gL: '#9bf07e', gD: '#3a9a44', gS: '#2c7a36', d: '#b06a32', dD: '#7c451c', dL: '#cd8c52', pe: '#5e3614', stone: '#9aa0b0' },
+  underground: { gT: '#56b6cf', gL: '#8fe3f0', gD: '#2a6f86', gS: '#1d4f63', d: '#3a5a8a', dD: '#22365a', dL: '#5a86b8', pe: '#172642', stone: '#6c79a8' },
+  castle: { gT: '#a6a6b4', gL: '#c8c8d4', gD: '#70707e', gS: '#54545f', d: '#7a7a86', dD: '#4a4a55', dL: '#9a9aa8', pe: '#3a3a44', stone: '#8a6f6f' },
+};
+function tex3D(type, face, theme) {
+  const k = type + '|' + face + '|' + theme;
+  if (TEX3D.has(k)) return TEX3D.get(k);
+  const S = 64, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  drawFace(cv.getContext('2d'), S, type, face, theme);
+  TEX3D.set(k, cv); return cv;
+}
+function drawFace(c, S, type, face, theme) {
+  const u = S / 16, P = GP[theme] || GP.overworld;
+  const R_ = (x, y, w, h, col) => { c.fillStyle = col; c.fillRect(x * u, y * u, w * u, h * u); };
+  const dot = (x, y, r, col) => { c.fillStyle = col; c.beginPath(); c.arc(x * u, y * u, r * u, 0, 7); c.fill(); };
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = (...a) => a[(Math.random() * a.length) | 0];
+
+  const grass = () => { R_(0, 0, 16, 16, P.gD); for (let i = 0; i < 90; i++) R_(rnd(0, 16), rnd(0, 16), 0.4, rnd(0.8, 2.2), pick(P.gT, P.gL, P.gT)); for (let i = 0; i < 30; i++) dot(rnd(0, 16), rnd(0, 16), 0.25, P.gS); };
+  const dirt = (fringe) => {
+    R_(0, 0, 16, 16, P.d);
+    for (let i = 0; i < 40; i++) dot(rnd(1, 15), rnd(fringe ? 4 : 1, 15), rnd(0.4, 1.1), pick(P.dD, P.dL, P.pe));
+    for (let i = 0; i < 6; i++) { const x = rnd(2, 14); c.strokeStyle = P.dD; c.lineWidth = u * 0.4; c.beginPath(); c.moveTo(x * u, rnd(4, 8) * u); c.lineTo((x + rnd(-2, 2)) * u, rnd(10, 15) * u); c.stroke(); }
+    if (fringe) { R_(0, 0, 16, 2.6, P.gD); for (let i = 0; i < 26; i++) R_(rnd(0, 16), 1.5, 0.5, rnd(1, 2.4), pick(P.gT, P.gL)); }
+  };
+  const stone = (dim) => {
+    const s = dim ? '#6a5f5f' : P.stone;
+    R_(0, 0, 16, 16, s);
+    R_(0, 0, 16, 1, '#ffffff55'); R_(0, 0, 1, 16, '#ffffff44'); R_(0, 15, 16, 1, '#00000066'); R_(15, 0, 1, 16, '#00000055');
+    for (let i = 0; i < 26; i++) dot(rnd(2, 14), rnd(2, 14), 0.3, pick('#ffffff33', '#00000033'));
+    [[2.4, 2.4], [13.6, 2.4], [2.4, 13.6], [13.6, 13.6]].forEach(([x, y]) => { dot(x, y, 0.9, '#00000055'); dot(x - 0.25, y - 0.25, 0.5, '#ffffff66'); });
+  };
+  const brick = () => {
+    R_(0, 0, 16, 16, '#5a2f18');
+    for (let r = 0; r < 4; r++) { const off = (r % 2) ? -4 : 0; for (let bx = -8; bx < 16; bx += 8) { const x = bx + off + 0.5, y = r * 4 + 0.5, w = 7, h = 3; R_(x, y, w, h, pick('#c8623a', '#bd5a33', '#cf6b42')); R_(x, y, w, 0.7, '#e08a5e'); R_(x, y + h - 0.7, w, 0.7, '#8a3b1f'); } }
+  };
+  const qblock = (faceCol, edge, sym) => {
+    R_(0, 0, 16, 16, edge); R_(1, 1, 14, 14, faceCol);
+    R_(1, 1, 14, 1.2, '#ffffff66'); R_(1, 13.8, 14, 1.2, '#00000055');
+    [[2.6, 2.6], [13.4, 2.6], [2.6, 13.4], [13.4, 13.4]].forEach(p => dot(p[0], p[1], 0.7, '#ffffffcc'));
+    c.fillStyle = '#00000088'; c.font = 'bold ' + (9 * u) + 'px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    if (sym) c.fillText(sym, 8 * u, 9 * u);
+  };
+  const pipe = (head) => {
+    R_(0, 0, 16, 16, '#1f8a30');
+    for (let x = 1; x < 15; x += 2) R_(x, 0, 1.4, 16, x % 4 === 1 ? '#46d058' : '#2aa23e');
+    R_(2, 0, 2.4, 16, '#7fe88a'); R_(0, 0, 1, 16, '#0c5a1c'); R_(15, 0, 1, 16, '#0c5a1c');
+    if (head) { R_(-1, 0, 18, 4, '#37c24a'); R_(-1, 0, 18, 1.4, '#9bf0a0'); R_(-1, 3.2, 18, 0.8, '#0c5a1c'); }
+  };
+  const plank = () => {
+    R_(0, 0, 16, 16, '#caa057'); R_(0, 0, 16, 1, '#e8c889');
+    R_(0, 5.3, 16, 0.6, '#7a5a2a'); R_(0, 10.6, 16, 0.6, '#7a5a2a');
+    for (let i = 0; i < 26; i++) R_(rnd(0, 15), rnd(0, 16), rnd(1, 3), 0.4, '#a8843f');
+    [[2, 2.6], [14, 2.6], [2, 13.4], [14, 13.4]].forEach(p => dot(p[0], p[1], 0.5, '#5a4020'));
+  };
+  const spring = () => { R_(0, 0, 16, 16, '#3a4250'); R_(2, 11, 12, 5, '#9aa0b0'); R_(2, 11, 12, 1, '#cfd6e0'); R_(3, 4.5, 10, 2, '#ff5d5d'); R_(3, 7.5, 10, 2, '#ff7b7b'); R_(4, 2.5, 8, 2, '#ffd23b'); R_(4, 2.5, 8, 0.8, '#fff2a0'); };
+
+  switch (type) {
+    case 'X': (face === 'top') ? grass() : dirt(true); break;
+    case 'H': stone(false); break;
+    case 'D': stone(true); break;
+    case 'B': brick(); break;
+    case '?': case 'M': qblock('#ffcf3b', '#a3760f', '?'); break;
+    case 'U': qblock('#ffcf3b', '#a3760f', '★'); break;
+    case 'L': qblock('#46d84a', '#1f7a2c', '1'); break;
+    case 'W': qblock('#46c8ff', '#1f6a9a', '✦'); break;
+    case 'p': pipe(false); break;
+    case 'P': pipe(true); break;
+    case 'T': spring(); break;
+    case '=': plank(); break;
+    default: R_(0, 0, 16, 16, '#888');
+  }
+}
+
 export async function ensure3D() {
   if (R) return true;
   if (failed) return false;
@@ -89,19 +168,23 @@ function buildRenderer() {
     if ('colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4; texCache.set(key2, t); return t;
   };
-  // matériau texturé par type de tuile + thème (réutilise l'art 2D)
+  // matériaux par FACE (dessus / côtés) avec textures 3D détaillées
   const tileMatCache = new Map();
-  const tileMat = (type, theme) => {
+  const faceMat = (type, face, theme) => {
+    const map = tex(tex3D(type, face, theme), 'm:' + type + face + theme);
+    const emissive = (type === '?' || type === 'M' || type === 'U' || type === 'L' || type === 'W');
+    return new THREE.MeshStandardMaterial({ map, roughness: 0.82, metalness: 0.04, emissive: emissive ? 0x332a00 : 0x000000, emissiveMap: emissive ? map : null, emissiveIntensity: emissive ? 0.35 : 1 });
+  };
+  const tileMats = (type, theme) => {
     const k = type + '|' + theme;
     if (tileMatCache.has(k)) return tileMatCache.get(k);
-    const map = tex(tileCanvas(type, theme), k);
-    const emissive = (type === '?' || type === 'M' || type === 'U' || type === 'L' || type === 'W');
-    const m = new THREE.MeshStandardMaterial({ map, roughness: 0.85, metalness: 0.02, emissive: emissive ? 0x222000 : 0x000000, emissiveMap: emissive ? map : null });
-    tileMatCache.set(k, m); return m;
+    const side = faceMat(type, 'side', theme), top = faceMat(type, 'top', theme);
+    const arr = [side, side, top, side, side, side]; // +x,-x,+y(top),-y,+z,-z
+    tileMatCache.set(k, arr); return arr;
   };
 
   return {
-    THREE, renderer, scene, cam, root, boxGeo, mat, tex, tileMat, key,
+    THREE, renderer, scene, cam, root, boxGeo, mat, tex, tileMats, key,
     pools: { tile: [], ti: 0, ent: new Map() },
     models: {}, skyCache: new Map(),
   };
@@ -219,7 +302,7 @@ function drawScene(scene) {
       if (ch === ' ' || ch === 'G' || ch === 'C' || ch === 'c') continue;
       if (!TILE_COL[ch]) continue; // type connu
       const m = getTile();
-      m.material = R.tileMat(ch, lvl.theme);
+      m.material = R.tileMats(ch, lvl.theme);
       m.position.set(tx + 0.5, -(ty + 0.5), 0);
       // plateformes fines vs blocs pleins
       if (ch === '=') m.scale.set(1, 0.38, 0.9); else m.scale.set(1, 1, 1);
