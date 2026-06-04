@@ -495,13 +495,14 @@ export class Player {
   draw(c, cam) {
     if (this.invuln > 0 && Math.floor(this.t * 20) % 2 && !this.dead) return; // clignote
     const moving = Math.abs(this.vx) > 6;
+    const H = ART.hero;
     const set = this.power === 'fire'
-      ? { idle: this.big ? ART.hero.fireBigIdle : ART.hero.fireSmallIdle, walk: this.big ? ART.hero.fireBigWalk : ART.hero.fireSmallWalk, jump: ART.hero.fireJump }
-      : { idle: this.big ? ART.hero.bigIdle : ART.hero.smallIdle, walk: this.big ? ART.hero.bigWalk : ART.hero.smallWalk, jump: ART.hero.jump };
+      ? { idle: this.big ? H.fireBigIdle : H.fireSmallIdle, walk: this.big ? H.fireBigWalk : H.fireSmallWalk, walk2: this.big ? H.fireBigWalk2 : H.fireSmallWalk2, jump: H.fireJump }
+      : { idle: this.big ? H.bigIdle : H.smallIdle, walk: this.big ? H.bigWalk : H.smallWalk, walk2: this.big ? H.bigWalk2 : H.smallWalk2, jump: H.jump };
     let img;
     if (this.ducking && !this.big) img = ART.hero.duck;
     else if (!this.onGround && !this.dead) img = set.jump;
-    else if (moving) img = (Math.floor(this.walkT) % 2) ? set.walk : set.idle;
+    else if (moving) img = (Math.floor(this.walkT) % 2) ? set.walk : set.walk2; // vraie foulée: 2 poses opposées
     else img = set.idle;
 
     // ancrage aux PIEDS (corrige l'alignement des grands persos)

@@ -93,6 +93,25 @@ const HERO_SMALL_2 = [
   '...kkk.kkk......',
   '................',
 ];
+// 2e pose de course (petit) — foulée opposée, jambes bien écartées
+const HERO_SMALL_2b = [
+  '.....kkkk.......',
+  '....khhhhk......',
+  '....khHHHk......',
+  '....kssssk......',
+  '...ksskssk......',
+  '...ksskssk......',
+  '....ksssk.......',
+  '...kbbBbbk......',
+  '..kbbyBybbk.....',
+  '..kbbyBybbk.....',
+  '...ksbBbsk......',
+  '..kss.k.ssk.....',
+  '..k.....k.......',
+  '.ksk.....ksk....',
+  '.kk........kk...',
+  '................',
+];
 const HERO_BIG_1 = [
   '.....kkkkk......',
   '....khhhhhk.....',
@@ -127,6 +146,25 @@ const HERO_BIG_2 = [
   '..kss.kk.ssk....',
   '..ksk....ksk...',
   '..kkk....kkk....',
+  '................',
+];
+// 2e pose de course (grand) — foulée opposée
+const HERO_BIG_2b = [
+  '.....kkkkk......',
+  '....khhhhhk.....',
+  '....khHHHHk.....',
+  '....kssssssk....',
+  '...kssksskssk...',
+  '...kssksskssk...',
+  '....ksssssk.....',
+  '....kksssk......',
+  '...kbbBBbbk.....',
+  '..kbbyBBybbk....',
+  '...kbyBBybk.....',
+  '...kbbBBbbk.....',
+  '..kss.kk.ssk....',
+  '.ksk......ksk...',
+  '.kk........kk...',
   '................',
 ];
 const HERO_JUMP = [
@@ -432,15 +470,19 @@ export function buildArt() {
   A.hero = {
     smallIdle: makeSprite('h_si', HERO_SMALL_1, P_HERO),
     smallWalk: makeSprite('h_sw', HERO_SMALL_2, P_HERO),
+    smallWalk2: makeSprite('h_sw2', HERO_SMALL_2b, P_HERO),
     bigIdle: makeSprite('h_bi', HERO_BIG_1, P_HERO),
     bigWalk: makeSprite('h_bw', HERO_BIG_2, P_HERO),
+    bigWalk2: makeSprite('h_bw2', HERO_BIG_2b, P_HERO),
     jump: makeSprite('h_j', HERO_JUMP, P_HERO),
     duck: makeSprite('h_d', HERO_DUCK, P_HERO),
     fireBigIdle: makeSprite('h_fbi', HERO_BIG_1, P_FIRE),
     fireBigWalk: makeSprite('h_fbw', HERO_BIG_2, P_FIRE),
+    fireBigWalk2: makeSprite('h_fbw2', HERO_BIG_2b, P_FIRE),
     fireJump: makeSprite('h_fj', HERO_JUMP, P_FIRE),
     fireSmallIdle: makeSprite('h_fsi', HERO_SMALL_1, P_FIRE),
     fireSmallWalk: makeSprite('h_fsw', HERO_SMALL_2, P_FIRE),
+    fireSmallWalk2: makeSprite('h_fsw2', HERO_SMALL_2b, P_FIRE),
   };
   A.goon = { a: makeSprite('g1', GOON_1, P_GOON), b: makeSprite('g2', GOON_2, P_GOON), flat: makeSprite('gf', GOON_FLAT, P_GOON) };
   A.shell = { a: makeSprite('s1', SHELL_1, P_SHELL), hide: makeSprite('sh', SHELL_HIDE, P_SHELL) };
