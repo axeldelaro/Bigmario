@@ -10,6 +10,7 @@ import { MapScene } from './scene_map.js';
 import { ReplayScene } from './scene_replay.js';
 import { WORLDS, ARENAS } from './levels.js';
 import { NetClient } from './net.js';
+import { ensure3D, is3DReady, renderScene, resize3D, get3DCanvas } from './render3d.js';
 import { Leaderboard, fmtTime } from './leaderboard.js';
 import { GhostStore } from './ghost.js';
 import { Share } from './share.js';
@@ -37,9 +38,17 @@ class Game {
     this.net = null;
     this.fadeAlpha = 0; // fondu d'entrée des scènes
     this.reduceMotion = Save.get('reduceMotion', false);
+    this.use3D = Save.get('render3d', true); // rendu 3D par défaut si dispo
+    this.canvas3d = null;
     this._installPrompt = null;
     if (Save.get('muted', false)) toggleMute(); // restaure le réglage son
     this.resize();
+    // initialisation 3D (asynchrone ; repli 2D si échec)
+    ensure3D().then((ok) => {
+      if (!ok) return;
+      this.canvas3d = get3DCanvas();
+      if (this.canvas3d) { this.canvas3d.classList.add('screen3d'); document.getElementById('game-shell').insertBefore(this.canvas3d, canvas); this.resize(); }
+    });
     addEventListener('resize', () => this.resize());
     addEventListener('orientationchange', () => setTimeout(() => this.resize(), 200));
     addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); this._installPrompt = e; });
@@ -62,6 +71,13 @@ class Game {
     canvas.style.width = cssW + 'px'; canvas.style.height = cssH + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = false;
+    // canvas 3D superposé exactement sur le canvas 2D
+    if (this.canvas3d) {
+      const left = Math.round((innerWidth - cssW) / 2), top = Math.round((innerHeight - cssH) / 2);
+      const s = this.canvas3d.style;
+      s.position = 'fixed'; s.left = left + 'px'; s.top = top + 'px';
+      resize3D(cssW, cssH, dpr);
+    }
     this.checkOrientation();
   }
 
@@ -98,8 +114,18 @@ class Game {
     } else { this.acc = 0; }
     // rendu
     ctx.clearRect(0, 0, VIEW_W, VIEW_H);
-    if (this.scene) this.scene.draw(ctx);
-    else this.drawMenuBackdrop();
+    const want3D = this.use3D && is3DReady() && this.scene && this.scene.drawWorld &&
+      (this.mode === 'game' || this.mode === 'versus');
+    if (want3D) {
+      const ok = renderScene(this.scene);
+      this.set3DVisible(ok);
+      if (ok) this.scene.drawOverlay ? this.scene.drawOverlay(ctx) : this.scene.draw(ctx);
+      else this.scene.draw(ctx); // repli 2D définitif
+    } else {
+      this.set3DVisible(false);
+      if (this.scene) this.scene.draw(ctx);
+      else this.drawMenuBackdrop();
+    }
     if (this.paused) this.drawPauseOverlay();
     if (this.fadeAlpha > 0) {
       ctx.fillStyle = `rgba(0,0,0,${this.fadeAlpha})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
@@ -109,6 +135,13 @@ class Game {
   }
 
   fadeIn() { this.fadeAlpha = 1; }
+
+  set3DVisible(on) {
+    if (!this.canvas3d || this._3dOn === on) return;
+    this._3dOn = on;
+    this.canvas3d.style.display = on ? 'block' : 'none';
+    document.body.classList.toggle('threeD', on);
+  }
 
   // décor animé derrière les menus
   drawMenuBackdrop() {
@@ -545,6 +578,7 @@ class Game {
         <button class="btn secondary" id="ach">🏆 Succès (${unlockedCount()}/${ACHIEVEMENTS.length})</button>
         <button class="btn secondary" id="friend">👥 Fantôme d'ami / Replay</button>
         <button class="btn secondary" id="mute">${isMuted() ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'}</button>
+        <button class="btn secondary" id="render">${this.use3D ? '🧊 Rendu: 3D' : '🟦 Rendu: 2D'}${is3DReady() ? '' : ' (3D indispo.)'}</button>
         <button class="btn secondary" id="motion">${this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'}</button>
         <button class="btn secondary" id="touch">🎮 Boutons tactiles</button>
         ${this._installPrompt ? '<button class="btn" id="install">📲 Installer l\'appli</button>' : ''}
@@ -552,11 +586,12 @@ class Game {
         <button class="btn danger" id="reset">🗑 Réinitialiser la progression</button>
         <button class="btn ghost" id="back">← Retour</button>
       </div>
-      <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• 🍄 grandir · 🔥 tir · ⭐ invincible · 🟢 1 vie · 🪶 <b>plume</b> = maintiens Saut en l'air pour <b>planer</b>.<br>• Enchaîne les écrasements en l'air pour des combos.<br>• Manette : A saut, X tir, Start pause.</p>
+      <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• 🍄 grandir · 🔥 tir · ⭐ invincible · 🟢 1 vie · 🪶 <b>plume</b> = maintiens Saut en l'air pour <b>planer</b>.<br>• Enchaîne les écrasements en l'air pour des combos.<br>• <b>Bas en l'air = écrasement piqué</b> (broie tout, même les pics).<br>• Manette : A saut, X tir, Start pause.</p>
     `);
     p.querySelector('#ach').onclick = () => this.showAchievements();
     p.querySelector('#friend').onclick = () => this.showFriend();
     p.querySelector('#mute').onclick = (e) => { const m = toggleMute(); Save.set('muted', m); e.target.textContent = m ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'; };
+    p.querySelector('#render').onclick = (e) => { this.use3D = !this.use3D; Save.set('render3d', this.use3D); e.target.textContent = (this.use3D ? '🧊 Rendu: 3D' : '🟦 Rendu: 2D') + (is3DReady() ? '' : ' (3D indispo.)'); };
     p.querySelector('#motion').onclick = (e) => { this.reduceMotion = !this.reduceMotion; Save.set('reduceMotion', this.reduceMotion); e.target.textContent = this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'; };
     p.querySelector('#touch').onclick = () => this.showTouchSettings();
     const ib = p.querySelector('#install');

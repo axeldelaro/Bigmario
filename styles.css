@@ -30,9 +30,20 @@ html, body {
   image-rendering: crisp-edges;
   background: #000;
   display: block;
+  position: relative;
+  z-index: 2;
   box-shadow: 0 0 0 2px #000, 0 18px 50px rgba(0,0,0,0.6);
   touch-action: none;
 }
+/* canvas WebGL (rendu 3D) placé derrière le canvas 2D (HUD) */
+.screen3d {
+  position: fixed;
+  z-index: 1;
+  display: none;
+  box-shadow: 0 0 0 2px #000, 0 18px 50px rgba(0,0,0,0.6);
+}
+/* en mode 3D, le canvas 2D ne sert que de calque HUD -> fond transparent */
+body.threeD #screen { background: transparent; box-shadow: none; }
 
 /* ---------- UI / Menus ---------- */
 .ui-layer {

@@ -89,7 +89,7 @@ export class VersusScene {
     const player = this.mode === 'online' ? 0 : idx;
     if (idx === 0 && I.justPressed('pause', 0)) this.game.togglePause();
     return {
-      left: I.isDown('left', player), right: I.isDown('right', player), down: I.isDown('down', player),
+      left: I.isDown('left', player), right: I.isDown('right', player), down: I.isDown('down', player), downPressed: I.justPressed('down', player),
       jump: I.isDown('jump', player), jumpPressed: I.justPressed('jump', player),
       fire: I.isDown('fire', player), firePressed: I.justPressed('fire', player), run: I.isDown('fire', player),
     };
@@ -210,7 +210,7 @@ export class VersusScene {
     if (b.invuln > 0) return;
     if (!aabb(a, b)) return;
     const aPrevFeet = a.prevFeet != null ? a.prevFeet : (a.y + a.h);
-    const fromAbove = a.vy > 0 && aPrevFeet <= b.y + 8;
+    const fromAbove = (a.vy > 0 && aPrevFeet <= b.y + 8) || a.pounding;
     if (fromAbove) {
       a.vy = -260; this.kos[aIdx]++; b.die(this); SFX.stomp(); this.burst(b.x+7, b.y+7, '#ff5d5d', 12);
       this.addFloat(b.x, b.y - 8, 'KO !', '#ffd23b');
@@ -268,7 +268,9 @@ export class VersusScene {
   }
   endByPeer() { this.finish(this.localId); }
 
-  draw(c) {
+  draw(c) { this.drawWorld(c); this.drawOverlay(c); }
+
+  drawWorld(c) {
     this.level.drawBackground(c, this.cam);
     this.level.drawTiles(c, this.cam);
     for (const co of this.coins) co.draw(c, this.cam);
@@ -277,6 +279,9 @@ export class VersusScene {
     for (const p of this.players) p.draw(c, this.cam);
     for (const p of this.particles) p.draw(c, this.cam);
     for (const f of this.floats) f.draw(c, this.cam);
+  }
+
+  drawOverlay(c) {
     this.drawHUD(c);
     if (this.over) {
       const txt = this.winner < 0 ? 'ÉGALITÉ !' : (this.mode === 'online'

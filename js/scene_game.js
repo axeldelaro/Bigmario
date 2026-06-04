@@ -244,6 +244,19 @@ export class GameScene {
     }
   }
 
+  // impact de l'écrasement piqué : onde de choc au sol
+  onPoundLand(p) {
+    this.addShake(6); this.freeze = 0.05; SFX.boom?.();
+    const cx = p.x + p.w / 2, gy = p.y + p.h;
+    for (let i = 0; i < 12; i++) { const s = i < 6 ? -1 : 1; this.particles.push(new Particle(cx, gy - 1, s * rand(40, 160), rand(-40, -5), '#e8dcc0', rand(0.3, 0.6), 2, 200)); }
+    const R = 34;
+    for (const e of this.enemies) {
+      if (e.dead || e.removed) continue;
+      if (Math.abs((e.x + e.w / 2) - cx) < R && Math.abs((e.y + e.h) - gy) < 20) { e.kill(e.x < cx ? -1 : 1); this.addCombo(e.x + 7, e.y); this.burst(e.x + 7, e.y + 7, '#ffd23b', 6); }
+    }
+    if (this.boss && !this.boss.dead && Math.abs((this.boss.x + this.boss.w / 2) - cx) < R + 12 && (this.boss.y + this.boss.h) - gy > -24) this.boss.hitTop(this);
+  }
+
   bossClear() {
     this.state = 'levelclear'; this.stateT = 0; SFX.win(); playMusic('overworld');
     this.player.addScore(5000 + Math.floor(this.timeLeft) * 10, this); this.saveGems();
@@ -258,6 +271,8 @@ export class GameScene {
       if (e.dead || e.removed || e.state === 'flat') continue;
       if (!aabb(p, e)) continue;
       if (p.star > 0) { e.kill(p.x < e.x ? 1 : -1); p.addScore(100, this); this.burst(e.x + 7, e.y + 7, '#ffd23b', 8); continue; }
+      // écrasement piqué (slam) : broie tout par le dessus, même les ennemis à pics
+      if (p.pounding) { e.kill(p.x < e.x ? 1 : -1); this.addCombo(e.x + 7, e.y); this.burst(e.x + 7, e.y + 7, '#ffd23b', 8); this.freeze = 0.03; continue; }
       // écrasement fiable: les pieds étaient au-dessus de l'ennemi et on descend
       const prevFeet = p.prevFeet != null ? p.prevFeet : (p.y + p.h);
       const fromAbove = p.vy > 0 && prevFeet <= e.y + 8;
@@ -370,14 +385,16 @@ export class GameScene {
     const I = this.game.input;
     if (I.justPressed('pause', 0)) this.game.togglePause();
     return {
-      left: I.isDown('left', 0), right: I.isDown('right', 0), down: I.isDown('down', 0),
+      left: I.isDown('left', 0), right: I.isDown('right', 0), down: I.isDown('down', 0), downPressed: I.justPressed('down', 0),
       jump: I.isDown('jump', 0), jumpPressed: I.justPressed('jump', 0),
       fire: I.isDown('fire', 0), firePressed: I.justPressed('fire', 0), run: I.isDown('fire', 0),
     };
   }
 
   // ---------- DRAW ----------
-  draw(c) {
+  draw(c) { this.drawWorld(c); this.drawOverlay(c); }
+
+  drawWorld(c) {
     c.save();
     if (this.shake > 0.2) c.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
     this.level.drawBackground(c, this.cam);
@@ -395,7 +412,10 @@ export class GameScene {
     for (const p of this.particles) p.draw(c, this.cam);
     for (const f of this.floats) f.draw(c, this.cam);
     c.restore();
+  }
 
+  // HUD/overlay seul (utilisé par-dessus le rendu 3D)
+  drawOverlay(c) {
     this.drawHUD(c);
     if (this.boss && !this.boss.dead) this.drawBossBar(c);
     if (this.speedrun || this.marathon) this.drawTimer(c);
@@ -464,12 +484,13 @@ export class GameScene {
   }
 
   drawBossBar(c) {
-    const w = 120, x = (VIEW_W - w) / 2, y = VIEW_H - 12;
-    c.fillStyle = '#000'; c.fillRect(x - 2, y - 2, w + 4, 8);
-    c.fillStyle = '#3a1a1a'; c.fillRect(x, y, w, 4);
-    c.fillStyle = '#ff5d5d'; c.fillRect(x, y, w * (this.boss.hp / 3), 4);
+    const w = 160, x = (VIEW_W - w) / 2, y = VIEW_H - 13;
+    const frac = this.boss.hp / this.boss.maxHp;
+    c.fillStyle = '#000'; c.fillRect(x - 2, y - 2, w + 4, 9);
+    c.fillStyle = '#3a1a1a'; c.fillRect(x, y, w, 5);
+    c.fillStyle = frac > 0.4 ? '#ff5d5d' : '#ffb13b'; c.fillRect(x, y, w * frac, 5);
     c.fillStyle = '#fff'; c.font = '7px monospace'; c.textAlign = 'center';
-    c.fillText('BOSS', VIEW_W / 2, y - 4); c.textAlign = 'left';
+    c.fillText('★ GARDIEN ★', VIEW_W / 2, y - 4); c.textAlign = 'left';
   }
 
   drawIntro(c) {
