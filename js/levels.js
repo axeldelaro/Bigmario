@@ -6,7 +6,9 @@
 //  p corps de tuyau | P tête de tuyau | ^ pics | = plateforme | o pièce | G arrivée
 //  T ressort | C checkpoint | j gemme cachée | m plateforme mobile (horiz.) | n plateforme mobile (vert.)
 //  S départ joueur | g marcheur | k ennemi à carapace | f volant | z ennemi à pics | O boss
-import { BUILT } from './levelbuild.js';
+import { BUILT, ARENAS } from './levelbuild.js';
+
+export { ARENAS };
 
 export const WORLDS = [
   {
@@ -27,57 +29,5 @@ export const WORLDS = [
   },
 ];
 
-// Arènes versus (symétriques, bouclées par les bords)
-export const ARENAS = [
-  {
-    name: 'Arène Duo', theme: 'overworld', time: 99,
-    map: [
-      '                                        ',
-      '                                        ',
-      '       ?              MM             ?   ',
-      '                                        ',
-      '    ====        ========        ====    ',
-      '                                        ',
-      '         o o                 o o        ',
-      '   1                                2   ',
-      '======        ==========        ========',
-      '                                        ',
-      '         ====            ====           ',
-      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-    ],
-  },
-  {
-    name: 'Tours', theme: 'castle', time: 99,
-    map: [
-      '                                        ',
-      '   ==                            ==     ',
-      '   ==        MM      MM           ==     ',
-      '   ==                             ==     ',
-      '        ====            ====             ',
-      '   1                                2    ',
-      '  =====                        =======   ',
-      '              ==========                 ',
-      '       o o                    o o        ',
-      '   =======                    =======    ',
-      '                                         ',
-      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-    ],
-  },
-  {
-    name: 'Ressorts', theme: 'overworld', time: 99,
-    map: [
-      '                                        ',
-      '                                        ',
-      '      MM                       MM        ',
-      '   ====                           ====   ',
-      '                                        ',
-      '   1          ========          2        ',
-      '  ===                            ===     ',
-      '            T            T               ',
-      '       ====                ====          ',
-      '                                        ',
-      '   o o      ====    ====     o o         ',
-      'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-    ],
-  },
-];
+// Les arènes versus (20 tuiles = 1 écran exact, avec murs de contour) sont
+// construites par js/levelbuild.js et ré-exportées ci-dessus.

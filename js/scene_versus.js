@@ -195,6 +195,7 @@ export class VersusScene {
     this.coins = this.coins.filter((c) => !c.dead);
     this.fireballs = this.fireballs.filter((f) => !f.dead);
     this.particles = this.particles.filter((p) => !p.dead);
+    if (this.particles.length > 110) this.particles.splice(0, this.particles.length - 110); // anti-saturation
     this.floats = this.floats.filter((f) => !f.dead);
 
     // respawn morts (local / bot)
