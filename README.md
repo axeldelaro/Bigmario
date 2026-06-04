@@ -12,6 +12,7 @@ en ligne.
 > librement hébergeables et partageables.
 
 - 🕹️ **Jouable au clavier, à la manette, et au tactile** (overlay en mode paysage sur téléphone, vibration).
+- 🧊 **Rendu 3D (WebGL/Three.js)** en option : le monde, les blocs, les persos et ennemis rendus en 3D temps réel (style 2.5D), piloté par le moteur 2D validé. Bascule 2D/3D dans les Options ; **repli automatique en 2D** si la 3D n'est pas disponible (hors-ligne, vieux GPU).
 - 🎨 **Décors détaillés** : ciel en dégradé, parallaxe multi-couches (montagnes, collines, arbres, nuages), cristaux scintillants et torches animées ; ombres au sol et menus animés.
 - 🗺️ **Carte du monde** animée pour choisir ses niveaux.
 - ✅ **Niveaux garantis franchissables** : un validateur physique headless (`test/solve.mjs`) simule le moteur réel et vérifie qu'un auto-joueur atteint l'arrivée de chaque niveau.

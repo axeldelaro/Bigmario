@@ -268,7 +268,9 @@ export class VersusScene {
   }
   endByPeer() { this.finish(this.localId); }
 
-  draw(c) {
+  draw(c) { this.drawWorld(c); this.drawOverlay(c); }
+
+  drawWorld(c) {
     this.level.drawBackground(c, this.cam);
     this.level.drawTiles(c, this.cam);
     for (const co of this.coins) co.draw(c, this.cam);
@@ -277,6 +279,9 @@ export class VersusScene {
     for (const p of this.players) p.draw(c, this.cam);
     for (const p of this.particles) p.draw(c, this.cam);
     for (const f of this.floats) f.draw(c, this.cam);
+  }
+
+  drawOverlay(c) {
     this.drawHUD(c);
     if (this.over) {
       const txt = this.winner < 0 ? 'ÉGALITÉ !' : (this.mode === 'online'

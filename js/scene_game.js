@@ -392,7 +392,9 @@ export class GameScene {
   }
 
   // ---------- DRAW ----------
-  draw(c) {
+  draw(c) { this.drawWorld(c); this.drawOverlay(c); }
+
+  drawWorld(c) {
     c.save();
     if (this.shake > 0.2) c.translate((Math.random() - 0.5) * this.shake, (Math.random() - 0.5) * this.shake);
     this.level.drawBackground(c, this.cam);
@@ -410,7 +412,10 @@ export class GameScene {
     for (const p of this.particles) p.draw(c, this.cam);
     for (const f of this.floats) f.draw(c, this.cam);
     c.restore();
+  }
 
+  // HUD/overlay seul (utilisé par-dessus le rendu 3D)
+  drawOverlay(c) {
     this.drawHUD(c);
     if (this.boss && !this.boss.dead) this.drawBossBar(c);
     if (this.speedrun || this.marathon) this.drawTimer(c);
