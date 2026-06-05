@@ -45,8 +45,8 @@ function L11() { // 1-1 Premiers pas — intro douce, un parcours haut bonus
   // ressort + gemme haute
   put(g, 9, 72, 'T'); put(g, 2, 72, 'j');
   put(g, 7, 78, '====='); coins(g, 6, 79, 3);
-  // bloc 1UP caché en hauteur
-  put(g, 4, 86, 'L');
+  // bloc 1UP caché en hauteur — plateforme d'appui pour l'atteindre au saut
+  plat(g, 7, 84, 4); put(g, 4, 86, 'L');
   // ennemis sol
   put(g, 9, 16, 'g'); put(g, 9, 50, 'g'); put(g, 9, 76, 'g'); put(g, 9, 100, 'g'); put(g, 9, 104, 'k');
   return { name: '1-1 Premiers pas', theme: 'overworld', time: 320, map: rows(g) };

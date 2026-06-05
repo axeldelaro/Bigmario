@@ -334,10 +334,19 @@ export class GameScene {
     if (!b || b.dead || p.dead || p.win) return;
     if (!aabb(p, b)) return;
     if (p.star > 0) { b.hitTop(this); p.vy = -240; return; }
-    const prevFeet = p.prevFeet != null ? p.prevFeet : (p.y + p.h);
-    const fromAbove = p.vy > 0 && prevFeet <= b.y + 12;
-    if (fromAbove) { if (b.hitTop(this)) { p.vy = (this.curInput && this.curInput.jump ? -320 : -240); this.freeze = 0.08; } }
-    else p.hurt(this);
+    const feet = p.y + p.h;
+    const prevFeet = p.prevFeet != null ? p.prevFeet : feet;
+    // Détection généreuse d'un piétinement par le dessus (le boss fait 48x40).
+    const fromAbove = p.vy > 0 && (prevFeet <= b.y + b.h * 0.55 || feet <= b.y + b.h * 0.45);
+    if (fromAbove) {
+      // On rebondit TOUJOURS sur un coup porté par le dessus, même si le boss
+      // est invulnérable — sinon le joueur retombe dedans et se fait toucher.
+      b.hitTop(this);
+      p.vy = (this.curInput && this.curInput.jump ? -340 : -260);
+      this.freeze = 0.08;
+    } else {
+      p.hurt(this);
+    }
   }
 
   handleShellCollisions() {
