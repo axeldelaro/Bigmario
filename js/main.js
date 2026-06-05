@@ -586,28 +586,23 @@ class Game {
 
   showVersusMenu() {
     const p = this.panel(`
-      <div class="title"><span class="big" style="font-size:34px">VERSUS</span><span class="sub">CHOISIS UN MODE</span></div>
+      <div class="title"><span class="big" style="font-size:32px">VERSUS</span></div>
       <div class="menu-list">
-        <button class="btn" id="m-bot">🤖 Contre l'IA</button>
-        <button class="btn" id="m-rival">🏁 Contre un Fantôme rival</button>
-        <button class="btn secondary" id="m-local">🎮 Local sur ce PC : Libre (2-4)</button>
-        <button class="btn secondary" id="m-local-tourney">🏆 Tournoi Local sur ce PC (3-8)</button>
-        <button class="btn secondary" id="m-p2p">📡 En Ligne (P2P par code) : Libre & Tournoi</button>
-        <button class="btn secondary" id="m-online">🌐 Serveur central WebSocket (1v1)</button>
-        <button class="btn ghost" id="m-back">← Retour</button>
+        <button class="btn" id="m-local">🎮 Local : Mode Libre</button>
+        <button class="btn secondary" id="m-local-tourney">🏆 Local : Championnat</button>
+        <button class="btn" id="m-p2p" style="margin-top:10px">📡 En Ligne (Code) : Mode Libre</button>
+        <button class="btn secondary" id="m-p2p-tourney">🏆 En Ligne (Code) : Championnat</button>
+        <button class="btn ghost" id="m-back" style="margin-top:15px">← Retour</button>
       </div>
       <p class="hint" style="margin-top:8px">
-        🎹 = Clavier partage &nbsp;|&nbsp;
-        📡 = 2 a 8 PC sans serveur &nbsp;|&nbsp;
-        🌐 = Serveur de relais WebSocket (Render)
+        🎮 = Multijoueur sur ce PC (Clavier/Manettes) &nbsp;|&nbsp;
+        📡 = Multijoueur P2P via code (2-8 Joueurs)
       </p>
     `);
-    p.querySelector('#m-bot').onclick    = () => { resumeAudio(); this.showDifficultyPicker('bot'); };
-    p.querySelector('#m-rival').onclick  = () => { resumeAudio(); this.showDifficultyPicker('rival'); };
-    p.querySelector('#m-local').onclick  = () => this.showLocalHelp();
-    p.querySelector('#m-local-tourney').onclick  = () => this.showLocalTournamentSetup();
-    p.querySelector('#m-p2p').onclick    = () => { resumeAudio(); this.showP2PLobby(); };
-    p.querySelector('#m-online').onclick = () => { resumeAudio(); this.showOnline(); };
+    p.querySelector('#m-local').onclick  = () => { resumeAudio(); this.showLocalHelp(); };
+    p.querySelector('#m-local-tourney').onclick  = () => { resumeAudio(); this.showLocalTournamentSetup(); };
+    p.querySelector('#m-p2p').onclick    = () => { resumeAudio(); this.showP2PLobby(false); };
+    p.querySelector('#m-p2p-tourney').onclick = () => { resumeAudio(); this.showP2PLobby(true); };
     p.querySelector('#m-back').onclick   = () => this.showTitle();
   }
 
@@ -706,13 +701,14 @@ class Game {
   // ================================================================
   // LOBBY P2P — jusqu'a 8 joueurs
   // ================================================================
-  showP2PLobby() {
+  showP2PLobby(tournament = false) {
     resumeAudio();
     let hostObj  = null;
     let guestPeer = null;
 
+    const modeName = tournament ? '🏆 CHAMPIONNAT (P2P)' : '📡 MODE LIBRE (P2P)';
     const p = this.panel(`
-      <div class="title"><span class="big" style="font-size:24px">📡 LOBBY MULTI P2P</span><span class="sub">JUSQU'À 4 JOUEURS (PEERJS)</span></div>
+      <div class="title"><span class="big" style="font-size:24px">${modeName}</span><span class="sub">JUSQU'À 8 JOUEURS (PEERJS)</span></div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
         <button class="btn" id="tab-h" style="flex:1">🏠 Héberger</button>
         <button class="btn ghost" id="tab-g" style="flex:1">🔗 Rejoindre</button>
@@ -753,8 +749,7 @@ class Game {
             <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:12px">
               <label>Ajouter des Bots (IA): <select id="p2p-bots"><option selected>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label>
             </div>
-            <button class="btn" id="start-game" style="width:100%;margin-bottom:8px">⚔️ Mode Libre (FFA)</button>
-            <button class="btn secondary" id="start-tourney" style="width:100%">🏆 Créer un Tournoi</button>
+            <button class="btn ${tournament ? 'secondary' : ''}" id="start-btn" style="width:100%">${tournament ? '🏆 Démarrer le Tournoi' : '⚔️ Démarrer la Partie'}</button>
           </div>
         </div>
       `;
@@ -797,7 +792,7 @@ class Game {
           });
 
           hostObj.on('peerleave', ({ id }) => {
-            st.textContent = 'Un joueur s\\'est déconnecté.';
+            st.textContent = "Un joueur s'est déconnecté.";
             updatePlayerList();
           });
 
@@ -814,20 +809,13 @@ class Game {
           };
 
 
-          content.querySelector('#start-game').onclick = () => {
+          content.querySelector('#start-btn').onclick = () => {
             const bots = parseInt(content.querySelector('#p2p-bots').value, 10);
             const ids = [0, ...hostObj.connectedIds];
             for (let i = 0; i < bots; i++) ids.push('AI_' + i);
-            if (ids.length > 4) { st.textContent = 'Le mode Libre (FFA) est limité à 4 joueurs max (bots inclus).'; return; }
-            this._p2pArenaSelect(hostObj, ids, false);
-          };
-
-          content.querySelector('#start-tourney').onclick = () => {
-            const bots = parseInt(content.querySelector('#p2p-bots').value, 10);
-            const ids = [0, ...hostObj.connectedIds];
-            for (let i = 0; i < bots; i++) ids.push('AI_' + i);
-            if (ids.length > 8) { st.textContent = 'Le Tournoi est limité à 8 joueurs max (bots inclus).'; return; }
-            this._p2pArenaSelect(hostObj, ids, true);
+            if (!tournament && ids.length > 4) { st.textContent = 'Le mode Libre (FFA) est limité à 4 joueurs max (bots inclus).'; return; }
+            if (tournament && ids.length > 8) { st.textContent = 'Le Tournoi est limité à 8 joueurs max (bots inclus).'; return; }
+            this._p2pArenaSelect(hostObj, ids, tournament);
           };
 
         } catch (err) {
@@ -944,7 +932,7 @@ class Game {
         }
       };
     });
-    pp.querySelector('#back').onclick = () => this.showP2PLobby();
+    pp.querySelector('#back').onclick = () => this.showP2PLobby(tournament);
   }
 
   // ---- Lancer une partie P2P ----
