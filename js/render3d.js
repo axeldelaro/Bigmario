@@ -410,67 +410,120 @@ function makeGhostModel() {
   g.userData = { mat, lL, lR };
   return g;
 }
+// paire d'yeux arrondis (blanc + pupille) tournés vers +Z
+function eyes3d(g, y, z, sep = 0.16, r = 0.1) {
+  const S = R.smooth;
+  for (const sx of [-1, 1]) {
+    const w = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 12), S(0xffffff, 0.25));
+    w.position.set(sx * sep, y, z); w.scale.set(1, 1.2, 0.6); g.add(w);
+    const pu = new THREE.Mesh(new THREE.SphereGeometry(r * 0.5, 10, 10), S(0x201810, 0.2));
+    pu.position.set(sx * sep, y, z + r * 0.6); g.add(pu);
+  }
+}
 function makeGoon() {
   const g = new THREE.Group();
-  g.add(texBox(0.95, 0.78, 0.85, 'fur', 'goon_face', 0, 0.4, 0));
-  g.add(texBox(0.3, 0.18, 0.5, 'shoe', null, -0.24, -0.05, 0));
-  g.add(texBox(0.3, 0.18, 0.5, 'shoe', null, 0.24, -0.05, 0));
+  const S = R.smooth;
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.3, 6, 16), S(0x9b5a2a, 0.55)); body.position.y = 0.45; body.scale.set(1, 1, 0.9); body.castShadow = true; g.add(body);
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 12), S(0xf0c89a, 0.6)); belly.position.set(0, 0.34, 0.26); belly.scale.set(1, 1.05, 0.5); g.add(belly);
+  eyes3d(g, 0.66, 0.34, 0.16, 0.1);
+  for (const sx of [-1, 1]) { const foot = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.16, 4, 10), S(0x5a3a1a, 0.5)); foot.rotation.z = Math.PI / 2; foot.position.set(sx * 0.22, 0.02, 0.05); foot.castShadow = true; g.add(foot); }
   return g;
 }
 function makeShell() {
   const g = new THREE.Group();
-  g.add(texBox(0.9, 0.5, 0.85, 'shell_skin', null, 0, 0.28, 0));
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 10, 0, 6.3, 0, Math.PI / 2), texMat('shell_top'));
-  dome.scale.set(1, 1.1, 1); dome.position.y = 0.5; dome.castShadow = true; g.add(dome);
+  const S = R.smooth;
+  const skin = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 12), S(0xd8ffe0, 0.6)); skin.position.y = 0.32; skin.scale.set(1, 0.8, 0.95); g.add(skin);
+  eyes3d(g, 0.46, 0.34, 0.15, 0.09);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.55, 18, 12, 0, 6.3, 0, Math.PI * 0.62), S(0x37c24a, 0.4)); dome.scale.set(1, 1.15, 1); dome.position.y = 0.42; dome.castShadow = true; g.add(dome);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.07, 10, 22), S(0x0c5a1c, 0.45)); rim.rotation.x = Math.PI / 2; rim.position.y = 0.42; g.add(rim);
   return g;
 }
 function makeFly() {
   const g = new THREE.Group();
-  g.add(texBox(0.72, 0.62, 0.72, 'fly_body', 'fly_body', 0, 0.42, 0));
-  const w1 = texBox(0.55, 0.55, 0.06, 'wing', null, -0.55, 0.6, 0);
-  const w2 = texBox(0.55, 0.55, 0.06, 'wing', null, 0.55, 0.6, 0);
+  const S = R.smooth;
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 14), S(0xe2483b, 0.5)); body.position.y = 0.42; body.scale.set(1, 1.05, 0.95); body.castShadow = true; g.add(body);
+  eyes3d(g, 0.55, 0.32, 0.15, 0.1);
+  const wingGeo = new THREE.SphereGeometry(0.3, 12, 10); wingGeo.scale(1, 1.3, 0.12);
+  const w1 = new THREE.Mesh(wingGeo, S(0xffffff, 0.3)); w1.position.set(-0.4, 0.62, -0.05);
+  const w2 = new THREE.Mesh(wingGeo, S(0xffffff, 0.3)); w2.position.set(0.4, 0.62, -0.05);
   g.add(w1); g.add(w2); g.userData = { w1, w2 }; return g;
 }
 function makeSpiky() {
   const g = new THREE.Group();
-  g.add(texBox(0.88, 0.62, 0.82, 'spiky_body', 'spiky_body', 0, 0.36, 0));
-  for (let i = -1; i <= 1; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.34, 5), R.mat(0xe0c0ff)); s.castShadow = true; s.position.set(i * 0.26, 0.78, 0); g.add(s); }
+  const S = R.smooth;
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 14), S(0xb06ad8, 0.5)); body.position.y = 0.38; body.scale.set(1, 0.9, 0.95); body.castShadow = true; g.add(body);
+  eyes3d(g, 0.42, 0.34, 0.15, 0.09);
+  for (let i = -1; i <= 1; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.34, 8), S(0xe0c0ff, 0.4)); s.castShadow = true; s.position.set(i * 0.24, 0.74, 0); g.add(s); }
   return g;
 }
 function makePlant() {
   const g = new THREE.Group();
-  g.add(texBox(0.18, 0.7, 0.18, 'fly_body', null, 0, 0.0, 0));            // tige (placeholder vert via mat)
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10), texMat('plant_head'));
-  head.position.y = 0.55; head.castShadow = true; g.add(head);
-  for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; const t = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.2, 4), R.mat(0xffffff)); t.position.set(Math.cos(a) * 0.32, 0.55, Math.sin(a) * 0.32); t.rotation.x = Math.PI; g.add(t); }
+  const S = R.smooth;
+  const stem = new THREE.Mesh(new THREE.CapsuleGeometry(0.1, 0.5, 4, 10), S(0x2a8a30, 0.55)); stem.position.y = 0.18; g.add(stem);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 14), S(0x46c24a, 0.5)); head.position.y = 0.6; head.castShadow = true; g.add(head);
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.26, 0.07, 10, 20), S(0xe23b3b, 0.45)); lip.rotation.x = Math.PI / 2.3; lip.position.set(0, 0.58, 0.28); g.add(lip);
+  for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28; const t = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 6), S(0xffffff, 0.3)); t.position.set(Math.cos(a) * 0.27, 0.58, 0.28 + Math.sin(a) * 0.06); t.rotation.z = a; g.add(t); }
+  eyes3d(g, 0.78, 0.34, 0.14, 0.09);
   return g;
 }
 function makeLob() {
   const g = new THREE.Group();
-  g.add(texBox(0.85, 0.7, 0.8, 'lob_body', 'lob_face', 0, 0.4, 0));
-  g.add(texBox(0.3, 0.18, 0.5, 'shoe', null, -0.24, -0.05, 0));
-  g.add(texBox(0.3, 0.18, 0.5, 'shoe', null, 0.24, -0.05, 0));
+  const S = R.smooth;
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.26, 6, 16), S(0x7a4ad0, 0.5)); body.position.y = 0.44; body.scale.set(1, 1, 0.92); body.castShadow = true; g.add(body);
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 12), S(0xe0c0ff, 0.55)); belly.position.set(0, 0.34, 0.26); belly.scale.set(1, 1, 0.5); g.add(belly);
+  eyes3d(g, 0.6, 0.32, 0.15, 0.1);
+  for (const sx of [-1, 1]) { const foot = new THREE.Mesh(new THREE.CapsuleGeometry(0.12, 0.16, 4, 10), S(0x4a2a90, 0.5)); foot.rotation.z = Math.PI / 2; foot.position.set(sx * 0.22, 0.02, 0.05); foot.castShadow = true; g.add(foot); }
   return g;
 }
 function makeBoss() {
   const g = new THREE.Group();
-  g.add(texBox(2.5, 2.1, 2.1, 'boss_body', 'boss_body', 0, 1.05, 0));
-  g.add(texBox(1.1, 1.0, 0.6, 'boss_face', 'boss_face', 0, 1.7, 0.95));
-  const eL = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 10), texMat('fly_body', { glow: 0xff3000, gi: 0.6 }));
-  eL.position.set(0.55, 2.1, 0.9); g.add(eL);
-  const eR = eL.clone(); eR.position.x = -0.55; g.add(eR);
-  for (let i = -2; i <= 2; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.24, 0.66, 5), R.mat(0xeafff0)); s.castShadow = true; s.position.set(i * 0.52, 2.25, -0.6); g.add(s); }
+  const S = R.smooth;
+  const body = new THREE.Mesh(new THREE.SphereGeometry(1.3, 22, 18), S(0x37c24a, 0.45)); body.position.y = 1.2; body.scale.set(1, 1.05, 0.95); body.castShadow = true; g.add(body);
+  const belly = new THREE.Mesh(new THREE.SphereGeometry(0.85, 18, 14), S(0xeafff0, 0.55)); belly.position.set(0, 0.95, 0.65); belly.scale.set(1, 1.1, 0.5); g.add(belly);
+  const mouth = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 10, 0, 6.3, 0, Math.PI / 1.6), S(0x5a1010, 0.5)); mouth.rotation.x = Math.PI; mouth.position.set(0, 1.85, 0.95); g.add(mouth);
+  const eGeo = new THREE.SphereGeometry(0.24, 12, 12);
+  for (const sx of [-1, 1]) { const e = new THREE.Mesh(eGeo, new THREE.MeshStandardMaterial({ color: 0xffe24a, emissive: 0xff3000, emissiveIntensity: 0.6, roughness: 0.3 })); e.position.set(sx * 0.5, 2.15, 0.85); g.add(e); const pu = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 10), S(0x200, 0.2)); pu.position.set(sx * 0.5, 2.15, 1.05); g.add(pu); }
+  for (let i = -2; i <= 2; i++) { const s = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.62, 8), S(0xeafff0, 0.4)); s.castShadow = true; s.position.set(i * 0.5, 2.35, -0.5); g.add(s); }
   return g;
 }
-function makeCoin() { return texBox(0.62, 0.62, 0.14, 'coin_edge', 'coin_face'); }
+function makeCoin() {
+  const g = new THREE.Group();
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.1, 24), new THREE.MeshStandardMaterial({ color: 0xffd23b, roughness: 0.18, metalness: 0.85, emissive: 0x4a3200, emissiveIntensity: 0.3 }));
+  m.rotation.x = Math.PI / 2; m.castShadow = true; g.add(m); return g;
+}
 function makeGem() { const m = new THREE.Mesh(new THREE.OctahedronGeometry(0.36), new THREE.MeshStandardMaterial({ color: 0x46d8ff, roughness: 0.1, metalness: 0.35, emissive: 0x0a3a55, emissiveIntensity: 0.6 })); m.castShadow = true; return m; }
 function makeItem(kind) { const g = new THREE.Group(); g.add(makeItemMesh(kind)); return g; }
+function mushroomModel(capHex) {
+  const S = R.smooth, g = new THREE.Group();
+  const cap = new THREE.Mesh(new THREE.SphereGeometry(0.44, 18, 12, 0, 6.3, 0, Math.PI / 1.7), S(capHex, 0.4)); cap.position.y = 0.4; cap.scale.set(1, 0.9, 1); cap.castShadow = true; g.add(cap);
+  for (const p of [[0.18, 0.5, 0.32], [-0.22, 0.46, 0.2], [0.05, 0.62, -0.1]]) { const d = new THREE.Mesh(new THREE.SphereGeometry(p[2] * 0.4, 10, 8), S(0xffffff, 0.35)); d.position.set(p[0], p[1], 0.32); d.scale.z = 0.4; g.add(d); }
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.3, 0.42, 16), S(0xffe2b0, 0.55)); stem.position.y = 0.2; stem.castShadow = true; g.add(stem);
+  for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.055, 8, 8), S(0x241b14, 0.2)); e.position.set(sx * 0.1, 0.22, 0.27); g.add(e); }
+  return g;
+}
 function makeItemMesh(kind) {
-  if (kind === 'mushroom') { const g = new THREE.Group(); const cap = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 8, 0, 6.3, 0, Math.PI / 2), texMat('mush_cap')); cap.position.y = 0.42; cap.castShadow = true; g.add(cap); g.add(texBox(0.5, 0.45, 0.5, 'mush_stem', 'mush_stem', 0, 0.18, 0)); return g; }
-  if (kind === 'oneup') { const g = new THREE.Group(); const cap = new THREE.Mesh(new THREE.SphereGeometry(0.42, 14, 8, 0, 6.3, 0, Math.PI / 2), texMat('oneup_cap')); cap.position.y = 0.42; cap.castShadow = true; g.add(cap); g.add(texBox(0.5, 0.45, 0.5, 'mush_stem', 'mush_stem', 0, 0.18, 0)); return g; }
-  if (kind === 'flower') return texBox(0.72, 0.72, 0.2, 'item_flower', 'item_flower', 0, 0.36, 0);
-  if (kind === 'feather') return texBox(0.7, 0.78, 0.18, 'item_feather', 'item_feather', 0, 0.36, 0);
-  return texBox(0.72, 0.72, 0.2, 'item_star', 'item_star', 0, 0.36, 0); // star
+  const S = R.smooth;
+  if (kind === 'mushroom') return mushroomModel(0xff5d3b);
+  if (kind === 'oneup') return mushroomModel(0x46d84a);
+  if (kind === 'flower') {
+    const g = new THREE.Group();
+    const center = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 12), S(0xffd23b, 0.4)); center.position.y = 0.42; g.add(center);
+    for (let i = 0; i < 6; i++) { const a = i / 6 * 6.28; const pet = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), S(i % 2 ? 0xff5d2e : 0xffd23b, 0.4)); pet.position.set(Math.cos(a) * 0.26, 0.42, Math.sin(a) * 0.26); pet.scale.set(1, 0.6, 1); pet.castShadow = true; g.add(pet); }
+    const stem = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.3, 4, 8), S(0x37c24a, 0.5)); stem.position.y = 0.15; g.add(stem);
+    return g;
+  }
+  if (kind === 'feather') {
+    const g = new THREE.Group();
+    const quill = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.55, 4, 10), S(0xffd23b, 0.4)); quill.position.y = 0.4; quill.rotation.z = 0.12; g.add(quill);
+    const vane = new THREE.Mesh(new THREE.SphereGeometry(0.3, 14, 12), S(0x46c8ff, 0.35)); vane.position.set(0.05, 0.46, 0); vane.scale.set(0.55, 1.25, 0.18); vane.rotation.z = 0.12; vane.castShadow = true; g.add(vane);
+    return g;
+  }
+  // star
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), new THREE.MeshStandardMaterial({ color: 0xffd23b, roughness: 0.25, metalness: 0.3, emissive: 0x6a4a00, emissiveIntensity: 0.5 }));
+  core.position.y = 0.4; core.castShadow = true; g.add(core);
+  for (const sx of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), S(0x241b14, 0.2)); e.position.set(sx * 0.1, 0.44, 0.28); g.add(e); }
+  return g;
 }
 function makeFire() { const m = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), new THREE.MeshStandardMaterial({ color: 0xff7b2e, emissive: 0xff4000, emissiveIntensity: 0.8, roughness: 0.4 })); m.castShadow = true; return m; }
 function makePlat() { return texBox(2, 0.42, 1, 'wood', 'wood'); }

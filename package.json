@@ -6,8 +6,9 @@
   "private": true,
   "scripts": {
     "solve": "node test/solve.mjs",
+    "reach": "node test/reach.mjs",
     "smoke": "node test/smoke.mjs",
-    "test": "node test/solve.mjs && node test/smoke.mjs",
+    "test": "node test/solve.mjs && node test/reach.mjs && node test/smoke.mjs",
     "serve": "python3 -m http.server 8000"
   }
 }
