@@ -40,6 +40,7 @@ class Game {
     this.net = null;
     this.fadeAlpha = 0; // fondu d'entrée des scènes
     this.reduceMotion = Save.get('reduceMotion', false);
+    this._showFps = Save.get('showFps', false);
     this.use3D = Save.get('render3d', true); // rendu 3D par défaut si dispo
     this.canvas3d = null;
     this._installPrompt = null;
@@ -79,7 +80,9 @@ class Game {
       const left = Math.round((innerWidth - cssW) / 2), top = Math.round((innerHeight - cssH) / 2);
       const s = this.canvas3d.style;
       s.position = 'fixed'; s.left = left + 'px'; s.top = top + 'px';
-      resize3D(cssW, cssH, dpr);
+      // sur mobile (pointeur grossier) on plafonne la densité 3D -> rendu plus fluide
+      const dpr3d = isTouch ? Math.min(dpr, 1.5) : dpr;
+      resize3D(cssW, cssH, dpr3d);
     }
     this.checkOrientation();
   }
@@ -134,7 +137,23 @@ class Game {
       ctx.fillStyle = `rgba(0,0,0,${this.fadeAlpha})`; ctx.fillRect(0, 0, VIEW_W, VIEW_H);
       this.fadeAlpha = Math.max(0, this.fadeAlpha - dt / 0.3);
     }
+    if (this._showFps) this.drawFps(ctx);
     requestAnimationFrame((tt) => this.loop(tt));
+  }
+
+  // Compteur d'images/seconde (vérifier la fluidité). Compte les frames de la
+  // dernière seconde glissante -> FPS réel, sans dépendre de dt.
+  drawFps(c) {
+    const now = performance.now();
+    (this._fpsBuf = this._fpsBuf || []).push(now);
+    while (this._fpsBuf.length && now - this._fpsBuf[0] > 1000) this._fpsBuf.shift();
+    const fps = this._fpsBuf.length;
+    c.save();
+    c.font = '8px monospace'; c.textAlign = 'left';
+    c.fillStyle = 'rgba(0,0,0,0.55)'; c.fillRect(3, VIEW_H - 13, 46, 11);
+    c.fillStyle = fps >= 50 ? '#7CFC9A' : fps >= 30 ? '#ffd23b' : '#ff5d5d';
+    c.fillText(fps + ' FPS', 6, VIEW_H - 5);
+    c.restore();
   }
 
   fadeIn() { this.fadeAlpha = 1; }
@@ -696,17 +715,70 @@ class Game {
     };
   }
 
+  // ---- Hors-ligne : installation PWA + état du cache + mode local ----
+  showOffline() {
+    const ready = typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller;
+    const installable = !!this._installPrompt;
+    // sur GitHub Pages, on déduit l'URL d'archive du dépôt pour proposer un téléchargement
+    let ghZip = null;
+    try {
+      const host = location.hostname;
+      if (host.endsWith('github.io')) {
+        const user = host.split('.')[0];
+        const repo = location.pathname.split('/').filter(Boolean)[0] || `${user}.github.io`;
+        ghZip = `https://github.com/${user}/${repo}/archive/refs/heads/main.zip`;
+      }
+    } catch {}
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:26px">JOUER HORS-LIGNE</span></div>
+      <p class="hint" style="margin-top:6px">${ready
+        ? '✅ <b>Jeu prêt hors-ligne</b> : tout (y compris la 3D) est mis en cache. Coupe le réseau, ça tourne pareil.'
+        : '⏳ Première mise en cache… reste connecté quelques secondes, puis reviens ici.'}</p>
+      <div class="menu-list" style="margin-top:12px">
+        ${installable ? '<button class="btn" id="install">📲 Installer l\'appli (écran d\'accueil)</button>' : ''}
+        <button class="btn secondary" id="prepare">⤓ Préparer le hors-ligne maintenant</button>
+        ${ghZip ? `<a class="btn secondary" id="dl" href="${ghZip}" download style="text-decoration:none;display:block">💾 Télécharger le jeu (.zip)</a>` : ''}
+        <button class="btn ghost" id="back">← Retour</button>
+      </div>
+      <div class="status" id="st"></div>
+      <p class="hint" style="text-align:left">
+        <b>3 façons de jouer sans internet :</b><br>
+        1. <b>Installer l'appli</b> (bouton ci-dessus, ou « Ajouter à l'écran d'accueil » du navigateur) puis la lancer hors-ligne.<br>
+        2. <b>Garder l'onglet</b> : après une visite en ligne, le jeu se relance hors-ligne (Three.js est livré en local).<br>
+        3. <b>Version fichier</b> : télécharge le dossier du jeu et lance un petit serveur local —<br>
+        &nbsp;&nbsp;<span class="badge">python3 -m http.server</span> puis ouvre <span class="badge">http://localhost:8000</span><br>
+        &nbsp;&nbsp;(ouvrir index.html en double-clic ne marche pas : les modules JS exigent un serveur).
+      </p>
+    `);
+    const st = p.querySelector('#st');
+    const ib = p.querySelector('#install');
+    if (ib) ib.onclick = async () => { const pr = this._installPrompt; if (!pr) return; pr.prompt(); try { await pr.userChoice; } catch {} this._installPrompt = null; this.showOffline(); };
+    p.querySelector('#prepare').onclick = async () => {
+      st.textContent = 'Mise en cache du jeu…';
+      try {
+        const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+        if (reg) await reg.update();
+        // réchauffe le cache en préchargeant les modules clés (dont Three.js)
+        await Promise.all(['./js/vendor/three.module.js', './index.html', './js/main.js'].map((u) => fetch(u, { cache: 'reload' }).catch(() => {})));
+        st.innerHTML = '✅ Prêt : tu peux couper le réseau et jouer.';
+      } catch { st.textContent = '⚠ Impossible de précharger ici. Recharge la page une fois en ligne.'; }
+    };
+    p.querySelector('#back').onclick = () => this.showOptions();
+  }
+
   showOptions() {
     const p = this.panel(`
       <div class="title"><span class="big" style="font-size:30px">OPTIONS</span></div>
       <div class="menu-list">
         <button class="btn secondary" id="ach">🏆 Succès (${unlockedCount()}/${ACHIEVEMENTS.length})</button>
+        <button class="btn" id="offline">📥 Jouer hors-ligne</button>
         <button class="btn secondary" id="friend">👥 Fantôme d'ami / Replay</button>
         <button class="btn secondary" id="mute">${isMuted() ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'}</button>
         <button class="btn secondary" id="render">${this.use3D ? '🧊 Rendu: 3D' : '🟦 Rendu: 2D'}${is3DReady() ? '' : ' (3D indispo.)'}</button>
         <button class="btn secondary" id="pseudo">✏ Pseudo : ${escapeHtml(Save.get('playerName', 'MOI'))}</button>
         <button class="btn secondary" id="motion">${this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'}</button>
         <button class="btn secondary" id="smooth2d">${Save.get('smooth2d', false) ? '🖼 Lissage 2D: ON' : '🖼 Lissage 2D: OFF (pixel)'}</button>
+        <button class="btn secondary" id="fps">${this._showFps ? '📊 Compteur FPS: ON' : '📊 Compteur FPS: OFF'}</button>
         <button class="btn secondary" id="touch">🎮 Boutons tactiles</button>
         ${this._installPrompt ? '<button class="btn" id="install">📲 Installer l\'appli</button>' : ''}
         <button class="btn ghost" id="fs">⛶ Plein écran</button>
@@ -716,6 +788,8 @@ class Game {
       <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• 🍄 grandir · 🔥 tir · ⭐ invincible · 🟢 1 vie · 🪶 <b>plume</b> = maintiens Saut en l'air pour <b>planer</b>.<br>• Enchaîne les écrasements en l'air pour des combos.<br>• <b>Bas en l'air = écrasement piqué</b> (broie tout, même les pics).<br>• Manette : A saut, X tir, Start pause.</p>
     `);
     p.querySelector('#ach').onclick = () => this.showAchievements();
+    p.querySelector('#offline').onclick = () => this.showOffline();
+    p.querySelector('#fps').onclick = (e) => { this._showFps = !this._showFps; Save.set('showFps', this._showFps); e.target.textContent = this._showFps ? '📊 Compteur FPS: ON' : '📊 Compteur FPS: OFF'; };
     p.querySelector('#friend').onclick = () => this.showFriend();
     p.querySelector('#mute').onclick = (e) => { const m = toggleMute(); Save.set('muted', m); e.target.textContent = m ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'; };
     p.querySelector('#render').onclick = (e) => { this.use3D = !this.use3D; Save.set('render3d', this.use3D); e.target.textContent = (this.use3D ? '🧊 Rendu: 3D' : '🟦 Rendu: 2D') + (is3DReady() ? '' : ' (3D indispo.)'); };

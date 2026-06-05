@@ -12,7 +12,8 @@ en ligne.
 > librement hébergeables et partageables.
 
 - 🕹️ **Jouable au clavier, à la manette, et au tactile** (overlay en mode paysage sur téléphone, vibration).
-- 🧊 **Rendu 3D (WebGL/Three.js)** en option : le monde, les blocs, les persos et ennemis rendus en 3D temps réel (style 2.5D), piloté par le moteur 2D validé. Bascule 2D/3D dans les Options ; **repli automatique en 2D** si la 3D n'est pas disponible (hors-ligne, vieux GPU).
+- 🧊 **Rendu 3D (WebGL/Three.js)** en option : le monde, les blocs, les persos et ennemis rendus en 3D temps réel (style 2.5D), piloté par le moteur 2D validé. Bascule 2D/3D dans les Options. **Three.js est livré en local** (`js/vendor/`), donc la **3D marche aussi hors-ligne** ; **repli automatique en 2D** si le GPU ne suit pas.
+- 🎮 **Mini-jeux vs IA** : **course aux pièces** et **course aux étoiles** sur 3 terrains — ramasse plus que le bot avant la fin du temps.
 - 🎨 **Décors détaillés** : ciel en dégradé, parallaxe multi-couches (montagnes, collines, arbres, nuages), cristaux scintillants et torches animées ; ombres au sol et menus animés.
 - 🗺️ **Carte du monde** animée pour choisir ses niveaux.
 - ✅ **Niveaux garantis franchissables** : un validateur physique headless (`test/solve.mjs`) simule le moteur réel et vérifie qu'un auto-joueur atteint l'arrivée de chaque niveau.
@@ -33,7 +34,7 @@ en ligne.
 - 🎥 **Caméra** à zone morte + look-ahead lissé (suivi doux, sans ballottement aux sauts).
 - ✨ **Game feel** : screen-shake, hit-stop, cartes d'intro de niveau, particules.
 - ⚔️ **Versus** : **contre l'IA**, à 2 sur le même écran, **ou en ligne** (premier à 5 KO), 3 arènes.
-- 📲 **PWA** : installable sur l'écran d'accueil et **jouable hors-ligne**.
+- 📲 **PWA / hors-ligne complet** : installable sur l'écran d'accueil et **jouable 100 % hors-ligne** (3D incluse, Three.js en local). Menu **Options → 📥 Jouer hors-ligne** : installer l'appli, préparer le cache, ou télécharger le jeu. **Compteur FPS** activable pour vérifier la fluidité.
 - 🎵 Musique chiptune et bruitages **générés en temps réel** (aucun fichier audio).
 - 💸 **Hébergement gratuit** : le jeu est 100 % statique (GitHub Pages), le serveur versus tient sur une offre gratuite (Render).
 
@@ -54,6 +55,36 @@ ou avec Node :
 ```bash
 npx serve .
 ```
+
+> ⚠️ Ouvrir `index.html` en double-clic (`file://`) **ne marche pas** : les
+> modules ES exigent un serveur. Utilise une des commandes ci-dessus.
+
+## 📥 Jouer hors-ligne (sans internet)
+
+Tout est conçu pour tourner **100 % en local**, y compris la 3D (Three.js est
+livré dans `js/vendor/`, aucune dépendance réseau à l'exécution).
+
+Trois moyens, au choix :
+
+1. **Installer l'appli (recommandé)** — ouvre le jeu en ligne une fois, puis
+   **Options → 📥 Jouer hors-ligne → Installer l'appli** (ou « Ajouter à l'écran
+   d'accueil »). Le service worker met tout en cache : tu peux ensuite couper le
+   réseau, l'appli se lance et la 3D fonctionne.
+2. **Garder l'onglet** — après une visite en ligne, recharger la page marche
+   même hors-ligne (cache du service worker).
+3. **Version fichier (dossier complet)** — récupère le jeu et lance un serveur
+   local :
+   ```bash
+   npm run pack        # crée dist/bigmario-offline.zip (autonome)
+   #   …ou « Code → Download ZIP » sur GitHub, ou le bouton 💾 in-game.
+   # puis, dans le dossier décompressé :
+   python3 -m http.server 8000   # → http://localhost:8000
+   ```
+
+**Vérifier la fluidité** : Options → *Compteur FPS: ON* affiche les images/s en
+bas de l'écran (vert ≥ 50, jaune ≥ 30). Sur mobile, la densité de pixels 3D est
+plafonnée automatiquement pour rester fluide ; la simulation physique coûte
+~0,3 µs/pas (budget 120 Hz = 8,33 ms), donc la marge va entièrement au rendu.
 
 ## 🎯 Contrôles
 
