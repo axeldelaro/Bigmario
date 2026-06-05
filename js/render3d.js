@@ -548,7 +548,7 @@ export function renderScene(scene) {
     if (_errCount >= 5) {
       // Après 5 erreurs consécutives seulement on désactive définitivement la 3D
       failed = true; R = null;
-      console.warn('3D désactivée définitivement après trop d’erreurs.');
+      console.warn("3D desactivee definitivement apres trop d'erreurs.");
     }
     return false;
   }

@@ -1,5 +1,10 @@
 // input.js — clavier + manette (Gamepad API) + tactile, multi-joueurs
 // Expose des "actions" booléennes avec détection de front (justPressed).
+//
+// Système de compteur de presses :
+// Chaque keydown (non-répété) incrémente un compteur par action.
+// justPressed() consomme UNE unité du compteur → chaque toucher compte
+// indépendamment de la vitesse du clavier ou du taux de rafraîchissement.
 
 const DEFAULT_KEYS = [
   { // Joueur 1
@@ -30,9 +35,11 @@ export class Input {
     this.touch = {}; // act -> bool
     this.players = [this._mkState(), this._mkState()];
     this.maps = DEFAULT_KEYS;
-    // Latch des fronts montants : garantit que justPressed ne soit jamais
-    // raté entre deux sous-steps physiques (120 Hz) même à faible FPS.
-    this._latch = [this._mkLatch(), this._mkLatch()];
+    // Compteur de presses : chaque keydown non-répété incrémente le compteur.
+    // justPressed() décrémente d'une unité et retourne true.
+    // Cela garantit que chaque pression physique compte, quelle que soit la
+    // vitesse du clavier ou le taux de rafraîchissement du moniteur.
+    this._pressCount = [this._mkCount(), this._mkCount()];
     this._bind();
   }
 
@@ -40,20 +47,21 @@ export class Input {
     const s = {}; ACTIONS.forEach((a) => (s[a] = { down: false, prev: false }));
     return s;
   }
-  _mkLatch() {
-    const s = {}; ACTIONS.forEach((a) => (s[a] = false));
+  _mkCount() {
+    const s = {}; ACTIONS.forEach((a) => (s[a] = 0));
     return s;
   }
 
   _bind() {
     addEventListener('keydown', (e) => {
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
-      if (e.repeat) return; // Ignorer la répétition auto de l'OS (cause principale du bug de saut)
-      // Enregistrer le front montant dans le latch pour ne pas le rater
+      // Ignorer les répétitions OS — on gère l'appui continu via keys.has()
+      if (e.repeat) return;
+      // Incrémenter le compteur de presses pour chaque action associée
       for (let p = 0; p < this.maps.length; p++) {
         const map = this.maps[p];
         for (const act of ACTIONS) {
-          if ((map[act] || []).includes(e.code)) this._latch[p][act] = true;
+          if ((map[act] || []).includes(e.code)) this._pressCount[p][act]++;
         }
       }
       this.keys.add(e.code);
@@ -67,6 +75,8 @@ export class Input {
       const set = (v) => {
         this.touch[act] = v; btn.classList.toggle('pressed', v);
         if (v && navigator.vibrate) navigator.vibrate(8); // retour haptique
+        // Simuler un compteur de presse pour les boutons tactiles (front montant)
+        if (v) this._pressCount[0][act] = Math.max(this._pressCount[0][act], 1);
       };
       const on = (e) => { e.preventDefault(); set(true); };
       const off = (e) => { e.preventDefault(); set(false); };
@@ -103,7 +113,7 @@ export class Input {
   update() {
     for (let p = 0; p < this.players.length; p++) {
       const state = this.players[p];
-      const latch = this._latch[p];
+      const cnt = this._pressCount[p];
       const map = this.maps[p];
       const gp = this._gamepad(p);
       for (const act of ACTIONS) {
@@ -112,30 +122,33 @@ export class Input {
         if (p === 0 && this.touch[act]) down = true;
         state[act].prev = state[act].down;
         state[act].down = down;
-        // Propager le latch au front montant si la touche n'est plus détectée
-        // (front court raté entre deux frames)
-        if (latch[act] && !state[act].prev) state[act].down = true;
-        // Effacer le latch seulement quand la touche est released
-        if (!down) latch[act] = false;
+
+        // Si la touche est maintenue (held) depuis la frame précédente, le
+        // compteur de presses a déjà été consommé ; on le remet à 0 pour éviter
+        // qu'un maintien continu génère des justPressed répétés.
+        if (down && state[act].prev) cnt[act] = 0;
+
+        // Manette / tactile : simuler un compte de presse sur le front montant
+        if (down && !state[act].prev && gp && gp[act] && cnt[act] === 0) cnt[act] = 1;
       }
     }
   }
 
-  // Réinitialise les latches après que la logique a lu les justPressed
-  // (à appeler en fin de readInput pour éviter les doublons)
-  flushLatches(player = 0) {
-    const latch = this._latch[player];
-    const state = this.players[player];
-    for (const act of ACTIONS) {
-      if (latch[act] && state[act].prev) latch[act] = false;
-    }
-  }
-
   isDown(act, player = 0) { return this.players[player][act].down; }
+
+  // justPressed : retourne true UNE FOIS par pression physique.
+  // Consomme une unité du compteur ou détecte un front montant (manette/tactile).
   justPressed(act, player = 0) {
+    const cnt = this._pressCount[player];
+    if (cnt[act] > 0) {
+      cnt[act]--;
+      return true;
+    }
+    // Fallback pour manette/tactile dont le front n'est pas géré par keydown
     const s = this.players[player][act];
     return s.down && !s.prev;
   }
+
   hasGamepad(index = 0) {
     const pads = navigator.getGamepads ? navigator.getGamepads() : [];
     return !!pads[index];
