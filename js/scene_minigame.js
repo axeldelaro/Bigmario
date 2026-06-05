@@ -18,7 +18,7 @@ export class MiniGameScene {
     this.particles = []; this.floats = [];
     this.over = false; this.stateT = 0; this.winner = -1;
     this.scores = [0, 0];
-    this.brain = new BotBrain({ skill: 0.92 });
+    this.brain = new BotBrain({ skill: opts.botSkill ?? 0.92 });
     this.load();
   }
 

@@ -7,12 +7,34 @@
 // Saut max ≈ 3,25 tuiles : les sauts tiennent compte de cette portée réelle.
 import { TILE } from './core.js';
 
+// Presets de difficulté prédéfinis
+export const AI_PRESETS = {
+  easy:    { skill: 0.20, label: 'FACILE',   emoji: '😊' },
+  medium:  { skill: 0.55, label: 'MOYEN',    emoji: '😐' },
+  hard:    { skill: 0.85, label: 'DIFFICILE', emoji: '😤' },
+  extreme: { skill: 1.00, label: 'EXTRÊME',  emoji: '💀' },
+};
+
 export class BotBrain {
   constructor(opts = {}) {
     this.skill = opts.skill ?? 0.9;       // 0..1 : agressivité / précision
+
+    // Paramètres dérivés du skill
+    // reactionDelay : délai avant de réagir à un obstacle (faible skill = lent)
+    this.reactionDelay = (1 - this.skill) * 0.35;
+    // errorRate : probabilité de rater un saut ou de faire une pause inattendue
+    this.errorRate = (1 - this.skill) * 0.55;
+    // jumpAccuracy : marge tolérance pour déclencher un saut vers cible haute
+    this.jumpAccuracy = TILE * (0.6 + (1 - this.skill) * 2.4);
+    // speedMult : facteur de vitesse de déplacement
+    this.speedMult = 0.3 + this.skill * 0.7;
+
     this.jumpCd = 0; this.fireCd = 0; this.holdJumpT = 0;
     this.stuckT = 0; this.lastX = null; this.panicDir = 0; this.panicT = 0;
     this.slamLatch = false;
+    // temporisateurs pour les erreurs et pauses simulées
+    this._pauseT = 0;
+    this._reactionT = 0;
   }
 
   // ctx: { me, level, target?:{x,y}, opponent?:Player, threats?:[{x,y,vx}], collect?:bool }
@@ -22,6 +44,21 @@ export class BotBrain {
     this.fireCd = Math.max(0, this.fireCd - dt);
     this.holdJumpT = Math.max(0, this.holdJumpT - dt);
     this.panicT = Math.max(0, this.panicT - dt);
+    this._reactionT = Math.max(0, this._reactionT - dt);
+
+    // --- Pause involontaire (simulation d'hésitation aux niveaux faibles) ---
+    this._pauseT = Math.max(0, this._pauseT - dt);
+    if (this._pauseT <= 0 && Math.random() < dt * this.errorRate * 0.6) {
+      this._pauseT = (0.15 + Math.random() * 0.35) * (1 - this.skill);
+    }
+    if (this._pauseT > 0) {
+      // pendant une pause, on lâche tout sauf le saut tenu
+      return {
+        left: false, right: false, down: false, downPressed: false,
+        jump: this.holdJumpT > 0, jumpPressed: false,
+        fire: false, firePressed: false, run: false,
+      };
+    }
 
     // --- cible ---
     let tx, ty;
@@ -31,6 +68,13 @@ export class BotBrain {
     const cx = me.x + me.w / 2;
     let dx = tx - cx;
     if (this.panicT > 0) dx = this.panicDir * 100; // débloquage : on force une direction
+
+    // Erreur de ciblage aux niveaux faibles (décalage aléatoire)
+    if (this.errorRate > 0 && this._reactionT <= 0) {
+      dx += (Math.random() - 0.5) * this.errorRate * TILE * 1.8;
+      this._reactionT = this.reactionDelay;
+    }
+
     const adx = Math.abs(dx);
     const wantRight = dx > 5, wantLeft = dx < -5;
     const want = wantRight ? 1 : wantLeft ? -1 : (me.dir || 1);
@@ -51,10 +95,13 @@ export class BotBrain {
     let jumpPressed = false, slam = false, firePressed = false;
     const canJump = me.onGround && this.jumpCd <= 0;
 
-    if (canJump) {
-      if (wallAhead) { jumpPressed = true; this.holdJumpT = 0.42; }
-      else if (gapAhead) { jumpPressed = true; this.holdJumpT = 0.5; }            // franchir le vide
-      else if (targetAbove && adx < TILE * 2.2) { jumpPressed = true; this.holdJumpT = 0.46; } // atteindre en hauteur
+    // Erreur de saut (le bot rate certains sauts aux niveaux faibles)
+    const jumpBlocked = Math.random() < this.errorRate * 0.3;
+
+    if (canJump && !jumpBlocked) {
+      if (wallAhead) { jumpPressed = true; this.holdJumpT = 0.42 * (0.7 + this.skill * 0.3); }
+      else if (gapAhead) { jumpPressed = true; this.holdJumpT = 0.5 * (0.7 + this.skill * 0.3); }
+      else if (targetAbove && adx < this.jumpAccuracy) { jumpPressed = true; this.holdJumpT = 0.46 * (0.7 + this.skill * 0.3); }
       else if (this.stuckT > 0.35) { jumpPressed = true; this.holdJumpT = 0.45; }
     }
 
@@ -63,7 +110,10 @@ export class BotBrain {
       const o = ctx.opponent;
       const odx = (o.x + o.w / 2) - cx, aodx = Math.abs(odx), ody = o.y - me.y;
       // bondir pour retomber sur sa tête quand on est proche et à sa hauteur/dessous
-      if (canJump && !jumpPressed && aodx < TILE * 2.6 && o.y >= me.y - 8) { jumpPressed = true; this.holdJumpT = 0.4; this.jumpCd = 0.35; }
+      const attackRange = TILE * (1.5 + this.skill * 1.1);
+      if (canJump && !jumpPressed && !jumpBlocked && aodx < attackRange && o.y >= me.y - 8) {
+        jumpPressed = true; this.holdJumpT = 0.4; this.jumpCd = 0.35 / this.skill;
+      }
       // écrasement piqué quand on est au-dessus de lui et qu'on descend
       if (!me.onGround && me.vy > 15 && aodx < TILE * 0.95 && ody > 6 && !me.pounding) slam = true;
       // tir si aligné et tourné vers lui
@@ -72,13 +122,15 @@ export class BotBrain {
       }
     }
 
-    // --- esquive de projectiles ---
-    if (ctx.threats && canJump && !jumpPressed) {
+    // --- esquive de projectiles (seulement si skill suffisant) ---
+    if (ctx.threats && canJump && !jumpPressed && this.skill > 0.3) {
       for (const t of ctx.threats) {
         const tdx = t.x - cx;
         const approaching = Math.abs(t.vx || 0) < 5 || (t.vx || 0) * (tdx > 0 ? 1 : -1) < 0;
-        if (Math.abs(tdx) < TILE * 3.2 && Math.abs(t.y - (me.y + me.h / 2)) < TILE * 1.6 && approaching) {
-          jumpPressed = true; this.holdJumpT = 0.4; break;
+        const detectionRange = TILE * (2 + this.skill * 1.2);
+        if (Math.abs(tdx) < detectionRange && Math.abs(t.y - (me.y + me.h / 2)) < TILE * 1.6 && approaching) {
+          if (!jumpBlocked) { jumpPressed = true; this.holdJumpT = 0.4; }
+          break;
         }
       }
     }
@@ -91,12 +143,16 @@ export class BotBrain {
     if (slam && !this.slamLatch) { downPressed = true; this.slamLatch = true; }
     if (me.onGround) this.slamLatch = false;
 
-    // courir (sprint) quand la cible est loin et le chemin dégagé
-    const run = adx > TILE * 5 && !gapAhead;
+    // courir (sprint) quand la cible est loin et le chemin dégagé — réduit selon skill
+    const runThreshold = TILE * (3 + (1 - this.skill) * 4);
+    const run = adx > runThreshold && !gapAhead;
+
+    // Ralentir le bot aux niveaux faibles : ignorer les directives de droite/gauche par moments
+    const moveBlocked = Math.random() < this.errorRate * 0.15;
 
     return {
-      left: this.panicT > 0 ? this.panicDir < 0 : wantLeft,
-      right: this.panicT > 0 ? this.panicDir > 0 : wantRight,
+      left:  moveBlocked ? false : (this.panicT > 0 ? this.panicDir < 0 : wantLeft),
+      right: moveBlocked ? false : (this.panicT > 0 ? this.panicDir > 0 : wantRight),
       down: false, downPressed,
       jump: jumpPressed || jumpHeld, jumpPressed,
       fire: firePressed, firePressed, run,

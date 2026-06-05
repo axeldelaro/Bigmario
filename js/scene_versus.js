@@ -20,6 +20,7 @@ export class VersusScene {
     this.net = opts.net || null;
     this.localId = opts.localId ?? 0; // index du joueur contrôlé en ligne
     this.arenaIdx = opts.arenaIdx ?? 0;
+    this.botSkill = opts.botSkill ?? 0.92; // difficulté de l'IA (0..1)
     this.cam = { x: 0, y: 0 };
     this.particles = []; this.floats = []; this.fireballs = [];
     this.timeLeft = 99; this.timeAcc = 0;
@@ -104,7 +105,8 @@ export class VersusScene {
   // - esquive boules de feu et projectiles.
   aiInput(dt = 1 / 120) {
     const me = this.players[1], foe = this.players[0];
-    this._brain = this._brain || new BotBrain({ skill: 0.92 });
+    // Créer le cerveau avec le skill configuré (botSkill) si pas encore instancié
+    this._brain = this._brain || new BotBrain({ skill: this.botSkill });
     // priorité : ramasser un power-up proche si on est encore petit
     let target = null, collect = false;
     if (me.power === 'small' && this.items.length) {

@@ -9,7 +9,7 @@ const DEFAULT_KEYS = [
     down: ['ArrowDown', 'KeyS'],
     jump: ['Space', 'KeyK', 'ArrowUp', 'KeyW'],
     fire: ['KeyJ', 'ShiftLeft', 'KeyL'],
-    pause: ['Escape', 'KeyP', 'Enter'],
+    pause: ['Escape', 'KeyP'],   // Enter retiré pour éviter les conflits de menus
   },
   { // Joueur 2 (clavier partagé pour versus local)
     left: ['KeyF'],
@@ -30,6 +30,9 @@ export class Input {
     this.touch = {}; // act -> bool
     this.players = [this._mkState(), this._mkState()];
     this.maps = DEFAULT_KEYS;
+    // Latch des fronts montants : garantit que justPressed ne soit jamais
+    // raté entre deux sous-steps physiques (120 Hz) même à faible FPS.
+    this._latch = [this._mkLatch(), this._mkLatch()];
     this._bind();
   }
 
@@ -37,10 +40,22 @@ export class Input {
     const s = {}; ACTIONS.forEach((a) => (s[a] = { down: false, prev: false }));
     return s;
   }
+  _mkLatch() {
+    const s = {}; ACTIONS.forEach((a) => (s[a] = false));
+    return s;
+  }
 
   _bind() {
     addEventListener('keydown', (e) => {
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(e.code)) e.preventDefault();
+      if (e.repeat) return; // Ignorer la répétition auto de l'OS (cause principale du bug de saut)
+      // Enregistrer le front montant dans le latch pour ne pas le rater
+      for (let p = 0; p < this.maps.length; p++) {
+        const map = this.maps[p];
+        for (const act of ACTIONS) {
+          if ((map[act] || []).includes(e.code)) this._latch[p][act] = true;
+        }
+      }
       this.keys.add(e.code);
     }, { passive: false });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -88,6 +103,7 @@ export class Input {
   update() {
     for (let p = 0; p < this.players.length; p++) {
       const state = this.players[p];
+      const latch = this._latch[p];
       const map = this.maps[p];
       const gp = this._gamepad(p);
       for (const act of ACTIONS) {
@@ -96,7 +112,22 @@ export class Input {
         if (p === 0 && this.touch[act]) down = true;
         state[act].prev = state[act].down;
         state[act].down = down;
+        // Propager le latch au front montant si la touche n'est plus détectée
+        // (front court raté entre deux frames)
+        if (latch[act] && !state[act].prev) state[act].down = true;
+        // Effacer le latch seulement quand la touche est released
+        if (!down) latch[act] = false;
       }
+    }
+  }
+
+  // Réinitialise les latches après que la logique a lu les justPressed
+  // (à appeler en fin de readInput pour éviter les doublons)
+  flushLatches(player = 0) {
+    const latch = this._latch[player];
+    const state = this.players[player];
+    for (const act of ACTIONS) {
+      if (latch[act] && state[act].prev) latch[act] = false;
     }
   }
 

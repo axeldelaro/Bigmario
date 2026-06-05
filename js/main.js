@@ -18,6 +18,7 @@ import { GhostStore } from './ghost.js';
 import { Share } from './share.js';
 import { parTimes, medalFor, MEDAL_EMOJI } from './medals.js';
 import { ACHIEVEMENTS, bumpStat, statValue, markSet, setSize, unlockedCount } from './achievements.js';
+import { AI_PRESETS } from './ai.js';
 
 const canvas = document.getElementById('screen');
 const ctx = canvas.getContext('2d');
@@ -41,7 +42,7 @@ class Game {
     this.fadeAlpha = 0; // fondu d'entrée des scènes
     this.reduceMotion = Save.get('reduceMotion', false);
     this._showFps = Save.get('showFps', false);
-    this.use3D = Save.get('render3d', true); // rendu 3D par défaut si dispo
+    this.use3D = Save.get('render3d', false); // 3D OFF par défaut pour garantir la visibilité des personnages
     this.canvas3d = null;
     this._installPrompt = null;
     if (Save.get('muted', false)) toggleMute(); // restaure le réglage son
@@ -198,8 +199,10 @@ class Game {
   }
 
   togglePause() {
+    // Permettre la pause en mode 'game' et 'versus' uniquement
     if (this.mode !== 'game' && this.mode !== 'versus') return;
-    this.paused = !this.paused; SFX.pause();
+    // Ne pas mettre en pause pendant la transition de scène (paused est déjà false)
+    this.paused = !this.paused; SFX.pause?.();
     if (this.paused) this.showPausePanel();
     else { ui.classList.add('hidden'); ui.innerHTML = ''; }
   }
@@ -238,8 +241,9 @@ class Game {
   }
   startVersusBot(arenaIdx = 0) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
+    const botSkill = this._botSkill ?? AI_PRESETS.medium.skill;
     this._restart = () => this.startVersusBot(arenaIdx);
-    this.scene = new VersusScene(this, { mode: 'bot', arenaIdx });
+    this.scene = new VersusScene(this, { mode: 'bot', arenaIdx, botSkill });
     this.checkOrientation();
   }
   startVersusRival(arenaIdx = 0) {
@@ -422,7 +426,36 @@ class Game {
   gameOver(score) { this.bestScore(score); setTimeout(() => this.showGameOver(score), 1800); }
   gameComplete(score) { this.bestScore(score); this.showComplete(score); }
   bestScore(s) { if (s > Save.get('best', 0)) Save.set('best', s); }
-  endVersus() { if (this.net) { this.net.close(); this.net = null; } this.returnToMenu(); }
+  endVersus() {
+    if (this.net) { this.net.close(); this.net = null; }
+    // Afficher un écran de résultats après un match versus
+    const sc = this.scene;
+    const kos = sc ? sc.kos : [0, 0];
+    const winner = sc ? sc.winner : -1;
+    const modeName = sc ? sc.mode : 'bot';
+    const isBot = modeName === 'bot' || modeName === 'rival';
+    let winLabel, winColor;
+    if (winner < 0) { winLabel = 'EGALITÉ !'; winColor = '#fff'; }
+    else if (isBot) { winLabel = winner === 0 ? '🏆 VICTOIRE !' : '❌ DÉFAITE'; winColor = winner === 0 ? '#ffd23b' : '#ff5d5d'; }
+    else { winLabel = `JOUEUR ${winner + 1} GAGNE !`; winColor = '#ffd23b'; }
+    this.paused = false; this.mode = 'menu';
+    this.scene?.dispose?.(); this.scene = null;
+    stopMusic(); this.checkOrientation();
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:28px;color:${winColor}">${winLabel}</span></div>
+      <p style="font-size:18px;font-weight:900;margin:10px 0">
+        ${isBot ? `TOI ${kos[0]} KO &nbsp;—&nbsp; IA ${kos[1]} KO` : `J1 ${kos[0]} KO &nbsp;—&nbsp; J2 ${kos[1]} KO`}
+      </p>
+      <div class="menu-list">
+        <button class="btn" id="retry">↻ Rejouer</button>
+        <button class="btn secondary" id="others">⚔ Autre arène</button>
+        <button class="btn ghost" id="menu">Menu principal</button>
+      </div>
+    `);
+    p.querySelector('#retry').onclick = () => this._restart?.();
+    p.querySelector('#others').onclick = () => this.showVersusMenu();
+    p.querySelector('#menu').onclick = () => this.returnToMenu();
+  }
   returnToMenu() {
     this.paused = false; this.mode = 'menu';
     this.scene?.dispose?.(); this.scene = null;
@@ -549,8 +582,8 @@ class Game {
       </div>
     `);
     this._coopMode = false;
-    p.querySelector('#m-bot').onclick = () => this.showArenaSelect('bot');
-    p.querySelector('#m-rival').onclick = () => this.showArenaSelect('rival');
+    p.querySelector('#m-bot').onclick = () => { resumeAudio(); this.showDifficultyPicker('bot'); };
+    p.querySelector('#m-rival').onclick = () => { resumeAudio(); this.showDifficultyPicker('rival'); };
     p.querySelector('#m-local').onclick = () => this.showArenaSelect('local');
     p.querySelector('#m-online').onclick = () => this.showOnline();
     p.querySelector('#m-coop').onclick = () => { this._coopMode = true; this.showOnline(); };
@@ -568,9 +601,42 @@ class Game {
       </div>
       <p class="hint">Ramasse plus d'objets que l'IA avant la fin du temps.<br>L'IA fonce vers le collectible le plus proche : sois plus rapide !</p>
     `);
-    p.querySelector('#coin').onclick = () => this.showMiniMapSelect('coin');
-    p.querySelector('#star').onclick = () => this.showMiniMapSelect('star');
+    p.querySelector('#coin').onclick = () => { resumeAudio(); this.showDifficultyPicker('minigame', 'coin'); };
+    p.querySelector('#star').onclick = () => { resumeAudio(); this.showDifficultyPicker('minigame', 'star'); };
     p.querySelector('#back').onclick = () => this.showTitle();
+  }
+
+  // Affiche un choix de difficulté avant le versus bot ou le mini-jeu
+  showDifficultyPicker(dest, kindOrMode = null) {
+    const presets = [
+      { key: 'easy',   ...AI_PRESETS.easy },
+      { key: 'medium', ...AI_PRESETS.medium },
+      { key: 'hard',   ...AI_PRESETS.hard },
+      { key: 'extreme',...AI_PRESETS.extreme },
+    ];
+    const current = Save.get('aiDifficulty', 'medium');
+    const btns = presets.map((pr) =>
+      `<button class="btn ${pr.key === current ? '' : 'ghost'}" id="d-${pr.key}">${pr.emoji} ${pr.label}</button>`
+    ).join('');
+    const title = dest === 'minigame' ? 'MINI-JEU' : 'VERSUS IA';
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:26px">⚔️ DIFFICULTÉ</span><span class="sub">${title}</span></div>
+      <p class="hint">Choisis le niveau de l’IA :</p>
+      <div class="menu-list">${btns}</div>
+      <div class="row" style="margin-top:16px"><button class="btn ghost" id="back">← Retour</button></div>
+    `);
+    presets.forEach((pr) => {
+      p.querySelector(`#d-${pr.key}`).onclick = () => {
+        Save.set('aiDifficulty', pr.key);
+        this._botSkill = pr.skill;
+        if (dest === 'minigame') this.showMiniMapSelect(kindOrMode);
+        else this.showArenaSelect(dest);
+      };
+    });
+    p.querySelector('#back').onclick = () => {
+      if (dest === 'minigame') this.showMiniMenu();
+      else this.showVersusMenu();
+    };
   }
 
   showMiniMapSelect(kind) {
@@ -586,9 +652,10 @@ class Game {
 
   startMiniGame(kind, mapIdx = 0) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
+    const botSkill = this._botSkill ?? AI_PRESETS.medium.skill;
     this._restart = () => this.startMiniGame(kind, mapIdx);
     this._miniReturn = () => this.showMiniMapSelect(kind);
-    this.scene = new MiniGameScene(this, { kind, mapIdx });
+    this.scene = new MiniGameScene(this, { kind, mapIdx, botSkill });
     this.checkOrientation();
   }
 

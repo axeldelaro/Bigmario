@@ -11,6 +11,7 @@ const THREE_CDN = 'https://unpkg.com/three@0.160.0/build/three.module.js';
 let THREE = null;
 let R = null;          // état du renderer
 let failed = false;
+let _errCount = 0;      // compteur d'erreurs consécutives (seuil = 5)
 
 const U = (px) => px / TILE;            // pixels -> unités (1 tuile = 1 unité)
 const VW = VIEW_W / TILE;               // largeur visible en unités (20)
@@ -537,8 +538,20 @@ function makePlat() { return texBox(2, 0.42, 1, 'wood', 'wood'); }
 // ---- rendu d'une scène de jeu ----
 export function renderScene(scene) {
   if (!R) return false;
-  try { drawScene(scene); return true; }
-  catch (e) { console.warn('Erreur rendu 3D -> repli 2D :', e && e.message); failed = true; R = null; return false; }
+  try {
+    drawScene(scene);
+    _errCount = 0; // réinitialiser le compteur en cas de succès
+    return true;
+  } catch (e) {
+    _errCount++;
+    console.warn(`Erreur rendu 3D (${_errCount}/5) -> repli 2D :`, e && e.message);
+    if (_errCount >= 5) {
+      // Après 5 erreurs consécutives seulement on désactive définitivement la 3D
+      failed = true; R = null;
+      console.warn('3D désactivée définitivement après trop d’erreurs.');
+    }
+    return false;
+  }
 }
 
 function drawScene(scene) {
@@ -624,15 +637,17 @@ function drawScene(scene) {
   }
 
   // fantômes (translucides) — synchronisés sur le chrono du run
+  // Utilise runMs (solo speedrun) ou matchMs (versus) selon ce qui est dispo
+  const runTime = scene.runMs ?? scene.matchMs ?? 0;
   (scene.ghosts || []).forEach((gh, gi) => {
-    const pose = gh.g.poseAt(scene.runMs || 0);
+    const pose = gh.g.poseAt(runTime);
     if (!pose) return;
     const g = entGroup('ghost' + gi, makeGhostModel);
     const big = pose.power >= 1, h = big ? 26 : 14;
     g.position.set(U(pose.x + 6), -(U(pose.y + h / 2)), 0.25); // même repère que le héros
     g.scale.set((pose.dir < 0 ? -1 : 1), big ? 1.25 : 1, 1);
-    try { g.userData.mat.color.set(gh.glow || '#46d8ff'); g.userData.mat.opacity = 0.32 + 0.12 * Math.sin((scene.runMs || 0) / 200 + gi); } catch {}
-    const ph = (scene.runMs || 0) / 90, amp = pose.moving ? 0.6 : 0;
+    try { g.userData.mat.color.set(gh.glow || '#46d8ff'); g.userData.mat.opacity = 0.32 + 0.12 * Math.sin(runTime / 200 + gi); } catch {}
+    const ph = runTime / 90, amp = pose.moving ? 0.6 : 0;
     g.userData.lL.rotation.z = Math.sin(ph) * amp; g.userData.lR.rotation.z = -Math.sin(ph) * amp;
   });
 

@@ -180,9 +180,17 @@ function L32() { // 3-2 Pont des cieux — piliers-ponts, plateformes mobiles, p
 function L33() { // 3-3 Antre du Gardien — combat de boss avec plateformes d'esquive
   const W = 52, g = grid(W); floorH(g);
   put(g, 9, 2, 'S');
+  // Plateformes principales (row 5) accessibles depuis les marches latérales
   plat(g, 5, 8, 5); plat(g, 5, 38, 5); plat(g, 7, 22, 6);
+  // Marches d'accès aux plateformes hautes (row 5) depuis le sol
+  // Gauche : marches en row 8 et 6 pour atteindre row 5
+  plat(g, 7, 5, 3); plat(g, 6, 6, 2);
+  // Droite : marches symétriques
+  plat(g, 7, 44, 3); plat(g, 6, 44, 2);
+  // Blocs power-up (row 3) : atteignables depuis les plateformes row 5 en sautant
   put(g, 3, 10, 'M'); put(g, 3, 40, 'W');
-  put(g, 6, 24, 'j'); put(g, 6, 27, 'j');
+  // Petite plateforme centrale pour casser les blocs
+  put(g, 4, 24, 'j'); put(g, 4, 27, 'j');
   coins(g, 8, 14, 3); coins(g, 8, 32, 3);
   put(g, 9, 26, 'O');
   return { name: '3-3 Antre du Gardien', theme: 'castle', time: 220, map: rows(g) };
@@ -222,9 +230,17 @@ function L42() { // 4-2 Donjon — château exigeant, pics, colonnes, deux route
 function L43() { // 4-3 Gardien Suprême — boss en grande arène
   const W = 60, g = grid(W); floorH(g);
   put(g, 9, 2, 'S');
-  plat(g, 5, 8, 5); plat(g, 5, 46, 5); plat(g, 6, 26, 8);  // plateformes d'esquive
+  // Plateformes d'esquive (row 5) avec accès par marches latérales
+  plat(g, 5, 8, 5); plat(g, 5, 46, 5); plat(g, 6, 26, 8);
+  // Marches d'accès gauche
+  plat(g, 7, 4, 4); plat(g, 6, 5, 3);
+  // Marches d'accès droite
+  plat(g, 7, 51, 4); plat(g, 6, 51, 3);
+  // Plateformes hautes (row 3) pour power-ups
   plat(g, 3, 18, 5); plat(g, 3, 36, 5);
-  put(g, 3, 10, 'M'); put(g, 3, 48, 'W'); put(g, 2, 20, 'U'); // fleu de feu, plume, étoile
+  put(g, 3, 10, 'M'); put(g, 3, 48, 'W'); put(g, 2, 20, 'U'); // feu, plume, étoile
+  // Ressort central pour accès aux plateformes hautes
+  put(g, 9, 30, 'T');
   put(g, 5, 28, 'j'); put(g, 5, 31, 'j');
   coins(g, 8, 14, 3); coins(g, 8, 40, 3);
   put(g, 9, 30, 'O');
@@ -262,7 +278,12 @@ function L53() { // 5-3 Cœur du Cristal — combat de boss (modèle 3-3/4-3)
   const W = 52, g = grid(W); floorH(g);
   put(g, 9, 2, 'S');
   plat(g, 5, 8, 5); plat(g, 5, 38, 5); plat(g, 7, 22, 6);
+  // Marches d'accès gauche et droite
+  plat(g, 7, 5, 3); plat(g, 6, 6, 2);
+  plat(g, 7, 44, 3); plat(g, 6, 44, 2);
   put(g, 3, 10, 'M'); put(g, 3, 40, 'W'); put(g, 2, 24, 'U');
+  // Ressort central
+  put(g, 9, 25, 'T');
   put(g, 6, 24, 'j'); put(g, 6, 27, 'j');
   coins(g, 8, 14, 3); coins(g, 8, 32, 3);
   put(g, 9, 26, 'O');

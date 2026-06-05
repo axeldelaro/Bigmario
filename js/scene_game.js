@@ -155,6 +155,10 @@ export class GameScene {
 
   // ---------- UPDATE ----------
   update(dt) {
+    // Vérifier la pause EN PREMIER, avant tout early return
+    // (fix: la pause était inaccessible pendant freeze/intro)
+    if (this.game.input.justPressed('pause', 0)) this.game.togglePause();
+
     if (this.freeze > 0) { this.freeze -= dt; this.shake = Math.max(0, this.shake - dt * 30); return; }
     this.shake = Math.max(0, this.shake * 0.88 - 0.05);
 
@@ -336,13 +340,17 @@ export class GameScene {
     if (p.star > 0) { b.hitTop(this); p.vy = -240; return; }
     const feet = p.y + p.h;
     const prevFeet = p.prevFeet != null ? p.prevFeet : feet;
-    // Détection généreuse d'un piétinement par le dessus (le boss fait 48x40).
-    const fromAbove = p.vy > 0 && (prevFeet <= b.y + b.h * 0.55 || feet <= b.y + b.h * 0.45);
+    // Détection généreuse d'un piétinement par le dessus.
+    // Le boss fait 48×40 — on accepte le stomp si les pieds du joueur
+    // descendaient ET étaient au-dessus des 65% supérieurs du boss.
+    // Le ground-pound (slam) compte toujours comme un stomp.
+    const fromAbove = (p.vy > 0 && (prevFeet <= b.y + b.h * 0.65 || feet <= b.y + b.h * 0.55)) || p.pounding;
     if (fromAbove) {
       // On rebondit TOUJOURS sur un coup porté par le dessus, même si le boss
       // est invulnérable — sinon le joueur retombe dedans et se fait toucher.
       b.hitTop(this);
       p.vy = (this.curInput && this.curInput.jump ? -340 : -260);
+      if (p.pounding) { p.pounding = false; p.vy = -300; } // rebond plus haut après slam
       this.freeze = 0.08;
     } else {
       p.hurt(this);
@@ -421,7 +429,8 @@ export class GameScene {
 
   readInput() {
     const I = this.game.input;
-    if (I.justPressed('pause', 0)) this.game.togglePause();
+    // La pause est maintenant gérée dans update() avant les early returns
+    // On ne relit plus justPressed('pause') ici pour éviter le double déclenchement
     return {
       left: I.isDown('left', 0), right: I.isDown('right', 0), down: I.isDown('down', 0), downPressed: I.justPressed('down', 0),
       jump: I.isDown('jump', 0), jumpPressed: I.justPressed('jump', 0),
