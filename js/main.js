@@ -937,15 +937,14 @@ class Game {
     pp.querySelectorAll('.lvl-card').forEach(card => {
       card.onclick = () => {
         const i = +card.dataset.i;
-        const botCount = playerIds.filter(pid => typeof pid === 'string' && pid.startsWith('AI_')).length;
         if (tournament) {
           this._tournamentBracket = this._mkBracket(playerIds);
-          // Annoncer le lancement du tournoi via le serveur
-          if (host.startGame) host.startGame(i, botCount, true);
+          // Annoncer le lancement à tous les guests avec les IDs exacts
+          if (host.startGame) host.startGame(i, playerIds, true);
           this.showTournamentBracket(host, playerIds, i);
         } else {
-          // Annoncer l'arène à tous les guests via le serveur relay
-          if (host.startGame) host.startGame(i, botCount, false);
+          // Annoncer l'arène à tous les guests avec les IDs exacts
+          if (host.startGame) host.startGame(i, playerIds, false);
           this.startVersusP2P(host, 0, i, n, playerIds);
         }
       };

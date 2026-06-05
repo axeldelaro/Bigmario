@@ -27,6 +27,8 @@ export class MultiPeerHost {
     this.pseudos      = new Map();   // id → pseudo
     this.connected    = true;
     this.nextId       = 1;
+    // IDs des joueurs pour la partie en cours (fixé au lancement)
+    this._gameIds     = null;
   }
 
   get connectedCount() { return this._conns.size + 1; } // +1 = hôte
@@ -41,7 +43,6 @@ export class MultiPeerHost {
       if (!window.Peer) { rej(new Error('PeerJS non chargé — vérifiez la connexion internet')); return; }
       const tryCode = (code) => {
         this.roomCode = code;
-        // Config minimale : PeerJS gère tout avec ses defaults
         const p = new window.Peer(PREFIX + code);
         this._peer = p;
         p.on('open',  ()  => res(code));
@@ -56,19 +57,30 @@ export class MultiPeerHost {
   }
 
   _accept(conn) {
-    // Chaque connexion entrante = un nouveau guest
+    // IMPORTANT : allouer l'ID ici, pas dans 'open', pour éviter les doublons
     const id = this.nextId++;
+
     conn.on('open', () => {
       this._conns.set(id, conn);
       if (!this.connectedIds.includes(id)) this.connectedIds.push(id);
-      // Envoyer au guest : son ID + liste des pseudos actuels
-      conn.send({ t: 'hello', id, pseudo: this.pseudo || 'Hôte', pseudos: Array.from(this.pseudos.entries()) });
-      // Annoncer aux autres guests que quelqu'un vient de rejoindre
+
+      // 1. Envoyer au guest : son ID + liste des pseudos actuels de tout le salon
+      conn.send({
+        t: 'hello',
+        id,
+        pseudo:  this.pseudo || 'Hôte',
+        pseudos: Array.from(this.pseudos.entries()),
+      });
+
+      // 2. Annoncer aux autres guests qu'un nouveau joueur vient de rejoindre
+      //    (on utilise un pseudo provisoire ; le vrai arrivera via set_pseudo)
       const joinMsg = { t: 'set_pseudo', from: id, pseudo: 'Joueur ' + (id + 1) };
       for (const [pid, c] of this._conns)
         if (pid !== id && c.open) c.send(joinMsg);
+
       this._emit('peerjoin', { id, total: this.connectedCount });
     });
+
     conn.on('data', (m) => {
       if (m.t === 'relay') {
         // Relayer à tous les autres guests + émettre localement
@@ -76,22 +88,24 @@ export class MultiPeerHost {
         for (const [pid, c] of this._conns)
           if (pid !== id && c.open) c.send(out);
         this._emit('msg', { d: m.d, from: id });
+
       } else if (m.t === 'set_pseudo') {
+        // Màj du pseudo du guest + propagation à tout le monde
         this.pseudos.set(id, m.pseudo || 'Joueur ' + (id + 1));
-        // Propager le pseudo à tous
-        const out = { t: 'set_pseudo', from: id, pseudo: m.pseudo };
+        const out = { t: 'set_pseudo', from: id, pseudo: this.pseudos.get(id) };
         for (const [pid, c] of this._conns)
-          if (pid !== id && c.open) c.send(out);
+          if (c.open) c.send(out);     // inclure le guest lui-même pour confirmation
         this._emit('pseudo_update', { pseudos: this.pseudos });
       }
     });
+
     conn.on('close', () => {
       this._conns.delete(id);
       this.connectedIds = this.connectedIds.filter(x => x !== id);
       this.pseudos.delete(id);
       this._emit('peerleave', { id });
     });
-    conn.on('error', (e) => console.warn('[Host] conn error:', e));
+    conn.on('error', (e) => console.warn('[Host] conn error id=' + id + ':', e));
   }
 
   sendTo(id, msg) {
@@ -104,11 +118,12 @@ export class MultiPeerHost {
   }
   relay(obj) { this.broadcast({ t: 'relay', d: obj }); }
 
-  // Annoncer le lancement de partie à tous les guests
-  startGame(arenaIdx, botCount = 0, tournament = false) {
-    const ids = [0, ...this.connectedIds];
-    for (let i = 0; i < botCount; i++) ids.push('AI_' + i);
-    this.broadcast({ t: 'relay', d: { t: 'start', arenaIdx, playerCount: ids.length, ids, tournament } });
+  // Annoncer le lancement de partie à tous les guests.
+  // playerIds est le tableau COMPLET déjà construit par main.js (humains + bots).
+  startGame(arenaIdx, playerIds, tournament = false) {
+    this._gameIds = playerIds;
+    const msg = { t: 'relay', d: { t: 'start', arenaIdx, playerCount: playerIds.length, ids: playerIds, tournament } };
+    this.broadcast(msg);
   }
 
   announceArena(arenaIdx, playerCount = 2) {
@@ -146,7 +161,6 @@ export class PeerClient {
     if (!window.Peer) return Promise.reject(new Error('PeerJS non chargé — vérifiez la connexion internet'));
     this.pseudo = pseudo;
     return new Promise((res, rej) => {
-      // Config minimale PeerJS par défaut — fonctionne en LAN sans TURN
       this._peer = new window.Peer();
       const to = setTimeout(() => rej(new Error('Timeout : hôte introuvable (code incorrect ou hôte parti)')), 15000);
 
@@ -157,13 +171,10 @@ export class PeerClient {
 
       this._peer.on('open', () => {
         const hostId = PREFIX + code.trim().toUpperCase();
-        // Connexion directe à l'hôte via WebRTC DataChannel
         this._conn = this._peer.connect(hostId);
 
-        this._conn.on('open', () => {
-          // Envoyer son pseudo dès la connexion établie
-          this._conn.send({ t: 'set_pseudo', pseudo });
-        });
+        // Envoyer le pseudo uniquement APRÈS avoir reçu 'hello'
+        // pour s'assurer que l'hôte nous a bien enregistrés avant.
 
         this._conn.on('data', (m) => {
           if (m.t === 'hello') {
@@ -174,11 +185,15 @@ export class PeerClient {
             this.pseudos = new Map(m.pseudos || []);
             this.pseudos.set(0, m.pseudo || 'Hôte');
             this.pseudos.set(m.id, pseudo);
+            // Maintenant qu'on est enregistrés, envoyer notre pseudo à l'hôte
+            this._conn.send({ t: 'set_pseudo', pseudo });
             this._emit('open',     {});
             this._emit('peerjoin', {});
             res({ role: 'guest', localId: m.id });
+
           } else if (m.t === 'relay') {
             this._emit('msg', { d: m.d, from: m.from });
+
           } else if (m.t === 'set_pseudo') {
             this.pseudos.set(m.from, m.pseudo);
             this._emit('pseudo_update', { pseudos: this.pseudos });
