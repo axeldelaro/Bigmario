@@ -12,7 +12,7 @@ import { ReplayScene } from './scene_replay.js';
 import { EditorScene } from './scene_editor.js';
 import { WORLDS, ARENAS, MINIGAMES } from './levels.js';
 import { NetClient } from './net.js';
-import { PeerClient, MultiPeerHost } from './peerclient.js';
+import { PeerClient, MultiPeerHost } from './netclient.js';
 import { ensure3D, is3DReady, renderScene, resize3D, get3DCanvas } from './render3d.js';
 import { Leaderboard, fmtTime } from './leaderboard.js';
 import { GhostStore } from './ghost.js';
@@ -699,16 +699,16 @@ class Game {
   }
 
   // ================================================================
-  // LOBBY P2P — jusqu'a 8 joueurs
+  // LOBBY EN LIGNE — WebSocket relay, 2-8 joueurs
   // ================================================================
   showP2PLobby(tournament = false) {
     resumeAudio();
-    let hostObj  = null;
+    let hostObj   = null;
     let guestPeer = null;
 
-    const modeName = tournament ? '🏆 CHAMPIONNAT (P2P)' : '📡 MODE LIBRE (P2P)';
+    const modeName = tournament ? '🏆 CHAMPIONNAT EN LIGNE' : '📡 MODE LIBRE EN LIGNE';
     const p = this.panel(`
-      <div class="title"><span class="big" style="font-size:24px">${modeName}</span><span class="sub">JUSQU'À 8 JOUEURS (PEERJS)</span></div>
+      <div class="title"><span class="big" style="font-size:22px">${modeName}</span><span class="sub">SALON • CODE • 2-8 JOUEURS</span></div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
         <button class="btn" id="tab-h" style="flex:1">🏠 Héberger</button>
         <button class="btn ghost" id="tab-g" style="flex:1">🔗 Rejoindre</button>
@@ -717,178 +717,199 @@ class Game {
       <div class="status" id="st"></div>
       <div class="row" style="margin-top:8px"><button class="btn ghost" id="back">← Retour</button></div>
     `);
-    const st = p.querySelector('#st');
+    const st      = p.querySelector('#st');
     const content = p.querySelector('#content');
 
     const cleanUp = () => {
-      if (hostObj) { hostObj.disconnect(); hostObj = null; }
+      if (hostObj)   { hostObj.disconnect();   hostObj   = null; }
       if (guestPeer) { guestPeer.disconnect(); guestPeer = null; }
     };
 
-    // ---- Onglet HÔTE ----
+    // ───────────────────────── ONGLET HÔTE ─────────────────────────
     const showHost = () => {
       cleanUp();
       p.querySelector('#tab-h').className = 'btn';
       p.querySelector('#tab-g').className = 'btn ghost';
       content.innerHTML = `
-        <div style="text-align:center;padding:15px;background:rgba(255,255,255,0.04);border:1px solid #334;border-radius:8px">
-          <p class="hint" style="margin-bottom:8px">Créer un salon et partager le code à 4 lettres</p>
-          <button class="btn" id="create-room">🎮 Créer un salon</button>
-          <div id="room-info" style="display:none;margin-top:12px">
-            <div style="font-size:11px;color:#888;text-transform:uppercase">Code du salon</div>
-            <div id="room-code-display" style="font-size:32px;font-weight:900;color:#ffd23b;letter-spacing:4px;margin:6px 0">----</div>
-            <button class="btn ghost" id="cp-code" style="padding:4px 10px;font-size:12px;margin-bottom:10px">📋 Copier le lien de partage</button>
+        <div style="background:rgba(255,255,255,0.04);border:1px solid #334;border-radius:8px;padding:14px">
+          <p class="hint" style="margin-bottom:10px">Configure ton salon puis clique sur Créer.</p>
+          <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:10px;font-size:13px">
+            <label>Pseudo hôte: <input id="h-pseudo" placeholder="Hôte" maxlength="16"
+              style="width:90px;padding:3px 6px;background:#1a1030;border:1px solid #556;border-radius:4px;color:#fff"></label>
+            <label>Joueurs max: <select id="h-max">
+              <option value="2">2</option><option value="3">3</option><option value="4" selected>4</option>
+              <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+            </select></label>
+          </div>
+          <button class="btn" id="create-room" style="width:100%">🎮 Créer le salon</button>
+          <div id="room-info" style="display:none;margin-top:12px;text-align:center">
+            <div style="font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px">Code à partager</div>
+            <div id="room-code-display" style="font-size:38px;font-weight:900;color:#ffd23b;letter-spacing:6px;margin:4px 0">----</div>
+            <button class="btn ghost" id="cp-code" style="padding:4px 12px;font-size:12px">📋 Copier le code</button>
           </div>
         </div>
-        <div id="player-list-section" style="display:none;margin-top:14px">
-          <div style="font-size:12px;color:#7fc6ff;font-weight:bold;margin-bottom:6px">Joueurs connectés (<span id="player-count">1</span>/4) :</div>
-          <div id="players-box" style="display:flex;flex-direction:column;gap:5px">
-            <div style="padding:6px;background:rgba(55,194,74,0.1);border:1px solid #37c24a;border-radius:5px;font-size:13px">👑 <b>J1 (Vous)</b> - Hôte</div>
+        <div id="player-list-section" style="display:none;margin-top:12px">
+          <div style="font-size:12px;color:#7fc6ff;font-weight:bold;margin-bottom:6px">
+            Joueurs connectés : <span id="player-count">1</span>/<span id="player-max">4</span>
           </div>
-          <div id="host-actions" style="margin-top:14px;display:none">
-            <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:12px">
-              <label>Ajouter des Bots (IA): <select id="p2p-bots"><option selected>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label>
-            </div>
-            <button class="btn ${tournament ? 'secondary' : ''}" id="start-btn" style="width:100%">${tournament ? '🏆 Démarrer le Tournoi' : '⚔️ Démarrer la Partie'}</button>
+          <div id="players-box" style="display:flex;flex-direction:column;gap:5px"></div>
+          <div id="host-actions" style="margin-top:12px">
+            <label style="font-size:12px">Ajouter des Bots (IA):
+              <select id="p2p-bots"><option selected>0</option><option>1</option><option>2</option>
+              <option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select>
+            </label>
+            <button class="btn ${tournament ? 'secondary' : ''}" id="start-btn" style="width:100%;margin-top:10px">
+              ${tournament ? '🏆 Démarrer le Tournoi' : '⚔️ Démarrer la Partie'}
+            </button>
+            <p class="hint" style="margin-top:6px">Tu peux démarrer même si le salon n'est pas plein.</p>
           </div>
         </div>
       `;
 
-      const createBtn = content.querySelector('#create-room');
-      const roomInfo = content.querySelector('#room-info');
-      const codeDisp = content.querySelector('#room-code-display');
-      const cpBtn = content.querySelector('#cp-code');
-      const listSec = content.querySelector('#player-list-section');
-      const countDisp = content.querySelector('#player-count');
-      const box = content.querySelector('#players-box');
-      const hostActs = content.querySelector('#host-actions');
+      const createBtn  = content.querySelector('#create-room');
+      const roomInfo   = content.querySelector('#room-info');
+      const codeDisp   = content.querySelector('#room-code-display');
+      const cpBtn      = content.querySelector('#cp-code');
+      const listSec    = content.querySelector('#player-list-section');
+      const countDisp  = content.querySelector('#player-count');
+      const maxDisp    = content.querySelector('#player-max');
+      const box        = content.querySelector('#players-box');
+      const hostActs   = content.querySelector('#host-actions');
+
+      const updatePlayerList = () => {
+        if (!hostObj) return;
+        const n = hostObj.connectedCount;
+        countDisp.textContent = n;
+        const hPseudo = escapeHtml(hostObj.pseudo || 'Hôte');
+        let html = `<div style="padding:6px 10px;background:rgba(55,194,74,0.12);border:1px solid #37c24a;border-radius:6px;font-size:13px">👑 <b>${hPseudo}</b> <span style="color:#37c24a;font-size:11px">Hôte</span></div>`;
+        hostObj.connectedIds.forEach((pid) => {
+          const pName = escapeHtml(hostObj.pseudos?.get(pid) || ('Joueur ' + (pid + 1)));
+          html += `<div style="padding:6px 10px;background:rgba(127,198,255,0.08);border:1px solid #334;border-radius:6px;font-size:13px">👤 <b>${pName}</b></div>`;
+        });
+        box.innerHTML = html;
+      };
 
       createBtn.onclick = async () => {
         createBtn.disabled = true;
-        st.textContent = 'Création du salon PeerJS...';
+        const maxP   = parseInt(content.querySelector('#h-max').value, 10);
+        const pseudo = content.querySelector('#h-pseudo').value.trim() || 'Hôte';
+        st.textContent = 'Connexion au serveur...';
         try {
           hostObj = new MultiPeerHost();
-          const code = await hostObj.open();
-          st.textContent = 'Salon ouvert avec succès !';
+          hostObj.pseudo = pseudo;
+          hostObj.pseudos.set(0, pseudo);
+          const code = await hostObj.open(maxP, pseudo);
+          st.textContent = '';
           createBtn.style.display = 'none';
+          content.querySelector('#h-pseudo').style.display = 'none';
+          content.querySelector('#h-max').parentElement.style.display = 'none';
           roomInfo.style.display = 'block';
-          codeDisp.textContent = code;
-          listSec.style.display = 'block';
+          codeDisp.textContent   = code;
+          listSec.style.display  = 'block';
+          maxDisp.textContent    = maxP;
+          updatePlayerList();
 
-          const shareUrl = `${window.location.origin}${window.location.pathname}?room=${code}`;
           cpBtn.onclick = () => {
-            navigator.clipboard?.writeText(shareUrl);
-            st.textContent = 'Lien de partage copié !';
-            setTimeout(() => { st.textContent = ''; }, 2500);
+            navigator.clipboard?.writeText(code);
+            cpBtn.textContent = '✅ Copié !';
+            setTimeout(() => { cpBtn.textContent = '📋 Copier le code'; }, 2000);
           };
 
-          hostObj.on('peerjoin', ({ id, total }) => {
-            st.textContent = `Un joueur a rejoint ! (Total: ${total})`;
-            updatePlayerList();
-          });
+          hostObj.on('peerjoin', () => { updatePlayerList(); st.textContent = ''; });
+          hostObj.on('peerleave', () => { updatePlayerList(); });
+          hostObj.on('pseudo_update', () => { updatePlayerList(); });
 
-          hostObj.on('pseudo_update', () => {
-            updatePlayerList();
-          });
-
-          hostObj.on('peerleave', ({ id }) => {
-            st.textContent = "Un joueur s'est déconnecté.";
-            updatePlayerList();
-          });
-
-          const updatePlayerList = () => {
-            const n = hostObj.connectedCount;
-            countDisp.textContent = n;
-            const hPseudo = escapeHtml(hostObj.pseudos?.get(0) || hostObj.pseudo || 'Hôte');
-            box.innerHTML = `<div style="padding:6px;background:rgba(55,194,74,0.1);border:1px solid #37c24a;border-radius:5px;font-size:13px">👑 <b>${hPseudo}</b> - Hôte</div>`;
-            hostObj.connectedIds.forEach((pid, idx) => {
-              const pPseudo = escapeHtml(hostObj.pseudos?.get(pid) || `J${idx+2}`);
-              box.innerHTML += `<div style="padding:6px;background:rgba(127,198,255,0.1);border:1px solid #334;border-radius:5px;font-size:13px">👤 <b>${pPseudo}</b> - Connecté</div>`;
-            });
-            hostActs.style.display = n >= 2 ? 'block' : 'none';
-          };
-
-
-          content.querySelector('#start-btn').onclick = () => {
-            const bots = parseInt(content.querySelector('#p2p-bots').value, 10);
-            const ids = [0, ...hostObj.connectedIds];
+          hostActs.querySelector('#start-btn').onclick = () => {
+            const bots = parseInt(hostActs.querySelector('#p2p-bots').value, 10);
+            const ids  = [0, ...hostObj.connectedIds];
             for (let i = 0; i < bots; i++) ids.push('AI_' + i);
-            if (!tournament && ids.length > 4) { st.textContent = 'Le mode Libre (FFA) est limité à 4 joueurs max (bots inclus).'; return; }
-            if (tournament && ids.length > 8) { st.textContent = 'Le Tournoi est limité à 8 joueurs max (bots inclus).'; return; }
+            if (!tournament && ids.length > 4) { st.textContent = 'FFA limité à 4 joueurs (bots inclus).'; return; }
+            if (ids.length > 8) { st.textContent = 'Maximum 8 joueurs (bots inclus).'; return; }
             this._p2pArenaSelect(hostObj, ids, tournament);
           };
 
         } catch (err) {
-          st.textContent = `Erreur de création: ${err.message}`;
+          st.textContent = 'Erreur : ' + err.message;
           createBtn.disabled = false;
         }
       };
     };
 
-    // ---- Onglet GUEST ----
+    // ───────────────────────── ONGLET GUEST ────────────────────────
     const showGuest = () => {
       cleanUp();
       p.querySelector('#tab-h').className = 'btn ghost';
       p.querySelector('#tab-g').className = 'btn';
+      const urlCode = new URLSearchParams(window.location.search).get('room') || '';
       content.innerHTML = `
-        <div style="text-align:center;padding:15px;background:rgba(255,255,255,0.04);border:1px solid #334;border-radius:8px">
-          <p class="hint" style="margin-bottom:8px">Entrer le code à 4 lettres de l'hôte</p>
-          <input id="room-code-input" placeholder="CODE" maxlength="4" style="font-size:24px;text-align:center;width:120px;text-transform:uppercase;font-weight:900;letter-spacing:3px;margin-bottom:10px">
-          <button class="btn" id="join-room" style="width:100%">🔌 Rejoindre le salon</button>
+        <div style="background:rgba(255,255,255,0.04);border:1px solid #334;border-radius:8px;padding:14px;text-align:center">
+          <p class="hint" style="margin-bottom:10px">Entre le code à 4 lettres fourni par l'hôte.</p>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:10px">
+            <input id="g-pseudo" placeholder="Ton pseudo" maxlength="16"
+              style="width:110px;padding:4px 8px;background:#1a1030;border:1px solid #556;border-radius:4px;color:#fff;font-size:13px">
+            <input id="room-code-input" placeholder="CODE" maxlength="4" value="${escapeHtml(urlCode.toUpperCase())}"
+              style="width:90px;font-size:24px;text-align:center;text-transform:uppercase;font-weight:900;letter-spacing:3px;background:#1a1030;border:1px solid #556;border-radius:4px;color:#ffd23b">
+          </div>
+          <button class="btn" id="join-room" style="width:100%">🔌 Rejoindre</button>
         </div>
+        <div id="guest-players-box" style="margin-top:12px;display:flex;flex-direction:column;gap:5px"></div>
       `;
 
       const joinBtn = content.querySelector('#join-room');
-      const input = content.querySelector('#room-code-input');
+      const input   = content.querySelector('#room-code-input');
+      const gBox    = content.querySelector('#guest-players-box');
+      let myId = null;
 
-      // Pré-remplir si présent dans l'URL (?room=CODE)
-      const urlCode = new URLSearchParams(window.location.search).get('room');
-      if (urlCode && urlCode.length === 4) {
-        input.value = urlCode.toUpperCase();
-      }
+      const renderPlayers = () => {
+        if (!guestPeer) return;
+        let html = '<div style="font-size:12px;color:#7fc6ff;font-weight:bold;margin-bottom:6px">Joueurs dans le salon :</div>';
+        guestPeer.pseudos.forEach((pseudo, pid) => {
+          const pName  = escapeHtml(pseudo);
+          const isMe   = pid === myId;
+          const isHost = pid === 0;
+          const icon   = isHost ? '👑' : '👤';
+          const bg     = isMe ? 'rgba(255,210,59,0.12)' : 'rgba(127,198,255,0.08)';
+          const border = isMe ? '#ffd23b' : '#334';
+          html += `<div style="padding:6px 10px;background:${bg};border:1px solid ${border};border-radius:6px;font-size:13px">${icon} <b>${pName}</b>${isMe?' <span style="color:#ffd23b;font-size:11px">(Toi)</span>':isHost?' <span style="color:#37c24a;font-size:11px">Hôte</span>':''}</div>`;
+        });
+        gBox.innerHTML = html;
+      };
 
       joinBtn.onclick = async () => {
-        const code = input.value.trim().toUpperCase();
-        if (code.length !== 4) { st.textContent = 'Le code doit faire 4 caractères.'; return; }
+        const code   = input.value.trim().toUpperCase();
+        const pseudo = content.querySelector('#g-pseudo').value.trim() || 'Joueur';
+        if (code.length !== 4) { st.textContent = 'Le code doit faire 4 lettres.'; return; }
         joinBtn.disabled = true;
         st.textContent = `Connexion au salon ${code}...`;
-
         try {
           guestPeer = new PeerClient();
-          const info = await guestPeer.connect(code);
-          st.innerHTML = `<b style="color:#37c24a">Connecté !</b> En attente du choix d'arène de l'hôte...`;
+          guestPeer.pseudo = pseudo;
+          const info = await guestPeer.connect(code, pseudo);
+          myId = info.localId;
+          st.innerHTML = `<b style="color:#37c24a">✅ Connecté !</b> En attente du lancement par l'hôte...`;
           joinBtn.style.display = 'none';
-          input.style.display = 'none';
+          input.style.display   = 'none';
+          content.querySelector('#g-pseudo').style.display = 'none';
+          renderPlayers();
+
+          guestPeer.on('peerjoin',      renderPlayers);
+          guestPeer.on('peerleave',     renderPlayers);
+          guestPeer.on('pseudo_update', renderPlayers);
 
           guestPeer.on('msg', (m) => {
             const d = m.d || m;
+            // Lancement de partie envoyé via server 'start'
+            if (d.t === 'start') {
+              const playerIds = d.ids || [0, myId];
+              this.startVersusP2P(guestPeer, myId, d.arenaIdx || 0, d.playerCount || 2, playerIds);
+            }
             if (d.t === 'arena') {
-              this.startVersusP2P(guestPeer, info.localId, d.i, d.playerCount || 2, d.ids);
-            } else if (d.t === 'tournament_match') {
-              this.startVersusP2P(guestPeer, d.localId, d.arenaIdx, 2, d.ids);
+              this.startVersusP2P(guestPeer, myId, d.i, d.playerCount || 2, d.ids || [0, myId]);
             }
           });
 
-          content.insertAdjacentHTML('beforeend', `<div id="guest-players-box" style="margin-top:14px;display:flex;flex-direction:column;gap:5px"></div>`);
-          const gBox = content.querySelector('#guest-players-box');
-          const renderGuestPlayers = () => {
-            if (!guestPeer) return;
-            gBox.innerHTML = '<div style="font-size:12px;color:#7fc6ff;font-weight:bold;margin-bottom:6px">Joueurs dans le salon :</div>';
-            guestPeer.pseudos.forEach((pseudo, pid) => {
-               const pName = escapeHtml(pseudo);
-               const isMe = pid === info.localId;
-               const isHost = pid === 0;
-               const icon = isHost ? '👑' : '👤';
-               gBox.innerHTML += `<div style="padding:6px;background:${isMe?'rgba(255,210,59,0.1)':'rgba(127,198,255,0.1)'};border:1px solid ${isMe?'#ffd23b':'#334'};border-radius:5px;font-size:13px">${icon} <b>${pName}</b> ${isMe?'(Vous)':isHost?'- Hôte':''}</div>`;
-            });
-          };
-          renderGuestPlayers();
-          guestPeer.on('pseudo_update', renderGuestPlayers);
-          guestPeer.on('peerjoin', renderGuestPlayers);
-          guestPeer.on('peerleave', renderGuestPlayers);
-
         } catch (err) {
-          st.textContent = `Échec de connexion: ${err.message}`;
+          st.textContent = 'Erreur : ' + err.message;
           joinBtn.disabled = false;
         }
       };
@@ -898,13 +919,9 @@ class Game {
     p.querySelector('#tab-g').onclick = showGuest;
     p.querySelector('#back').onclick  = () => { cleanUp(); this.showVersusMenu(); };
 
-    // Auto-join guest si ?room= dans l'URL
+    // Auto basculer en guest si ?room= dans l'URL
     const urlRoom = new URLSearchParams(window.location.search).get('room');
-    if (urlRoom && urlRoom.length === 4) {
-      showGuest();
-    } else {
-      showHost();
-    }
+    if (urlRoom && urlRoom.length === 4) showGuest(); else showHost();
   }
 
   // ---- Selection arene P2P (host annonce aux guests) ----
@@ -920,14 +937,15 @@ class Game {
     pp.querySelectorAll('.lvl-card').forEach(card => {
       card.onclick = () => {
         const i = +card.dataset.i;
+        const botCount = playerIds.filter(pid => typeof pid === 'string' && pid.startsWith('AI_')).length;
         if (tournament) {
           this._tournamentBracket = this._mkBracket(playerIds);
+          // Annoncer le lancement du tournoi via le serveur
+          if (host.startGame) host.startGame(i, botCount, true);
           this.showTournamentBracket(host, playerIds, i);
         } else {
-          playerIds.forEach((pid, idx) => {
-            if (pid === 0 || typeof pid === 'string') return;
-            host.sendTo(pid, { t: 'relay', d: { t: 'arena', i, playerCount: n, guestId: idx, ids: playerIds } });
-          });
+          // Annoncer l'arène à tous les guests via le serveur relay
+          if (host.startGame) host.startGame(i, botCount, false);
           this.startVersusP2P(host, 0, i, n, playerIds);
         }
       };
