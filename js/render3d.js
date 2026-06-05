@@ -4,7 +4,10 @@
 import { TILE, VIEW_W, VIEW_H } from './core.js';
 import { tileCanvas } from './art.js';
 
-const THREE_URL = 'https://unpkg.com/three@0.160.0/build/three.module.js';
+// Three.js est livré EN LOCAL (js/vendor/) pour un fonctionnement 100% hors-ligne.
+// On tente d'abord la copie locale ; repli sur le CDN si elle manque (ex. dev).
+const THREE_LOCAL = new URL('./vendor/three.module.js', import.meta.url).href;
+const THREE_CDN = 'https://unpkg.com/three@0.160.0/build/three.module.js';
 let THREE = null;
 let R = null;          // état du renderer
 let failed = false;
@@ -110,7 +113,8 @@ export async function ensure3D() {
   if (R) return true;
   if (failed) return false;
   try {
-    THREE = await import(/* @vite-ignore */ THREE_URL);
+    try { THREE = await import(/* @vite-ignore */ THREE_LOCAL); }
+    catch { THREE = await import(/* @vite-ignore */ THREE_CDN); } // repli réseau
     R = buildRenderer();
     return true;
   } catch (e) {

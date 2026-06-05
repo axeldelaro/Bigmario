@@ -1,6 +1,6 @@
 // sw.js — service worker: met le jeu en cache pour une utilisation hors-ligne.
 // Incrémente CACHE à chaque mise à jour des fichiers pour forcer le rafraîchissement.
-const CACHE = 'bigmario-v26';
+const CACHE = 'bigmario-v27';
 const ASSETS = [
   './',
   './index.html',
@@ -26,11 +26,20 @@ const ASSETS = [
   './js/net.js',
   './js/leaderboard.js',
   './js/ghost.js',
+  './js/share.js',
+  './js/medals.js',
+  './js/achievements.js',
   './js/render3d.js',
+  './js/vendor/three.module.js',
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // Mise en cache tolérante : un asset manquant ne casse pas tout le hors-ligne.
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => Promise.all(ASSETS.map((u) => c.add(u).catch((err) => console.warn('SW: non mis en cache', u, err)))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
