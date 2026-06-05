@@ -12,6 +12,7 @@ import { ReplayScene } from './scene_replay.js';
 import { EditorScene } from './scene_editor.js';
 import { WORLDS, ARENAS, MINIGAMES } from './levels.js';
 import { NetClient } from './net.js';
+import { PeerClient } from './peerclient.js';
 import { ensure3D, is3DReady, renderScene, resize3D, get3DCanvas } from './render3d.js';
 import { Leaderboard, fmtTime } from './leaderboard.js';
 import { GhostStore } from './ghost.js';
@@ -575,19 +576,146 @@ class Game {
       <div class="menu-list">
         <button class="btn" id="m-bot">🤖 Contre l'IA</button>
         <button class="btn" id="m-rival">🏁 Contre un Fantôme rival</button>
-        <button class="btn secondary" id="m-local">👥 Local (2 joueurs)</button>
-        <button class="btn secondary" id="m-online">🌐 En ligne</button>
+        <button class="btn secondary" id="m-local">🎹 Même clavier — 2 joueurs sur cet écran</button>
+        <button class="btn secondary" id="m-p2p">📡 2 PC / LAN — sans serveur (P2P)</button>
+        <button class="btn secondary" id="m-online">🌐 2 PC en ligne (avec serveur)</button>
         <button class="btn secondary" id="m-coop">🤝 Co-op en ligne</button>
         <button class="btn ghost" id="m-back">← Retour</button>
       </div>
+      <p class="hint" style="margin-top:8px">
+        🎹 = 1 seul ordinateur, clavier partagé &nbsp;|&nbsp;
+        📡 = 2 PC, aucun serveur requis &nbsp;|&nbsp;
+        🌐 = 2 PC, via un serveur Render
+      </p>
     `);
     this._coopMode = false;
-    p.querySelector('#m-bot').onclick = () => { resumeAudio(); this.showDifficultyPicker('bot'); };
-    p.querySelector('#m-rival').onclick = () => { resumeAudio(); this.showDifficultyPicker('rival'); };
-    p.querySelector('#m-local').onclick = () => this.showArenaSelect('local');
+    p.querySelector('#m-bot').onclick    = () => { resumeAudio(); this.showDifficultyPicker('bot'); };
+    p.querySelector('#m-rival').onclick  = () => { resumeAudio(); this.showDifficultyPicker('rival'); };
+    p.querySelector('#m-local').onclick  = () => this.showLocalHelp();
+    p.querySelector('#m-p2p').onclick    = () => { resumeAudio(); this.showP2P(); };
     p.querySelector('#m-online').onclick = () => this.showOnline();
-    p.querySelector('#m-coop').onclick = () => { this._coopMode = true; this.showOnline(); };
-    p.querySelector('#m-back').onclick = () => this.showTitle();
+    p.querySelector('#m-coop').onclick   = () => { this._coopMode = true; this.showOnline(); };
+    p.querySelector('#m-back').onclick   = () => this.showTitle();
+  }
+
+  // Explique les controles local avant de choisir l'arene
+  showLocalHelp() {
+    resumeAudio();
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:28px">🎹 MODE LOCAL</span><span class="sub">MEME CLAVIER, MEME ECRAN</span></div>
+      <p class="hint">Les 2 joueurs jouent sur <b>le meme ordinateur</b> avec un clavier partage.</p>
+      <table style="margin:10px auto;border-collapse:collapse;font-size:13px;text-align:center">
+        <tr style="background:#1a2a3a">
+          <th style="padding:6px 14px;color:#7fc6ff">JOUEUR 1</th>
+          <th style="padding:6px 14px;color:#37c24a">JOUEUR 2</th>
+        </tr>
+        <tr><td style="padding:5px 14px">← → &nbsp; Fleches / ZQSD</td><td style="padding:5px 14px">F / H &nbsp; (gauche / droite)</td></tr>
+        <tr><td>Saut : Espace / W / K</td><td>Saut : T / Y</td></tr>
+        <tr><td>Feu : J / Shift / L</td><td>Feu : U</td></tr>
+      </table>
+      <div class="menu-list" style="margin-top:12px">
+        <button class="btn" id="go">🎮 Choisir l'arene</button>
+        <button class="btn ghost" id="back">← Retour</button>
+      </div>
+    `);
+    p.querySelector('#go').onclick   = () => this.showArenaSelect('local');
+    p.querySelector('#back').onclick = () => this.showVersusMenu();
+  }
+
+  // Mode P2P direct WebRTC : 2 PC sans aucun serveur
+  showP2P() {
+    const mkStatus = (msg, col = '#aaa') => `<span style="color:${col}">${msg}</span>`;
+    let tab = 'host'; // 'host' | 'guest'
+    const render = () => {
+      const p = this.panel(`
+        <div class="title"><span class="big" style="font-size:26px">📡 P2P DIRECT</span><span class="sub">SANS SERVEUR</span></div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <button class="btn ${tab==='host'?'':'ghost'}" id="tab-host" style="flex:1">🏠 Heberger</button>
+          <button class="btn ${tab==='guest'?'':'ghost'}" id="tab-guest" style="flex:1">🔗 Rejoindre</button>
+        </div>
+        ${tab === 'host' ? `
+          <p class="hint">1. Clique <b>Generer</b> — tu obtiens un code.<br>
+             2. Envoie ce code a ton ami (message, chat...).<br>
+             3. Ton ami colle le code dans l'onglet Rejoindre et te renvoie son code de reponse.<br>
+             4. Colle le code de reponse ici et clique Connecter.</p>
+          <div class="menu-list" style="gap:6px">
+            <button class="btn" id="gen">⚙️ Generer mon code d'offre</button>
+            <textarea id="offer-out" rows="3" readonly placeholder="Ton code apparait ici..." style="width:100%;font-size:11px;font-family:monospace;resize:none"></textarea>
+            <button class="btn ghost" id="copy-offer" style="display:none">📋 Copier le code</button>
+            <label style="font-size:12px;margin-top:6px">Code de reponse de ton ami :</label>
+            <textarea id="answer-in" rows="3" placeholder="Colle ici..." style="width:100%;font-size:11px;font-family:monospace;resize:none"></textarea>
+            <button class="btn secondary" id="accept">✅ Connecter</button>
+          </div>
+        ` : `
+          <p class="hint">1. Ton ami clique Heberger → Generer et te donne son code.<br>
+             2. Colle-le ci-dessous et clique Generer ma reponse.<br>
+             3. Envoie le code de reponse a ton ami.<br>
+             4. La connexion s'etablit automatiquement !</p>
+          <div class="menu-list" style="gap:6px">
+            <label style="font-size:12px">Code d'offre de ton ami :</label>
+            <textarea id="offer-in" rows="3" placeholder="Colle ici..." style="width:100%;font-size:11px;font-family:monospace;resize:none"></textarea>
+            <button class="btn" id="answer">⚙️ Generer ma reponse</button>
+            <textarea id="answer-out" rows="3" readonly placeholder="Ton code de reponse apparait ici..." style="width:100%;font-size:11px;font-family:monospace;resize:none"></textarea>
+            <button class="btn ghost" id="copy-answer" style="display:none">📋 Copier la reponse</button>
+          </div>
+        `}
+        <div class="status" id="st" style="margin-top:8px"></div>
+        <div class="row" style="margin-top:10px"><button class="btn ghost" id="back">← Retour</button></div>
+      `);
+
+      p.querySelector('#tab-host').onclick  = () => { tab = 'host';  render(); };
+      p.querySelector('#tab-guest').onclick = () => { tab = 'guest'; render(); };
+      p.querySelector('#back').onclick      = () => this.showVersusMenu();
+      const st = p.querySelector('#st');
+
+      if (tab === 'host') {
+        let peer = null;
+        p.querySelector('#gen').onclick = async () => {
+          st.innerHTML = 'Generation du code... (max 5s)';
+          try {
+            peer = new PeerClient();
+            const offerCode = await peer.createOffer();
+            p.querySelector('#offer-out').value = offerCode;
+            const cb = p.querySelector('#copy-offer');
+            cb.style.display = '';
+            cb.onclick = () => navigator.clipboard?.writeText(offerCode).then(() => { st.textContent = 'Code copie !'; });
+            st.innerHTML = 'Code genere. Envoie-le a ton ami, puis colle sa reponse.';
+          } catch(e) { st.textContent = 'Erreur : ' + e.message; }
+        };
+        p.querySelector('#accept').onclick = async () => {
+          if (!peer) { st.textContent = 'Genere un code d\'offre d\'abord.'; return; }
+          const ans = p.querySelector('#answer-in').value.trim();
+          if (!ans) { st.textContent = 'Colle le code de reponse de ton ami.'; return; }
+          st.textContent = 'Connexion en cours...';
+          try {
+            const info = await peer.acceptAnswer(ans);
+            st.innerHTML = '<b style="color:#37c24a">Connecte !</b> Choix de l\'arene...';
+            setTimeout(() => this.showArenaSelect('online', peer, 0), 700);
+          } catch(e) { st.textContent = 'Echec : ' + (e.message || 'timeout'); }
+        };
+      } else {
+        let peer = null;
+        p.querySelector('#answer').onclick = async () => {
+          const offer = p.querySelector('#offer-in').value.trim();
+          if (!offer) { st.textContent = 'Colle le code d\'offre de ton ami.'; return; }
+          st.textContent = 'Generation de la reponse...';
+          try {
+            peer = new PeerClient();
+            const { answerCode, waitForConnection } = await peer.answerOffer(offer);
+            p.querySelector('#answer-out').value = answerCode;
+            const cb = p.querySelector('#copy-answer');
+            cb.style.display = '';
+            cb.onclick = () => navigator.clipboard?.writeText(answerCode).then(() => { st.textContent = 'Code copie !'; });
+            st.innerHTML = 'Envoie ce code a ton ami. Connexion en attente...';
+            waitForConnection().then(() => {
+              st.innerHTML = '<b style="color:#37c24a">Connecte !</b> En attente du choix de l\'arene...';
+              peer.on('msg', (m) => { const d = m.d || m; if (d.t === 'arena') this.startVersusOnline(peer, 1, d.i); });
+            }).catch(e => { st.textContent = 'Timeout : ton ami n\'a pas valide. Recommence.'; });
+          } catch(e) { st.textContent = 'Code invalide : ' + e.message; }
+        };
+      }
+    };
+    render();
   }
 
   // ---- Mini-jeux : courses à la collecte contre l'IA ----
