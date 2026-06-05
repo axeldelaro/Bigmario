@@ -262,12 +262,18 @@ class Game {
       <div class="row" style="margin-top:10px"><button class="btn ghost" id="back">← Retour</button></div>`);
     const opts = p.querySelector('#opts'), st = p.querySelector('#st');
     const add = (label, cls, cb) => { const b = document.createElement('button'); b.className = 'btn ' + (cls || ''); b.innerHTML = label; b.onclick = cb; opts.appendChild(b); };
-    add('🚫 Aucun fantôme', 'ghost', () => this.startSpeedrun(worldIdx, levelIdx, { none: true }));
-    if (pb != null) add(`🔵 Ton record · ${fmtTime(pb)}`, 'secondary', () => this.startSpeedrun(worldIdx, levelIdx, {}));
-    const list = await Leaderboard.fetchGhostList(levelId);
-    st.textContent = list.length ? 'Choisis qui affronter :' : (Leaderboard.apiBase() ? 'Aucun fantôme en ligne pour ce niveau.' : 'Serveur non configuré (fantômes en ligne indispo).');
     const medal = ['🥇', '🥈', '🥉'];
-    list.forEach((g) => add(`${medal[g.rank - 1] || '🏅'} ${escapeHtml(g.name)} · ${fmtTime(g.ms)}`, '', () => this.startSpeedrun(worldIdx, levelIdx, { onlineRank: g.rank, onlineName: g.name })));
+    add('🚫 Aucun fantôme', 'ghost', () => this.startSpeedrun(worldIdx, levelIdx, { none: true }));
+    // top-3 LOCAL (hors-ligne) — tes meilleurs runs nommés
+    const local = GhostStore.localTop(levelId);
+    local.forEach((g) => add(`${medal[g.rank - 1] || '🏅'} ${escapeHtml(g.name)} · ${fmtTime(g.ms)}`, 'secondary', () => this.startSpeedrun(worldIdx, levelIdx, { localRank: g.rank })));
+    if (!local.length && pb != null) add(`🔵 Ton record · ${fmtTime(pb)}`, 'secondary', () => this.startSpeedrun(worldIdx, levelIdx, {}));
+    st.textContent = local.length ? 'Choisis qui affronter :' : 'Finis ce niveau pour créer des fantômes à affronter.';
+    // top-3 EN LIGNE (seulement si un serveur est configuré)
+    if (Leaderboard.apiBase()) {
+      const list = await Leaderboard.fetchGhostList(levelId);
+      list.forEach((g) => add(`🌐 ${medal[g.rank - 1] || '🏅'} ${escapeHtml(g.name)} · ${fmtTime(g.ms)}`, '', () => this.startSpeedrun(worldIdx, levelIdx, { onlineRank: g.rank })));
+    }
     p.querySelector('#back').onclick = () => this.showMap('speedrun');
   }
 
@@ -278,11 +284,18 @@ class Game {
     this.checkOrientation();
     const levelId = `${worldIdx}-${levelIdx}`;
     if (pick.none) { this.scene.ghosts = []; return; } // course sans fantôme
+    if (pick.localRank) {
+      // fantôme LOCAL choisi (top-3 hors-ligne) — on l'affiche seul (doré, nommé)
+      const g = GhostStore.localTopData(levelId, pick.localRank);
+      this.scene.ghosts = [];
+      if (g) this.scene.addGhost(g.data, { glow: '#ffd23b', label: (g.name || 'TOI').slice(0, 10) });
+      return;
+    }
     // fantôme d'ami chargé localement (mauve)
     const fr = GhostStore.load(`fghost.${levelId}`);
     if (fr) this.scene.addGhost(fr, { glow: '#b06ad8', label: 'AMI' });
-    // fantôme en ligne choisi (par rang dans le top 3) — défaut: le record (#1)
-    Leaderboard.fetchGhost(levelId, pick.onlineRank || 1).then((res) => {
+    // fantôme en ligne choisi (par rang dans le top 3) — seulement si serveur configuré
+    if (Leaderboard.apiBase()) Leaderboard.fetchGhost(levelId, pick.onlineRank || 1).then((res) => {
       const s = this.scene;
       if (res && res.data && s && s.speedrun && s.worldIdx === worldIdx && s.levelIdx === levelIdx) {
         s.addGhost(res.data, { glow: '#ffd23b', label: (res.name || 'WR').slice(0, 8) });
@@ -627,6 +640,7 @@ class Game {
         <button class="btn secondary" id="friend">👥 Fantôme d'ami / Replay</button>
         <button class="btn secondary" id="mute">${isMuted() ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'}</button>
         <button class="btn secondary" id="render">${this.use3D ? '🧊 Rendu: 3D' : '🟦 Rendu: 2D'}${is3DReady() ? '' : ' (3D indispo.)'}</button>
+        <button class="btn secondary" id="pseudo">✏ Pseudo : ${escapeHtml(Save.get('playerName', 'MOI'))}</button>
         <button class="btn secondary" id="motion">${this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'}</button>
         <button class="btn secondary" id="touch">🎮 Boutons tactiles</button>
         ${this._installPrompt ? '<button class="btn" id="install">📲 Installer l\'appli</button>' : ''}
@@ -640,6 +654,7 @@ class Game {
     p.querySelector('#friend').onclick = () => this.showFriend();
     p.querySelector('#mute').onclick = (e) => { const m = toggleMute(); Save.set('muted', m); e.target.textContent = m ? '🔇 Son: COUPÉ' : '🔊 Son: ACTIVÉ'; };
     p.querySelector('#render').onclick = (e) => { this.use3D = !this.use3D; Save.set('render3d', this.use3D); e.target.textContent = (this.use3D ? '🧊 Rendu: 3D' : '🟦 Rendu: 2D') + (is3DReady() ? '' : ' (3D indispo.)'); };
+    p.querySelector('#pseudo').onclick = (e) => { const n = (prompt('Ton pseudo (nom de tes fantômes) :', Save.get('playerName', 'MOI')) || '').trim().slice(0, 12); if (n) { Save.set('playerName', n); e.target.textContent = '✏ Pseudo : ' + n; } };
     p.querySelector('#motion').onclick = (e) => { this.reduceMotion = !this.reduceMotion; Save.set('reduceMotion', this.reduceMotion); e.target.textContent = this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'; };
     p.querySelector('#touch').onclick = () => this.showTouchSettings();
     const ib = p.querySelector('#install');

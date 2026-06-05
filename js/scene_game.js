@@ -1,6 +1,6 @@
 // scene_game.js — scène solo: niveau, joueur, ennemis, objets, boss, caméra, HUD,
 // gemmes, plateformes mobiles, checkpoints, ressorts, screen-shake, hit-stop.
-import { VIEW_W, VIEW_H, TILE, clamp, aabb, rand } from './core.js';
+import { VIEW_W, VIEW_H, TILE, clamp, aabb, rand, Save } from './core.js';
 import { Level } from './level.js';
 import { Player, Enemy, Boss, Coin, Gem, MovingPlatform, EnemyShot, PowerUp, Fireball, Particle, FloatText } from './entities.js';
 import { SFX, playMusic } from './audio.js';
@@ -19,10 +19,11 @@ export class GameScene {
     this.combo = 0; this.lookAhead = 0; this.warpCd = 0;
     this.recorder = new GhostRecorder();        // toujours actif -> fantôme auto à chaque niveau
     this.ghosts = []; // [{g:GhostPlayer, glow, label}]
-    // affiche le fantôme (PB) dans TOUS les modes solo (sauf marathon/custom où le chrono cumule)
+    // affiche le meilleur fantôme LOCAL dans tous les modes solo (sauf marathon/custom)
     if (!this.marathon && !this.customDef) {
-      const data = GhostStore.load(`${worldIdx}-${levelIdx}`);
-      if (data) { const g = new GhostPlayer(data); if (g.valid) this.ghosts.push({ g, glow: '#46d8ff', label: 'PB' }); }
+      const top = GhostStore.localTopData(`${worldIdx}-${levelIdx}`, 1);
+      const data = top ? top.data : GhostStore.load(`${worldIdx}-${levelIdx}`);
+      if (data) { const g = new GhostPlayer(data); if (g.valid) this.ghosts.push({ g, glow: '#46d8ff', label: (top && top.name) || 'PB' }); }
     }
     this.cam = { x: 0, y: 0 };
     this.particles = []; this.floats = []; this.fireballs = []; this.hazards = [];
@@ -132,7 +133,10 @@ export class GameScene {
   autoSaveGhost() {
     if (this.customDef || !this.recorder) return;
     const d = this.recorder.data();
-    if (d && d.f && d.f.length >= 6) GhostStore.save(`${this.worldIdx}-${this.levelIdx}`, d);
+    if (!(d && d.f && d.f.length >= 6)) return;
+    const id = `${this.worldIdx}-${this.levelIdx}`;
+    GhostStore.save(id, d); // dernier run (compat replay)
+    GhostStore.addLocalTop(id, Save.get('playerName', 'MOI'), this.runMs, d); // top-3 local nommé
   }
 
   finishRun() {
