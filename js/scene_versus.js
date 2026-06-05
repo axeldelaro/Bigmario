@@ -84,6 +84,21 @@ export class VersusScene {
     if (ev.kind === 'question') { this.items.push(new PowerUp(ev.tx * TILE + 1, ev.ty * TILE - 4, Math.random() < 0.5 ? 'mushroom' : 'flower')); SFX.bump(); }
   }
   burst(x, y, col, n = 8) { for (let i = 0; i < n; i++) this.particles.push(new Particle(x, y, rand(-120,120), rand(-120,20), col, rand(0.3,0.7), 2)); }
+  addShake(m) { /* vibration légère – optionnel en versus */ }
+  dust(x, y, n = 3) { for (let i = 0; i < n; i++) this.particles.push(new Particle(x, y, rand(-40,40), rand(-25,-5), '#ddd', rand(0.2,0.4), 2, 150)); }
+
+  // Écrasement piqué : déclenche les blocs juste sous les pieds (comme scene_game)
+  onPoundLand(player) {
+    const feetTy = Math.floor((player.y + player.h + 2) / TILE);
+    const x0 = Math.floor((player.x + 2) / TILE);
+    const x1 = Math.floor((player.x + player.w - 3) / TILE);
+    let hit = false;
+    for (let tx = x0; tx <= x1; tx++) {
+      const ev = this.level.hitBlock(tx, feetTy);
+      if (ev) { this.onBlockHit(ev, player); hit = true; }
+    }
+    this.burst(player.x + player.w / 2, player.y + player.h, hit ? '#ffd23b' : '#ccc', hit ? 12 : 4);
+  }
 
   inputFor(idx) {
     // joueur 1 piloté par l'IA en mode bot, ou en mode rival sans fantôme enregistré
@@ -300,5 +315,18 @@ export class VersusScene {
     }
     c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(String(this.timeLeft).padStart(2,'0'), VIEW_W/2, 11);
     c.textAlign = 'left';
+
+    // Légende des contrôles en bas (mode local 2 joueurs)
+    if (this.mode === 'local') {
+      c.globalAlpha = 0.6;
+      c.fillStyle = '#000'; c.fillRect(0, VIEW_H - 12, VIEW_W, 12);
+      c.globalAlpha = 1;
+      c.font = '7px monospace';
+      c.fillStyle = '#7fc6ff'; c.textAlign = 'left';
+      c.fillText('J1: Fleches/ZQSD  Saut:Espace  Feu:J', 4, VIEW_H - 3);
+      c.fillStyle = '#37c24a'; c.textAlign = 'right';
+      c.fillText('J2: F/H/T/G  Saut:T/Y  Feu:U', VIEW_W - 4, VIEW_H - 3);
+      c.textAlign = 'left';
+    }
   }
 }

@@ -123,10 +123,12 @@ export class Input {
         state[act].prev = state[act].down;
         state[act].down = down;
 
-        // Si la touche est maintenue (held) depuis la frame précédente, le
-        // compteur de presses a déjà été consommé ; on le remet à 0 pour éviter
-        // qu'un maintien continu génère des justPressed répétés.
-        if (down && state[act].prev) cnt[act] = 0;
+        // NOTE : on ne remet PAS cnt à 0 ici même si la touche est maintenue.
+        // Raison : fire (tir) = ShiftLeft (run) + KeyJ (feu) mappés au MÊME
+        // slot « fire ». Si on efface le compteur dès que ShiftLeft est tenu,
+        // presser J pendant la course effacerait immédiatement son incrément →
+        // la boule de feu ne partirait jamais. Le compteur est autorégulatoire :
+        // il ne monte que sur keydown (non-répété) et descend sur justPressed().
 
         // Manette / tactile : simuler un compte de presse sur le front montant
         if (down && !state[act].prev && gp && gp[act] && cnt[act] === 0) cnt[act] = 1;

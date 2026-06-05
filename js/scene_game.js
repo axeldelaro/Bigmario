@@ -129,6 +129,24 @@ export class GameScene {
   onBossDefeated() { if (this.pendingClear <= 0) this.pendingClear = 1.6; this.addShake(8); this.game.stat?.('boss'); }
   onPlayerDeath() { if (this.state === 'play') { this.state = 'dying'; this.stateT = 0; this.freeze = 0.12; this.addShake(5); } }
 
+  // Écrasement piqué (slam) : déclenche les blocs juste sous les pieds du joueur,
+  // comme s'il les frappait par en dessous — ouvre les ? et casse les briques (si grand).
+  onPoundLand(player) {
+    const feetTy = Math.floor((player.y + player.h + 2) / TILE); // tuile juste sous les pieds
+    const x0 = Math.floor((player.x + 2) / TILE);
+    const x1 = Math.floor((player.x + player.w - 3) / TILE);
+    let hit = false;
+    for (let tx = x0; tx <= x1; tx++) {
+      const ev = this.level.hitBlock(tx, feetTy);
+      if (ev) { this.onBlockHit(ev, player); hit = true; }
+    }
+    // impact visuel + retour haptique même sans bloc
+    this.addShake(hit ? 6 : 3);
+    this.burst(player.x + player.w / 2, player.y + player.h, hit ? '#ffd23b' : '#ccc', hit ? 14 : 6, 180);
+    if (hit) this.freeze = Math.max(this.freeze, 0.04); // mini hitstop
+  }
+
+
   // fantôme enregistré automatiquement à chaque fin de niveau (sauf custom)
   autoSaveGhost() {
     if (this.customDef || !this.recorder) return;

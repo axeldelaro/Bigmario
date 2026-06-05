@@ -736,51 +736,76 @@ class Game {
   }
 
   showOnline() {
-    const url = Save.get('serverUrl', '');
-    const room = Save.get('room', 'arene1');
+    const CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    const genCode = () => { let c = ''; for (let i = 0; i < 4; i++) c += CHARS[(Math.random() * CHARS.length) | 0]; return c; };
+    const savedUrl  = Save.get('serverUrl', '');
+    const savedRoom = Save.get('room', '') || genCode();
     const p = this.panel(`
-      <div class="title"><span class="big" style="font-size:30px">VERSUS EN LIGNE</span></div>
-      <div class="field"><label>ADRESSE DU SERVEUR (wss://...)</label>
-        <input id="srv" placeholder="wss://mon-serveur.onrender.com" value="${url}"></div>
-      <div class="field"><label>CODE DE SALON (partage-le à ton ami)</label>
-        <input id="room" value="${room}"></div>
+      <div class="title"><span class="big" style="font-size:28px">🌐 VERSUS EN LIGNE</span></div>
+      <div class="field">
+        <label>TON CODE DE SALON</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="room" value="${escapeHtml(savedRoom)}"
+            style="font-size:20px;font-weight:900;letter-spacing:6px;text-transform:uppercase;text-align:center;flex:1">
+          <button class="btn ghost" id="newcode" style="padding:6px 10px" title="Nouveau code">🎲</button>
+          <button class="btn ghost" id="copy"    style="padding:6px 10px" title="Copier le code">📋</button>
+        </div>
+        <small class="hint">Donne ce code a ton ami — il devra entrer le meme code.</small>
+      </div>
+      <div class="field">
+        <label>ADRESSE DU SERVEUR (wss://…)</label>
+        <input id="srv" placeholder="wss://bigmario.onrender.com" value="${escapeHtml(savedUrl)}">
+        <small class="hint">Deploie le serveur gratuitement depuis GitHub (voir README) puis colle ici le lien wss://.</small>
+      </div>
       <div class="status" id="st"></div>
       <div class="menu-list">
-        <button class="btn" id="connect">🔌 Rejoindre le salon</button>
+        <button class="btn" id="connect">🔌 Rejoindre / Heberger</button>
         <button class="btn ghost" id="back">← Retour</button>
       </div>
-      <p class="hint">Besoin d'un serveur gratuit ? Voir <span class="badge">README</span> : déploiement en 1 clic sur Render. Sans serveur, joue en <b>Versus local</b>.</p>
     `);
-    const st = p.querySelector('#st');
+    const st     = p.querySelector('#st');
+    const roomIn = p.querySelector('#room');
+    const srvIn  = p.querySelector('#srv');
+    p.querySelector('#newcode').onclick = () => { roomIn.value = genCode(); };
+    p.querySelector('#copy').onclick = () => {
+      const code = roomIn.value.trim().toUpperCase();
+      navigator.clipboard?.writeText(code)
+        .then(() => { st.textContent = `Code copie : ${code}`; setTimeout(() => { st.textContent = ''; }, 2000); })
+        .catch(() => { st.textContent = `Code : ${code}  (copie manuelle)`; });
+    };
     p.querySelector('#back').onclick = () => this.showVersusMenu();
     p.querySelector('#connect').onclick = async () => {
-      const u = p.querySelector('#srv').value.trim();
-      const r = p.querySelector('#room').value.trim() || 'arene1';
-      if (!u) { st.textContent = '⚠ Entre l’adresse du serveur.'; return; }
-      Save.set('room', r);
-      st.textContent = 'Connexion…';
+      const u = srvIn.value.trim();
+      const r = (roomIn.value.trim().toUpperCase() || genCode()).slice(0, 16);
+      if (!u) { st.textContent = "Entrez l'adresse du serveur (wss://...)."; return; }
+      Save.set('serverUrl', u); Save.set('room', r);
+      st.textContent = 'Connexion en cours...';
       const net = new NetClient();
       try {
         const info = await net.connect(u, r);
-        st.innerHTML = `Connecté en tant que <b>${info.role === 'host' ? 'Hôte (J1)' : 'Invité (J2)'}</b>.`;
+        const roleLabel = info.role === 'host' ? 'Hote — J1 (gauche)' : 'Invite — J2 (droite)';
+        st.innerHTML = `<b>${roleLabel}</b> — salon : <b>${r}</b>`;
         const localId = info.role === 'host' ? 0 : 1;
         if (info.role === 'host') {
-          st.innerHTML += '<br>En attente de l’adversaire…';
-          net.on('peerjoin', () => { st.innerHTML += '<br>Adversaire connecté ! Choix de l’arène…'; setTimeout(() => this.showArenaSelect('online', net, localId), 600); });
-          // si déjà 2 joueurs présents
-          if (info.players >= 2) this.showArenaSelect('online', net, localId);
+          st.innerHTML += `<br>En attente de votre adversaire (code : <b>${r}</b>)...`;
+          const proceed = () => {
+            st.innerHTML += '<br>Adversaire connecte ! Selection de l\'arene...';
+            setTimeout(() => this.showArenaSelect('online', net, localId), 600);
+          };
+          net.on('peerjoin', proceed);
+          if (info.players >= 2) proceed();
         } else {
-          // invité: attend que l'hôte choisisse l'arène
-          st.innerHTML += '<br>En attente du choix de l’hôte…';
+          st.innerHTML += "<br>En attente du choix d'arene de l'hote...";
           net.on('msg', (m) => { const d = m.d || m; if (d.t === 'arena') { this._coopMode = !!d.coop; this.startVersusOnline(net, localId, d.i); } });
         }
-        // l'hôte annonce l'arène via showArenaSelect (on patche startVersusOnline pour host)
         if (info.role === 'host') this._hostNet = net;
       } catch (e) {
-        st.textContent = '❌ ' + (e.message || 'Connexion impossible') + ' — vérifie l’adresse, ou joue en Versus local.';
+        st.textContent = `Connexion impossible : ${e.message || 'erreur reseau'}. Verifiez l'adresse ou jouez en Versus local.`;
       }
     };
   }
+
+
 
   // ---- Hors-ligne : installation PWA + état du cache + mode local ----
   showOffline() {
