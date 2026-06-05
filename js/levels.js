@@ -6,9 +6,9 @@
 //  p corps de tuyau | P tête de tuyau | ^ pics | = plateforme | o pièce | G arrivée
 //  T ressort | C checkpoint | j gemme cachée | m plateforme mobile (horiz.) | n plateforme mobile (vert.)
 //  S départ joueur | g marcheur | k ennemi à carapace | f volant | z ennemi à pics | O boss
-import { BUILT, ARENAS } from './levelbuild.js';
+import { BUILT, ARENAS, MINIGAMES } from './levelbuild.js';
 
-export { ARENAS };
+export { ARENAS, MINIGAMES };
 
 export const WORLDS = [
   {
@@ -26,6 +26,10 @@ export const WORLDS = [
   {
     name: 'Orage & Gardien Suprême',
     levels: [BUILT.L41, BUILT.L42, BUILT.L43],
+  },
+  {
+    name: 'Cavernes de Cristal',
+    levels: [BUILT.L51, BUILT.L52, BUILT.L53],
   },
 ];
 
