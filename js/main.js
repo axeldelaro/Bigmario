@@ -12,7 +12,7 @@ import { ReplayScene } from './scene_replay.js';
 import { EditorScene } from './scene_editor.js';
 import { WORLDS, ARENAS, MINIGAMES } from './levels.js';
 import { NetClient } from './net.js';
-import { PeerClient, MultiPeerHost } from './netclient.js';
+import { PeerClient, MultiPeerHost, warmupServer } from './netclient.js';
 import { ensure3D, is3DReady, renderScene, resize3D, get3DCanvas } from './render3d.js';
 import { Leaderboard, fmtTime } from './leaderboard.js';
 import { GhostStore } from './ghost.js';
@@ -703,6 +703,7 @@ class Game {
   // ================================================================
   showP2PLobby(tournament = false) {
     resumeAudio();
+    warmupServer(); // réveille le serveur Render en arrière-plan dès l'ouverture
     let hostObj   = null;
     let guestPeer = null;
 
@@ -798,6 +799,7 @@ class Game {
           hostObj = new MultiPeerHost();
           hostObj.pseudo = pseudo;
           hostObj.pseudos.set(0, pseudo);
+          hostObj.onStatus((msg) => { st.textContent = msg; });
           const code = await hostObj.open(maxP, pseudo);
           st.textContent = '';
           createBtn.style.display = 'none';
@@ -884,6 +886,7 @@ class Game {
         try {
           guestPeer = new PeerClient();
           guestPeer.pseudo = pseudo;
+          guestPeer.onStatus((msg) => { st.textContent = msg; });
           const info = await guestPeer.connect(code, pseudo);
           myId = info.localId;
           st.innerHTML = `<b style="color:#37c24a">✅ Connecté !</b> En attente du lancement par l'hôte...`;

@@ -1,15 +1,54 @@
-// netclient.js — Multi-joueurs P2P via PeerJS (topologie étoile, 2-8 joueurs).
-// L'hôte est le hub central : chaque guest s'y connecte individuellement.
-// PeerJS gère le signaling WebRTC (cloud gratuit) ; les données passent ensuite
-// en direct P2P sur le réseau local → faible latence, aucun serveur à configurer.
-//
-// window.Peer est chargé via le CDN PeerJS dans index.html.
+// netclient.js — Multi-joueurs via WebSocket relay (bigmario-relay sur Render).
+// Fiable sur tous les réseaux (WiFi, 4G, box avec AP isolation).
+// Le serveur relay est pré-réchauffé dès l'ouverture du lobby pour éviter
+// le délai de démarrage à froid du plan gratuit Render (~30s).
 
-const PREFIX = 'bigmario-'; // préfixe pour éviter les collisions d'ID PeerJS
+const WS_URL = (() => {
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    return 'ws://localhost:8080';
+  return 'wss://bigmario-relay.onrender.com';
+})();
 
-function genCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ2345679'; // sans O/0/I/1 ambigus
-  return Array.from({ length: 4 }, () => chars[Math.random() * chars.length | 0]).join('');
+const HTTP_URL = WS_URL.replace('wss://', 'https://').replace('ws://', 'http://');
+
+// ── Pré-réveil du serveur (appeler dès l'ouverture du lobby) ──────────────
+export function warmupServer() {
+  fetch(HTTP_URL + '/', { mode: 'no-cors' }).catch(() => {});
+}
+
+// ── Connexion WebSocket avec retry automatique ────────────────────────────
+function wsConnect(onStatus) {
+  return new Promise((res, rej) => {
+    let attempts = 0;
+    const maxAttempts = 5;
+    const tryConnect = () => {
+      attempts++;
+      const ws = new WebSocket(WS_URL);
+      const t = setTimeout(() => {
+        ws.close();
+        if (attempts < maxAttempts) {
+          const wait = Math.min(attempts * 3, 12);
+          onStatus?.(`Serveur en démarrage... tentative ${attempts}/${maxAttempts} (${wait}s)`);
+          setTimeout(tryConnect, wait * 1000);
+        } else {
+          rej(new Error('Serveur inaccessible après ' + maxAttempts + ' tentatives. Relancez dans 1 minute.'));
+        }
+      }, 8000);
+      ws.onopen = () => { clearTimeout(t); res(ws); };
+      ws.onerror = () => {
+        clearTimeout(t);
+        if (attempts < maxAttempts) {
+          const wait = Math.min(attempts * 3, 12);
+          onStatus?.(`Serveur en démarrage... tentative ${attempts}/${maxAttempts} (${wait}s)`);
+          setTimeout(tryConnect, wait * 1000);
+        } else {
+          rej(new Error('Serveur inaccessible. Réessayez dans 1 minute.'));
+        }
+      };
+    };
+    onStatus?.('Connexion au serveur relay...');
+    tryConnect();
+  });
 }
 
 // ==============================================================
@@ -20,124 +59,85 @@ export class MultiPeerHost {
     this.role         = 'host';
     this.localId      = 0;
     this.roomCode     = '';
-    this._peer        = null;
-    this._conns       = new Map();   // guestId → DataConnection
+    this.connected    = true;
     this.connectedIds = [];
     this.handlers     = {};
-    this.pseudos      = new Map();   // id → pseudo
-    this.connected    = true;
-    this.nextId       = 1;
-    // IDs des joueurs pour la partie en cours (fixé au lancement)
-    this._gameIds     = null;
+    this.pseudos      = new Map();
+    this._ws          = null;
+    this._onStatus    = null;
   }
 
-  get connectedCount() { return this._conns.size + 1; } // +1 = hôte
+  get connectedCount() { return this.connectedIds.length + 1; }
   on(ev, fn)   { this.handlers[ev] = fn; return this; }
   _emit(ev, d) { const h = this.handlers[ev]; if (h) h(d); }
+  onStatus(fn) { this._onStatus = fn; return this; }
 
-  // Ouvre la salle → résout avec le code à 4 lettres
-  open(maxPlayers = 8, pseudo = 'Hôte') {
+  async open(maxPlayers = 4, pseudo = 'Hôte') {
     this.pseudo = pseudo;
     this.pseudos.set(0, pseudo);
+    this._ws = await wsConnect(this._onStatus);
     return new Promise((res, rej) => {
-      if (!window.Peer) { rej(new Error('PeerJS non chargé — vérifiez la connexion internet')); return; }
-      const tryCode = (code) => {
-        this.roomCode = code;
-        const p = new window.Peer(PREFIX + code);
-        this._peer = p;
-        p.on('open',  ()  => res(code));
-        p.on('error', (e) => {
-          if (e.type === 'unavailable-id') { p.destroy(); tryCode(genCode()); }
-          else rej(new Error(e.type + (e.message ? ': ' + e.message : '')));
-        });
-        p.on('connection', (conn) => this._accept(conn));
+      this._ws.onmessage = (ev) => {
+        let m; try { m = JSON.parse(ev.data); } catch { return; }
+        if (m.t === 'created') {
+          this.roomCode = m.code;
+          this._onStatus?.('');
+          this._ws.onmessage = (e2) => this._onMsg(e2);
+          res(m.code);
+        } else if (m.t === 'error') {
+          rej(new Error(m.msg));
+        }
       };
-      tryCode(genCode());
+      this._ws.onerror = () => rej(new Error('Erreur WebSocket hôte'));
+      this._ws.onclose = () => { /* géré dans _onMsg */ };
+      this._ws.send(JSON.stringify({ t: 'create', maxPlayers, pseudo }));
     });
   }
 
-  _accept(conn) {
-    // IMPORTANT : allouer l'ID ici, pas dans 'open', pour éviter les doublons
-    const id = this.nextId++;
-
-    conn.on('open', () => {
-      this._conns.set(id, conn);
-      if (!this.connectedIds.includes(id)) this.connectedIds.push(id);
-
-      // 1. Envoyer au guest : son ID + liste des pseudos actuels de tout le salon
-      conn.send({
-        t: 'hello',
-        id,
-        pseudo:  this.pseudo || 'Hôte',
-        pseudos: Array.from(this.pseudos.entries()),
-      });
-
-      // 2. Annoncer aux autres guests qu'un nouveau joueur vient de rejoindre
-      //    (on utilise un pseudo provisoire ; le vrai arrivera via set_pseudo)
-      const joinMsg = { t: 'set_pseudo', from: id, pseudo: 'Joueur ' + (id + 1) };
-      for (const [pid, c] of this._conns)
-        if (pid !== id && c.open) c.send(joinMsg);
-
-      this._emit('peerjoin', { id, total: this.connectedCount });
-    });
-
-    conn.on('data', (m) => {
-      if (m.t === 'relay') {
-        // Relayer à tous les autres guests + émettre localement
-        const out = { t: 'relay', d: m.d, from: id };
-        for (const [pid, c] of this._conns)
-          if (pid !== id && c.open) c.send(out);
-        this._emit('msg', { d: m.d, from: id });
-
-      } else if (m.t === 'set_pseudo') {
-        // Màj du pseudo du guest + propagation à tout le monde
-        this.pseudos.set(id, m.pseudo || 'Joueur ' + (id + 1));
-        const out = { t: 'set_pseudo', from: id, pseudo: this.pseudos.get(id) };
-        for (const [pid, c] of this._conns)
-          if (c.open) c.send(out);     // inclure le guest lui-même pour confirmation
-        this._emit('pseudo_update', { pseudos: this.pseudos });
-      }
-    });
-
-    conn.on('close', () => {
-      this._conns.delete(id);
-      this.connectedIds = this.connectedIds.filter(x => x !== id);
-      this.pseudos.delete(id);
-      this._emit('peerleave', { id });
-    });
-    conn.on('error', (e) => console.warn('[Host] conn error id=' + id + ':', e));
+  _onMsg(ev) {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.t === 'player_joined') {
+      if (!this.connectedIds.includes(m.id)) this.connectedIds.push(m.id);
+      this.pseudos.set(m.id, m.pseudo || ('Joueur ' + (m.id + 1)));
+      this._emit('peerjoin',      { id: m.id, total: this.connectedCount });
+      this._emit('pseudo_update', { pseudos: this.pseudos });
+    }
+    if (m.t === 'player_left') {
+      this.connectedIds = this.connectedIds.filter(x => x !== m.id);
+      this.pseudos.delete(m.id);
+      this._emit('peerleave', { id: m.id });
+    }
+    if (m.t === 'relay')      { this._emit('msg', { d: m.d, from: m.from }); }
+    if (m.t === 'set_pseudo') { this.pseudos.set(m.from, m.pseudo); this._emit('pseudo_update', { pseudos: this.pseudos }); }
+    if (m.t === 'room_info')  { this._emit('room_info', m); }
   }
 
-  sendTo(id, msg) {
-    const c = this._conns.get(id);
-    if (c && c.open) c.send(msg);
+  broadcast(obj) {
+    if (this._ws?.readyState === 1) this._ws.send(JSON.stringify({ t: 'relay', d: obj }));
   }
-  broadcast(msg, excl = -1) {
-    for (const [id, c] of this._conns)
-      if (id !== excl && c.open) c.send(msg);
+  relay(obj) { this.broadcast(obj); }
+  sendTo(id, obj) {
+    if (this._ws?.readyState === 1) this._ws.send(JSON.stringify({ t: 'relay_to', to: id, d: obj }));
   }
-  relay(obj) { this.broadcast({ t: 'relay', d: obj }); }
 
-  // Annoncer le lancement de partie à tous les guests.
-  // playerIds est le tableau COMPLET déjà construit par main.js (humains + bots).
+  // Lancer la partie — envoie les IDs exacts à tous les guests
   startGame(arenaIdx, playerIds, tournament = false) {
-    this._gameIds = playerIds;
-    const msg = { t: 'relay', d: { t: 'start', arenaIdx, playerCount: playerIds.length, ids: playerIds, tournament } };
-    this.broadcast(msg);
+    if (this._ws?.readyState === 1)
+      this._ws.send(JSON.stringify({ t: 'start', arenaIdx, playerCount: playerIds.length, ids: playerIds, tournament }));
   }
 
   announceArena(arenaIdx, playerCount = 2) {
-    this.broadcast({ t: 'relay', d: { t: 'arena', i: arenaIdx, playerCount, totalPlayers: this.connectedCount } });
+    this.broadcast({ t: 'arena', i: arenaIdx, playerCount, totalPlayers: this.connectedCount });
   }
 
   disconnect() {
-    try { this._peer?.destroy(); } catch {}
-    this._conns.clear();
+    try { if (this._ws) { this._ws.send(JSON.stringify({ t: 'leave' })); this._ws.close(); } } catch {}
+    this._ws = null;
   }
 }
 
 // ==============================================================
-// GUEST — rejoint la salle de l'hôte avec le code à 4 lettres
+// GUEST — rejoint la salle avec le code à 4 lettres
 // ==============================================================
 export class PeerClient {
   constructor() {
@@ -146,74 +146,58 @@ export class PeerClient {
     this.connected = false;
     this.handlers  = {};
     this.pseudos   = new Map();
-    this._peer     = null;
-    this._conn     = null;
+    this._ws       = null;
+    this._onStatus = null;
   }
 
   on(ev, fn)   { this.handlers[ev] = fn; return this; }
   _emit(ev, d) { const h = this.handlers[ev]; if (h) h(d); }
+  onStatus(fn) { this._onStatus = fn; return this; }
 
   relay(obj) {
-    if (this._conn && this._conn.open) this._conn.send({ t: 'relay', d: obj });
+    if (this._ws?.readyState === 1) this._ws.send(JSON.stringify({ t: 'relay', d: obj }));
   }
 
-  connect(code, pseudo = 'Joueur') {
-    if (!window.Peer) return Promise.reject(new Error('PeerJS non chargé — vérifiez la connexion internet'));
+  async connect(code, pseudo = 'Joueur') {
     this.pseudo = pseudo;
+    this._ws = await wsConnect(this._onStatus);
     return new Promise((res, rej) => {
-      this._peer = new window.Peer();
-      const to = setTimeout(() => rej(new Error('Timeout : hôte introuvable (code incorrect ou hôte parti)')), 15000);
-
-      this._peer.on('error', (err) => {
-        clearTimeout(to);
-        rej(new Error(err.type + (err.message ? ': ' + err.message : '')));
-      });
-
-      this._peer.on('open', () => {
-        const hostId = PREFIX + code.trim().toUpperCase();
-        this._conn = this._peer.connect(hostId);
-
-        // Envoyer le pseudo uniquement APRÈS avoir reçu 'hello'
-        // pour s'assurer que l'hôte nous a bien enregistrés avant.
-
-        this._conn.on('data', (m) => {
-          if (m.t === 'hello') {
-            clearTimeout(to);
-            this.localId   = m.id;
-            this.connected = true;
-            // Reconstituer la map des pseudos depuis la liste de l'hôte
-            this.pseudos = new Map(m.pseudos || []);
-            this.pseudos.set(0, m.pseudo || 'Hôte');
-            this.pseudos.set(m.id, pseudo);
-            // Maintenant qu'on est enregistrés, envoyer notre pseudo à l'hôte
-            this._conn.send({ t: 'set_pseudo', pseudo });
-            this._emit('open',     {});
-            this._emit('peerjoin', {});
-            res({ role: 'guest', localId: m.id });
-
-          } else if (m.t === 'relay') {
-            this._emit('msg', { d: m.d, from: m.from });
-
-          } else if (m.t === 'set_pseudo') {
-            this.pseudos.set(m.from, m.pseudo);
-            this._emit('pseudo_update', { pseudos: this.pseudos });
-          }
-        });
-
-        this._conn.on('close', () => {
-          this.connected = false;
-          this._emit('peerleave', {});
-        });
-        this._conn.on('error', (err) => {
+      const to = setTimeout(() => rej(new Error('Salon introuvable ou hôte déconnecté')), 10000);
+      this._ws.onmessage = (ev) => {
+        let m; try { m = JSON.parse(ev.data); } catch { return; }
+        if (m.t === 'joined') {
           clearTimeout(to);
-          rej(new Error('Connexion refusée : ' + (err.message || err.type)));
-        });
-      });
+          this.localId   = m.id;
+          this.connected = true;
+          this.pseudos   = new Map();
+          (m.players || []).forEach(p => this.pseudos.set(p.id, p.pseudo));
+          this._onStatus?.('');
+          this._ws.onmessage = (e2) => this._onMsg(e2);
+          this._emit('open',     {});
+          this._emit('peerjoin', {});
+          res({ role: 'guest', localId: m.id });
+        } else if (m.t === 'error') {
+          clearTimeout(to); rej(new Error(m.msg));
+        }
+      };
+      this._ws.onerror = () => { clearTimeout(to); rej(new Error('Erreur WebSocket guest')); };
+      this._ws.onclose = () => { clearTimeout(to); rej(new Error('Connexion fermée')); };
+      this._ws.send(JSON.stringify({ t: 'join', code: code.trim().toUpperCase(), pseudo }));
     });
   }
 
+  _onMsg(ev) {
+    let m; try { m = JSON.parse(ev.data); } catch { return; }
+    if (m.t === 'player_joined') { this.pseudos.set(m.id, m.pseudo); this._emit('peerjoin', { id: m.id }); this._emit('pseudo_update', { pseudos: this.pseudos }); }
+    if (m.t === 'player_left')   { this.pseudos.delete(m.id); this._emit('peerleave', { id: m.id }); }
+    if (m.t === 'relay')         { this._emit('msg', { d: m.d, from: m.from }); }
+    if (m.t === 'start')         { this._emit('msg', { d: m,   from: 0 }); }
+    if (m.t === 'set_pseudo')    { this.pseudos.set(m.from, m.pseudo); this._emit('pseudo_update', { pseudos: this.pseudos }); }
+    if (m.t === 'error')         { this._emit('peerleave', { id: -1, msg: m.msg }); }
+  }
+
   disconnect() {
-    try { this._peer?.destroy(); } catch {}
-    this._conn = null;
+    try { if (this._ws) { this._ws.send(JSON.stringify({ t: 'leave' })); this._ws.close(); } } catch {}
+    this._ws = null;
   }
 }
