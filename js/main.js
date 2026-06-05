@@ -442,6 +442,7 @@ class Game {
       const cb = this._onVersusEnd;
       delete this._onVersusEnd;
       this.paused = false; this.mode = 'menu';
+      this.scene?.unbindNet?.();
       this.scene?.dispose?.(); this.scene = null;
       stopMusic(); this.checkOrientation();
       cb(sc || { winner: -1, kos: [] });
@@ -903,11 +904,32 @@ class Game {
             const d = m.d || m;
             // Lancement de partie envoyé via server 'start'
             if (d.t === 'start') {
-              const playerIds = d.ids || [0, myId];
-              this.startVersusP2P(guestPeer, myId, d.arenaIdx || 0, d.playerCount || 2, playerIds);
+              if (d.tournament) {
+                this._tournamentBracket = this._mkBracket(d.ids);
+                this.showTournamentBracket(guestPeer, d.ids, d.arenaIdx);
+              } else {
+                this.startVersusP2P(guestPeer, myId, d.arenaIdx || 0, d.playerCount || 2, d.ids || [0, myId]);
+              }
             }
             if (d.t === 'arena') {
               this.startVersusP2P(guestPeer, myId, d.i, d.playerCount || 2, d.ids || [0, myId]);
+            }
+            if (d.t === 'tournament_sync') {
+              if (this._tournamentBracket) this._tournamentBracket._w = d.w;
+              this.showTournamentBracket(guestPeer, d.ids, d.arenaIdx);
+            }
+            if (d.t === 'tournament_match') {
+              const { p1Id, p2Id, arenaIdx, ids } = d;
+              if (myId === p1Id) {
+                this._onVersusEnd = (scene) => { delete this._onVersusEnd; this.showTournamentBracket(guestPeer, ids, arenaIdx); };
+                this.startVersusP2P(guestPeer, 0, arenaIdx, 2, [p1Id, p2Id]);
+              } else if (myId === p2Id) {
+                this._onVersusEnd = (scene) => { delete this._onVersusEnd; this.showTournamentBracket(guestPeer, ids, arenaIdx); };
+                this.startVersusP2P(guestPeer, 1, arenaIdx, 2, [p1Id, p2Id]);
+              } else {
+                const st = document.getElementById('tst');
+                if (st) st.textContent = 'Match en cours...';
+              }
             }
           });
 
@@ -993,6 +1015,7 @@ class Game {
 
     const pair = bracket.currentPair;
     let matchSection = '';
+    const isHost = !host || host.role === 'host';
     if (bracket.isComplete) {
       matchSection = `<div style="text-align:center;padding:14px;background:rgba(255,210,59,0.12);border-radius:8px">
         <div style="font-size:22px;color:#ffd23b">🏆 CHAMPION : ${lbl(bracket.champion)} 🏆</div>
@@ -1002,7 +1025,7 @@ class Game {
       matchSection = `<div style="padding:10px;background:rgba(255,210,59,0.1);border-radius:8px;text-align:center">
         <div style="font-size:12px;color:#aaa">Match suivant :</div>
         <div style="font-size:16px;margin:4px 0"><b style="color:${colFor(p1)}">${lbl(p1)}</b> <span style="color:#ffd23b">VS</span> <b style="color:${colFor(p2)}">${lbl(p2)}</b></div>
-        <button class="btn" id="launch" style="margin-top:6px">⚔️ Lancer ce match</button>
+        ${isHost ? `<button class="btn" id="launch" style="margin-top:6px">⚔️ Lancer ce match</button>` : `<div style="font-size:12px;color:#888;margin-top:6px">En attente de l'hôte...</div>`}
       </div>`;
     }
 
@@ -1016,7 +1039,7 @@ class Game {
 
     pp.querySelector('#tback').onclick = () => { delete this._tournamentBracket; this.showVersusMenu(); };
 
-    if (pair && !bracket.isComplete) {
+    if (pair && !bracket.isComplete && isHost) {
       const [p1Id, p2Id] = pair;
       pp.querySelector('#launch').onclick = () => {
         if (mode === 'local') {
@@ -1028,27 +1051,35 @@ class Game {
           };
           this.startVersusLocal(arenaIdx, 2);
         } else {
+          // Lancement d'un match de tournoi en ligne (hôte)
           const myLocalId = p1Id === 0 ? 0 : p2Id === 0 ? 1 : -1;
-          if (p1Id !== 0) host.sendTo(p1Id, { t: 'relay', d: { t: 'tournament_match', localId: 0, arenaIdx } });
-          if (p2Id !== 0) host.sendTo(p2Id, { t: 'relay', d: { t: 'tournament_match', localId: 1, arenaIdx } });
+          
+          host.broadcast({ t: 'tournament_match', p1Id, p2Id, arenaIdx, ids: playerIds });
+          
           if (myLocalId >= 0) {
+            // L'hôte joue
             this._onVersusEnd = (scene) => {
-              const w = scene.winner;
-              const winId = w === 0 ? p1Id : p2Id;
+              const winId = scene.winner === 0 ? p1Id : p2Id;
               bracket.recordWinner(winId);
+              host.broadcast({ t: 'tournament_sync', w: bracket._w, arenaIdx, ids: playerIds });
               delete this._onVersusEnd;
               this.showTournamentBracket(host, playerIds, arenaIdx);
             };
-            this.startVersusP2P(host, myLocalId, arenaIdx, 2);
+            this.startVersusP2P(host, myLocalId, arenaIdx, 2, [p1Id, p2Id]);
           } else {
+            // L'hôte regarde
             pp.querySelector('#tst').textContent = 'Match en cours...';
-            host.on('msg', (m) => {
-              if (m.d?.t === 'end') {
-                const w = m.d.winner; const winId = w === 0 ? p1Id : p2Id;
+            const onMatchEnd = (m) => {
+              const d = m.d || m;
+              if (d.t === 'end') {
+                host.off('msg', onMatchEnd);
+                const winId = d.winner === 0 ? p1Id : p2Id;
                 bracket.recordWinner(winId);
+                host.broadcast({ t: 'tournament_sync', w: bracket._w, arenaIdx, ids: playerIds });
                 this.showTournamentBracket(host, playerIds, arenaIdx);
               }
-            });
+            };
+            host.on('msg', onMatchEnd);
           }
         }
       };

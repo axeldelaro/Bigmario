@@ -80,7 +80,7 @@ export class VersusScene {
   }
 
   bindNet() {
-    this.net.on('msg', (m) => {
+    this._msgHandler = (m) => {
       const d = m.d || m;
       const from = m.from ?? (d.from ?? (1 - this.localId));
       if (d.t === 'state') { this.remoteStates.set(from, d); this.remoteBuf = d; }
@@ -94,8 +94,18 @@ export class VersusScene {
       }
       else if (d.t === 'spawnfb') { this.fireballs.push(new Fireball(d.x, d.y, d.dir, from)); }
       else if (d.t === 'end') { this.finish(d.winner); }
-    });
-    this.net.on('peerleave', () => { if (!this.over) { this.addFloat(VIEW_W/2, 60, 'Adversaire parti', '#ff5d5d'); } });
+    };
+    this.net.on('msg', this._msgHandler);
+
+    this._leaveHandler = () => { if (!this.over) { this.addFloat(VIEW_W/2, 60, 'Adversaire parti', '#ff5d5d'); } };
+    this.net.on('peerleave', this._leaveHandler);
+  }
+
+  unbindNet() {
+    if (this.net) {
+      if (this._msgHandler) this.net.off('msg', this._msgHandler);
+      if (this._leaveHandler) this.net.off('peerleave', this._leaveHandler);
+    }
   }
 
   addFloat(x, y, t, c) { this.floats.push(new FloatText(x, y, t, c)); }

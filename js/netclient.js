@@ -68,8 +68,18 @@ export class MultiPeerHost {
   }
 
   get connectedCount() { return this.connectedIds.length + 1; }
-  on(ev, fn)   { this.handlers[ev] = fn; return this; }
-  _emit(ev, d) { const h = this.handlers[ev]; if (h) h(d); }
+  on(ev, fn) {
+    if (!this.handlers[ev]) this.handlers[ev] = [];
+    this.handlers[ev].push(fn);
+    return this;
+  }
+  off(ev, fn) {
+    if (this.handlers[ev]) this.handlers[ev] = this.handlers[ev].filter(f => f !== fn);
+    return this;
+  }
+  _emit(ev, d) {
+    if (this.handlers[ev]) this.handlers[ev].forEach(f => f(d));
+  }
   onStatus(fn) { this._onStatus = fn; return this; }
 
   async open(maxPlayers = 4, pseudo = 'Hôte') {
@@ -150,8 +160,18 @@ export class PeerClient {
     this._onStatus = null;
   }
 
-  on(ev, fn)   { this.handlers[ev] = fn; return this; }
-  _emit(ev, d) { const h = this.handlers[ev]; if (h) h(d); }
+  on(ev, fn) {
+    if (!this.handlers[ev]) this.handlers[ev] = [];
+    this.handlers[ev].push(fn);
+    return this;
+  }
+  off(ev, fn) {
+    if (this.handlers[ev]) this.handlers[ev] = this.handlers[ev].filter(f => f !== fn);
+    return this;
+  }
+  _emit(ev, d) {
+    if (this.handlers[ev]) this.handlers[ev].forEach(f => f(d));
+  }
   onStatus(fn) { this._onStatus = fn; return this; }
 
   relay(obj) {
