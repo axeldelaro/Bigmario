@@ -673,26 +673,34 @@ class Game {
       const r = []; for (let i = 0; i < cur.length; i += 2) r.push([cur[i], cur[i+1] ?? null]);
       rounds.push(r); cur = r.map(() => null);
     }
-    const obj = { players: ids, rounds, currentRound: 0, currentMatch: 0, _w: {} };
-    const skipByes = () => {
-      while (obj.currentRound < obj.rounds.length) {
-        const pair = obj.rounds[obj.currentRound]?.[obj.currentMatch];
-        if (!pair || (pair[0] != null && pair[1] != null)) break;
-        obj.recordWinner(pair[0] ?? pair[1]);
-      }
-    };
-    obj.recordWinner = (id) => {
-      const key = `${obj.currentRound}_${obj.currentMatch}`;
+    const obj = { players: ids, rounds, currentRound: 0, _w: {} };
+    
+    obj.recordWinner = (id, mi) => {
+      const key = `${obj.currentRound}_${mi}`;
+      if (obj._w[key] !== undefined) return;
       obj._w[key] = id;
       if (obj.currentRound + 1 < obj.rounds.length) {
-        const slot = Math.floor(obj.currentMatch / 2);
-        obj.rounds[obj.currentRound + 1][slot][obj.currentMatch % 2] = id;
+        const slot = Math.floor(mi / 2);
+        obj.rounds[obj.currentRound + 1][slot][mi % 2] = id;
       }
-      obj.currentMatch++;
-      if (obj.currentMatch >= obj.rounds[obj.currentRound].length) { obj.currentRound++; obj.currentMatch = 0; }
-      skipByes();
+      const roundComplete = obj.rounds[obj.currentRound].every((pair, i) => obj._w[`${obj.currentRound}_${i}`] !== undefined);
+      if (roundComplete) { obj.currentRound++; skipByes(); }
     };
-    Object.defineProperty(obj, 'currentPair', { get: () => obj.currentRound < obj.rounds.length ? obj.rounds[obj.currentRound]?.[obj.currentMatch] ?? null : null });
+    
+    const skipByes = () => {
+      while (obj.currentRound < obj.rounds.length) {
+        let hasBye = false;
+        const byes = [];
+        obj.rounds[obj.currentRound].forEach((pair, mi) => {
+          if ((pair[0] == null || pair[1] == null) && obj._w[`${obj.currentRound}_${mi}`] === undefined) byes.push({id: pair[0] ?? pair[1], mi});
+        });
+        if (byes.length === 0) break;
+        byes.forEach(b => { obj.recordWinner(b.id, b.mi); hasBye = true; });
+        if (!hasBye) break;
+      }
+    };
+    
+    Object.defineProperty(obj, 'currentMatches', { get: () => obj.currentRound < obj.rounds.length ? obj.rounds[obj.currentRound] : [] });
     Object.defineProperty(obj, 'isComplete',   { get: () => obj.currentRound >= obj.rounds.length });
     Object.defineProperty(obj, 'champion',      { get: () => obj._w[`${obj.rounds.length-1}_0`] ?? null });
     skipByes();
@@ -918,17 +926,14 @@ class Game {
               if (this._tournamentBracket) this._tournamentBracket._w = d.w;
               this.showTournamentBracket(guestPeer, d.ids, d.arenaIdx);
             }
-            if (d.t === 'tournament_match') {
-              const { p1Id, p2Id, arenaIdx, ids } = d;
-              if (myId === p1Id) {
-                this._onVersusEnd = (scene) => { delete this._onVersusEnd; this.showTournamentBracket(guestPeer, ids, arenaIdx); };
-                this.startVersusP2P(guestPeer, 0, arenaIdx, 2, [p1Id, p2Id]);
-              } else if (myId === p2Id) {
-                this._onVersusEnd = (scene) => { delete this._onVersusEnd; this.showTournamentBracket(guestPeer, ids, arenaIdx); };
-                this.startVersusP2P(guestPeer, 1, arenaIdx, 2, [p1Id, p2Id]);
+            if (d.t === 'tournament_round') {
+              const match = d.matches.find(m => m.p1Id === myId || m.p2Id === myId);
+              if (match) {
+                this._onVersusEnd = (scene) => { delete this._onVersusEnd; this.showTournamentBracket(guestPeer, d.ids, d.arenaIdx); };
+                this.startVersusP2P(guestPeer, match.p1Id === myId ? 0 : 1, d.arenaIdx, 2, [match.p1Id, match.p2Id]);
               } else {
                 const st = document.getElementById('tst');
-                if (st) st.textContent = 'Match en cours...';
+                if (st) st.textContent = 'Matchs en cours...';
               }
             }
           });
@@ -998,10 +1003,10 @@ class Game {
 
     const bHTML = bracket.rounds.map((round, ri) => {
       const rname = ri === bracket.rounds.length-1 ? 'FINALE' : ri === bracket.rounds.length-2 ? 'DEMI-FINALES' : `ROUND ${ri+1}`;
-      const matches = round.map((pair, mi) => {
+      const roundMatches = round.map((pair, mi) => {
         const key = `${ri}_${mi}`;
         const winner = bracket._w[key];
-        const isCur = ri === bracket.currentRound && mi === bracket.currentMatch;
+        const isCur = ri === bracket.currentRound;
         const p1 = pair[0]; const p2 = pair[1];
         return `<div style="display:inline-flex;flex-direction:column;margin:3px;padding:6px 10px;background:${isCur?'rgba(255,210,59,0.18)':'rgba(255,255,255,0.05)'};border:1px solid ${isCur?'#ffd23b':'#334'};border-radius:6px;font-size:11px;text-align:center;min-width:72px">
           <span style="color:${winner===p1?'#ffd23b':p1!=null?colFor(p1):'#444'}">${p1!=null?lbl(p1):'BYE'}</span>
@@ -1010,22 +1015,26 @@ class Game {
           ${winner!=null?`<span style="color:#ffd23b;font-size:9px;margin-top:2px">→ ${lbl(winner)}</span>`:''}
         </div>`;
       }).join('');
-      return `<div style="margin-bottom:10px"><div style="font-size:10px;color:#888;margin-bottom:3px">${rname}</div>${matches}</div>`;
+      return `<div style="margin-bottom:10px"><div style="font-size:10px;color:#888;margin-bottom:3px">${rname}</div>${roundMatches}</div>`;
     }).join('');
 
-    const pair = bracket.currentPair;
+    const activeMatches = bracket.currentMatches.map((pair, mi) => ({ p1: pair[0], p2: pair[1], mi }))
+       .filter(m => bracket._w[`${bracket.currentRound}_${m.mi}`] === undefined && m.p1 != null && m.p2 != null);
+
     let matchSection = '';
     const isHost = !host || host.role === 'host';
     if (bracket.isComplete) {
       matchSection = `<div style="text-align:center;padding:14px;background:rgba(255,210,59,0.12);border-radius:8px">
         <div style="font-size:22px;color:#ffd23b">🏆 CHAMPION : ${lbl(bracket.champion)} 🏆</div>
       </div>`;
-    } else if (pair) {
-      const [p1, p2] = pair;
+    } else if (activeMatches.length > 0) {
+      const txt = activeMatches.map(m => `<b style="color:${colFor(m.p1)}">${lbl(m.p1)}</b> <span style="color:#ffd23b">VS</span> <b style="color:${colFor(m.p2)}">${lbl(m.p2)}</b>`).join('<br>');
+      const btnState = bracket._playing ? `<div style="font-size:12px;color:#888;margin-top:6px">Manche en cours...</div>` :
+                       (isHost ? `<button class="btn" id="launch" style="margin-top:6px">⚔️ Lancer la manche en simultané</button>` : `<div style="font-size:12px;color:#888;margin-top:6px">En attente de l'hôte...</div>`);
       matchSection = `<div style="padding:10px;background:rgba(255,210,59,0.1);border-radius:8px;text-align:center">
-        <div style="font-size:12px;color:#aaa">Match suivant :</div>
-        <div style="font-size:16px;margin:4px 0"><b style="color:${colFor(p1)}">${lbl(p1)}</b> <span style="color:#ffd23b">VS</span> <b style="color:${colFor(p2)}">${lbl(p2)}</b></div>
-        ${isHost ? `<button class="btn" id="launch" style="margin-top:6px">⚔️ Lancer ce match</button>` : `<div style="font-size:12px;color:#888;margin-top:6px">En attente de l'hôte...</div>`}
+        <div style="font-size:12px;color:#aaa">Manche suivante (${activeMatches.length} match(s)) :</div>
+        <div style="font-size:16px;margin:4px 0">${txt}</div>
+        ${btnState}
       </div>`;
     }
 
@@ -1039,47 +1048,77 @@ class Game {
 
     pp.querySelector('#tback').onclick = () => { delete this._tournamentBracket; this.showVersusMenu(); };
 
-    if (pair && !bracket.isComplete && isHost) {
-      const [p1Id, p2Id] = pair;
+    if (activeMatches.length > 0 && !bracket.isComplete && isHost && !bracket._playing) {
       pp.querySelector('#launch').onclick = () => {
         if (mode === 'local') {
+          const m = activeMatches[0];
           this._onVersusEnd = (scene) => {
-            const w = scene.winner;
-            const winId = w === 0 ? p1Id : p2Id;
-            bracket.recordWinner(winId);
+            const winId = scene.winner === 0 ? m.p1 : m.p2;
+            bracket.recordWinner(winId, m.mi);
             this.showTournamentBracket('local', playerIds, arenaIdx);
           };
           this.startVersusLocal(arenaIdx, 2);
         } else {
-          // Lancement d'un match de tournoi en ligne (hôte)
-          const myLocalId = p1Id === 0 ? 0 : p2Id === 0 ? 1 : -1;
+          // Lancement d'un match de tournoi en ligne (hôte) avec gestion des matchs simultanés
+          const roundData = [];
+          let hostBusy = false;
+          for (const m of activeMatches) {
+            const needsHost = (m.p1 === 0 || m.p2 === 0 || String(m.p1).startsWith('AI') || String(m.p2).startsWith('AI'));
+            if (needsHost) {
+              if (hostBusy) continue; // L'hôte ne peut simuler qu'une seule instance de VersusScene à la fois
+              hostBusy = true;
+            }
+            roundData.push({ p1Id: m.p1, p2Id: m.p2, mi: m.mi });
+          }
+
+          let matchesFinished = 0;
+          bracket._playing = true;
+          host.broadcast({ t: 'tournament_round', matches: roundData, arenaIdx, ids: playerIds });
           
-          host.broadcast({ t: 'tournament_match', p1Id, p2Id, arenaIdx, ids: playerIds });
+          const myMatch = roundData.find(m => m.p1Id === 0 || m.p2Id === 0 || String(m.p1Id).startsWith('AI') || String(m.p2Id).startsWith('AI'));
           
-          if (myLocalId >= 0) {
-            // L'hôte joue
-            this._onVersusEnd = (scene) => {
-              const winId = scene.winner === 0 ? p1Id : p2Id;
-              bracket.recordWinner(winId);
-              host.broadcast({ t: 'tournament_sync', w: bracket._w, arenaIdx, ids: playerIds });
-              delete this._onVersusEnd;
-              this.showTournamentBracket(host, playerIds, arenaIdx);
-            };
-            this.startVersusP2P(host, myLocalId, arenaIdx, 2, [p1Id, p2Id]);
-          } else {
-            // L'hôte regarde
-            pp.querySelector('#tst').textContent = 'Match en cours...';
-            const onMatchEnd = (m) => {
-              const d = m.d || m;
-              if (d.t === 'end') {
+          const checkRoundComplete = () => {
+             if (matchesFinished >= roundData.length) {
+                bracket._playing = false;
                 host.off('msg', onMatchEnd);
-                const winId = d.winner === 0 ? p1Id : p2Id;
-                bracket.recordWinner(winId);
                 host.broadcast({ t: 'tournament_sync', w: bracket._w, arenaIdx, ids: playerIds });
                 this.showTournamentBracket(host, playerIds, arenaIdx);
+             }
+          };
+          
+          const onMatchEnd = (m) => {
+            const d = m.d || m;
+            if (d.t === 'end') {
+              const senderId = m.from ?? (d.from ?? 0);
+              const match = roundData.find(rm => rm.p1Id === senderId || rm.p2Id === senderId);
+              if (match && bracket._w[`${bracket.currentRound}_${match.mi}`] === undefined) {
+                const winId = d.winner === 0 ? match.p1Id : match.p2Id;
+                bracket.recordWinner(winId, match.mi);
+                matchesFinished++;
+                checkRoundComplete();
+              }
+            }
+          };
+          host.on('msg', onMatchEnd);
+
+          if (myMatch) {
+            this._onVersusEnd = (scene) => {
+              const winId = scene.winner === 0 ? myMatch.p1Id : myMatch.p2Id;
+              bracket.recordWinner(winId, myMatch.mi);
+              matchesFinished++;
+              delete this._onVersusEnd;
+              if (matchesFinished < roundData.length) {
+                 this.clearUI();
+                 this.showTournamentBracket(host, playerIds, arenaIdx);
+              } else {
+                 checkRoundComplete();
               }
             };
-            host.on('msg', onMatchEnd);
+            const myLocalId = myMatch.p1Id === 0 ? 0 : myMatch.p2Id === 0 ? 1 : -1;
+            this.startVersusP2P(host, myLocalId, arenaIdx, 2, [myMatch.p1Id, myMatch.p2Id]);
+          } else {
+            pp.querySelector('#tst').textContent = 'Match(s) en cours...';
+            this.showTournamentBracket(host, playerIds, arenaIdx); // re-render pour masquer le bouton launch
           }
         }
       };
