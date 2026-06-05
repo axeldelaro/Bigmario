@@ -83,16 +83,22 @@ export class VersusScene {
     this._msgHandler = (m) => {
       const d = m.d || m;
       const from = m.from ?? (d.from ?? (1 - this.localId));
-      if (d.t === 'state') { this.remoteStates.set(from, d); this.remoteBuf = d; }
+      
+      // Isoler les arènes en simultané : rejeter les paquets hors de ce match
+      const remoteIdx = this.ids.indexOf(from);
+      if (remoteIdx < 0) return;
+
+      if (d.t === 'state') { this.remoteStates.set(remoteIdx, d); this.remoteBuf = d; }
       else if (d.t === 'ko') {
-        const killer = d.killer ?? (1 - from);
-        const victim = d.victim ?? from;
+        // killer/victim envoyés sont déjà des indices locaux (0 ou 1)
+        const killer = d.killer ?? (1 - remoteIdx);
+        const victim = d.victim ?? remoteIdx;
         if (killer != null && this.kos[killer] != null) this.kos[killer]++;
         const victimLabel = victim === this.localId ? 'Vous' : `J${victim+1}`;
         const killerLabel = killer === this.localId ? 'Vous' : `J${killer+1}`;
         this.addFloat(VIEW_W/2, 40, `${victimLabel} KO par ${killerLabel} !`, '#ffd23b');
       }
-      else if (d.t === 'spawnfb') { this.fireballs.push(new Fireball(d.x, d.y, d.dir, from)); }
+      else if (d.t === 'spawnfb') { this.fireballs.push(new Fireball(d.x, d.y, d.dir, remoteIdx)); }
       else if (d.t === 'end') { this.finish(d.winner); }
     };
     this.net.on('msg', this._msgHandler);
@@ -203,6 +209,10 @@ export class VersusScene {
     this.burst(p.x + 7, p.y + 7, '#fff', 12);
   }
 
+  isLocalControlled(idx) {
+    if (idx === this.localId) return true;
+    if (this.mode === 'online' || this.mode === 'ffa') {
+      // L'hôte simule les IAs pour tout le monde
   update(dt) {
     this.stateT += dt;
     if (this.over) { if (this.stateT > 3.5) this.game.endVersus(); return; }
@@ -224,20 +234,20 @@ export class VersusScene {
       if (this.rec && !this.over && this.players[0]) this.rec.update(dt, this.players[0], this.matchMs);
       for (let i = 0; i < this.players.length; i++) for (let j = 0; j < this.players.length; j++) if (i !== j) this.resolveCombat(i, j);
     } else {
-      const me = this.players[this.localId];
-      if (me) {
-        me.update(dt, this.level, this, this.inputFor(this.localId));
-        this._applyRemoteAll(dt);
-        // détecte si JE me fais écraser par un adversaire (autorité locale)
-        for (let i = 0; i < this.players.length; i++) {
-          if (i === this.localId) continue;
-          const other = this.players[i];
+      for (let i = 0; i < this.players.length; i++) {
+        if (!this.isLocalControlled(i)) continue;
+        const me = this.players[i];
+        if (!me) continue;
+
+        me.update(dt, this.level, this, this.inputFor(i));
+        
+        for (let j = 0; j < this.players.length; j++) {
+          if (i === j) continue;
+          const other = this.players[j];
           if (other && !other.dead && !me.dead && aabb(me, other)) {
             const otherPrevFeet = other.prevFeet != null ? other.prevFeet : (other.y + other.h);
             const otherFromAbove = (other.vy > 0 && otherPrevFeet <= me.y + 12) || other.pounding;
-            if (otherFromAbove && me.invuln <= 0) {
-              this.localKO(me, i);
-            }
+            if (otherFromAbove && me.invuln <= 0) this.localKO(me, j);
             
             const mePrevFeet = me.prevFeet != null ? me.prevFeet : (me.y + me.h);
             const meFromAbove = (me.vy > 0 && mePrevFeet <= other.y + 12) || me.pounding;
@@ -248,10 +258,11 @@ export class VersusScene {
           }
         }
         if (!this.coop) for (const fb of this.fireballs) {
-          if (fb.owner !== this.localId && !me.dead && me.invuln <= 0 && aabb(fb, me)) { fb.dead = true; this.localKO(me, fb.owner); }
+          if (fb.owner !== i && !me.dead && me.invuln <= 0 && aabb(fb, me)) { fb.dead = true; this.localKO(me, fb.owner); }
         }
-        this.sendState(dt);
       }
+      this._applyRemoteAll(dt);
+      this.sendState(dt);
     }
 
     // objets/pièces/particules communs
@@ -299,22 +310,29 @@ export class VersusScene {
     me.die(this); SFX.hurt();
     if (killerIdx != null && this.kos[killerIdx] != null) {
       this.kos[killerIdx]++;
-      if (this.kos[killerIdx] >= KO_TO_WIN && this.localId === 0) this.finish(killerIdx);
+      if (this.kos[killerIdx] >= KO_TO_WIN && this.isAuthority()) this.finish(killerIdx);
     } else {
-      const otherId = 1 - this.localId;
+      const otherId = me === this.players[0] ? 1 : 0;
       this.kos[otherId]++;
-      if (this.kos[otherId] >= KO_TO_WIN && this.localId === 0) this.finish(otherId);
+      if (this.kos[otherId] >= KO_TO_WIN && this.isAuthority()) this.finish(otherId);
     }
     this.burst(me.x + 7, me.y + 7, '#ff5d5d', 12);
-    if (this.net) this.net.relay({ t: 'ko', killer: killerIdx, victim: this.localId });
+    if (this.net) this.net.relay({ t: 'ko', killer: killerIdx, victim: this.players.indexOf(me) });
   }
 
   sendState(dt) {
     this.netAcc += dt;
     if (this.netAcc < 1 / 20) return; // 20 Hz
     this.netAcc = 0;
-    const me = this.players[this.localId];
-    this.net.relay({ t: 'state', from: this.localId, x: me.x, y: me.y, vx: me.vx, vy: me.vy, dir: me.dir, power: me.power, dead: me.dead, walkT: me.walkT, onGround: me.onGround });
+    if (!this.net) return;
+    
+    for (let i = 0; i < this.players.length; i++) {
+      if (this.isLocalControlled(i)) {
+        const p = this.players[i];
+        if (!p) continue;
+        this.net.relay({ t: 'state', from: this.ids[i], x: p.x, y: p.y, vx: p.vx, vy: p.vy, dir: p.dir, power: p.power, dead: p.dead, walkT: p.walkT, onGround: p.onGround });
+      }
+    }
   }
   applyRemote(dt) {
     const r = this.players[1 - this.localId];
@@ -367,7 +385,7 @@ export class VersusScene {
       : (this.mode === 'bot' || this.mode === 'rival') ? (winner === 0)
       : (winner >= 0);
     if (humanWon) this.game.stat?.('vwin');
-    if ((this.mode === 'online' || this.mode === 'ffa') && this.localId === 0 && this.net) this.net.relay({ t: 'end', winner });
+    if ((this.mode === 'online' || this.mode === 'ffa') && this.isAuthority() && this.net) this.net.relay({ t: 'end', winner });
   }
   endByPeer() { this.finish(this.localId); }
 
