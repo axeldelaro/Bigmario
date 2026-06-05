@@ -24,6 +24,11 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   background: radial-gradient(circle at 50% 30%, #2a1a55, #120a26 70%);
 }
+/* vignette douce par-dessus le jeu (2D et 3D) pour plus de profondeur */
+#game-shell::after {
+  content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 3;
+  box-shadow: inset 0 0 90px rgba(0,0,0,0.30), inset 0 0 26px rgba(0,0,0,0.18);
+}
 
 #screen {
   image-rendering: pixelated;
