@@ -30,14 +30,14 @@ export class VersusScene {
     this.kos = [];
     // Fantôme rival: enregistre le joueur 0 (hors ligne) pour créer un adversaire fantôme
     this.matchMs = 0;
-    this.rec = (this.mode !== 'online') ? new GhostRecorder() : null;
+    this.rec = (this.mode !== 'online' && this.mode !== 'ffa') ? new GhostRecorder() : null;
     this.rivalGhost = null;
     if (this.mode === 'rival') {
       const data = GhostStore.load(`vghost.${this.arenaIdx}`);
       if (data) { const g = new GhostPlayer(data); if (g.valid) this.rivalGhost = g; }
     }
     this.load();
-    if (this.mode === 'online' && this.net) this.bindNet();
+    if ((this.mode === 'online' || this.mode === 'ffa') && this.net) this.bindNet();
   }
 
   load() {
@@ -78,11 +78,17 @@ export class VersusScene {
   bindNet() {
     this.net.on('msg', (m) => {
       const d = m.d || m;
-      if (d.t === 'state') { const from = d.from ?? (1 - this.localId); this.remoteStates.set(from, d); this.remoteBuf = d; }
-      else if (d.t === 'ko') { // l'adversaire annonce qu'on l'a éliminé
-        this.kos[this.localId]++; this.addFloat(VIEW_W/2, 40, 'KO !', '#ffd23b');
+      const from = m.from ?? (d.from ?? (1 - this.localId));
+      if (d.t === 'state') { this.remoteStates.set(from, d); this.remoteBuf = d; }
+      else if (d.t === 'ko') {
+        const killer = d.killer ?? (1 - from);
+        const victim = d.victim ?? from;
+        if (killer != null && this.kos[killer] != null) this.kos[killer]++;
+        const victimLabel = victim === this.localId ? 'Vous' : `J${victim+1}`;
+        const killerLabel = killer === this.localId ? 'Vous' : `J${killer+1}`;
+        this.addFloat(VIEW_W/2, 40, `${victimLabel} KO par ${killerLabel} !`, '#ffd23b');
       }
-      else if (d.t === 'spawnfb') { this.fireballs.push(new Fireball(d.x, d.y, d.dir, 1 - this.localId)); }
+      else if (d.t === 'spawnfb') { this.fireballs.push(new Fireball(d.x, d.y, d.dir, from)); }
       else if (d.t === 'end') { this.finish(d.winner); }
     });
     this.net.on('peerleave', () => { if (!this.over) { this.addFloat(VIEW_W/2, 60, 'Adversaire parti', '#ff5d5d'); } });
@@ -91,7 +97,7 @@ export class VersusScene {
   addFloat(x, y, t, c) { this.floats.push(new FloatText(x, y, t, c)); }
   spawnFireball(fb) {
     this.fireballs.push(fb);
-    if (this.mode === 'online') this.net.relay({ t: 'spawnfb', x: fb.x, y: fb.y, dir: fb.vx > 0 ? 1 : -1 });
+    if (this.mode === 'online' || this.mode === 'ffa') this.net.relay({ t: 'spawnfb', from: this.localId, x: fb.x, y: fb.y, dir: fb.vx > 0 ? 1 : -1 });
   }
   countFireballs(id) { return this.fireballs.filter((f) => f.owner === id).length; }
   onBlockHit(ev, p) {
@@ -119,12 +125,12 @@ export class VersusScene {
     if (idx === 1 && (this.mode === 'bot' || (this.mode === 'rival' && !this.rivalGhost))) return this.aiInput();
     const I = this.game.input;
     // en ligne, le joueur local utilise le contrôleur 0; en local, p0=clavier1/manette1, p1=clavier2/manette2
-    const player = this.mode === 'online' ? 0 : idx;
+    const player = (this.mode === 'online' || this.mode === 'ffa') ? 0 : idx;
     if (idx === 0 && I.justPressed('pause', 0)) this.game.togglePause();
     return {
       left: I.isDown('left', player), right: I.isDown('right', player), down: I.isDown('down', player), downPressed: I.justPressed('down', player),
       jump: I.isDown('jump', player), jumpPressed: I.justPressed('jump', player),
-      fire: I.isDown('fire', player), firePressed: I.justPressed('fire', player), run: I.isDown('fire', player),
+      fire: I.isDown('fire', player), firePressed: I.justPressed('fire', player), run: I.isDown('run', player),
     };
   }
 
@@ -179,27 +185,36 @@ export class VersusScene {
     if (this.timeAcc >= 1) { this.timeAcc -= 1; this.timeLeft = Math.max(0, this.timeLeft - 1); }
     if (this.timeLeft <= 0 && !this.over) this.finishByScore();
 
-    if (this.mode !== 'online') {
+    if (this.mode !== 'online' && this.mode !== 'ffa') {
       this.matchMs += dt * 1000;
-      this.players[0].update(dt, this.level, this, this.inputFor(0));
-      if (this.rec && !this.over) this.rec.update(dt, this.players[0], this.matchMs);
-      if (this.mode === 'rival' && this.rivalGhost && !this.players[1].dead) this.puppetRival(dt);
-      else this.players[1].update(dt, this.level, this, this.inputFor(1));
+      for (let i = 0; i < this.players.length; i++) {
+        if (i === 1 && this.mode === 'rival' && this.rivalGhost && !this.players[1].dead) {
+          this.puppetRival(dt);
+        } else {
+          this.players[i].update(dt, this.level, this, this.inputFor(i));
+        }
+      }
+      if (this.rec && !this.over && this.players[0]) this.rec.update(dt, this.players[0], this.matchMs);
       for (let i = 0; i < this.players.length; i++) for (let j = 0; j < this.players.length; j++) if (i !== j) this.resolveCombat(i, j);
     } else {
       const me = this.players[this.localId];
-      me.update(dt, this.level, this, this.inputFor(this.localId));
-      this._applyRemoteAll(dt);
-      // détecte si JE me fais écraser par l'adversaire (autorité locale sur ma propre mort)
-      const other = this.players[1 - this.localId];
-      if (!this.coop && !me.dead && me.invuln <= 0 && aabb(me, other)) {
-        const fromAbove = (other.y + other.h) - me.y < 12 && other.vy > 30 && other.y < me.y;
-        if (fromAbove) { this.localKO(me); }
+      if (me) {
+        me.update(dt, this.level, this, this.inputFor(this.localId));
+        this._applyRemoteAll(dt);
+        // détecte si JE me fais écraser par un adversaire (autorité locale)
+        for (let i = 0; i < this.players.length; i++) {
+          if (i === this.localId) continue;
+          const other = this.players[i];
+          if (other && !other.dead && !me.dead && me.invuln <= 0 && aabb(me, other)) {
+            const fromAbove = (other.y + other.h) - me.y < 12 && other.vy > 30 && other.y < me.y;
+            if (fromAbove) { this.localKO(me, i); }
+          }
+        }
+        if (!this.coop) for (const fb of this.fireballs) {
+          if (fb.owner !== this.localId && !me.dead && me.invuln <= 0 && aabb(fb, me)) { fb.dead = true; this.localKO(me, fb.owner); }
+        }
+        this.sendState(dt);
       }
-      if (!this.coop) for (const fb of this.fireballs) {
-        if (fb.owner !== this.localId && !me.dead && me.invuln <= 0 && aabb(fb, me)) { fb.dead = true; this.localKO(me); }
-      }
-      this.sendState(dt);
     }
 
     // objets/pièces/particules communs
@@ -217,7 +232,7 @@ export class VersusScene {
     this.floats = this.floats.filter((f) => !f.dead);
 
     // respawn morts (local / bot)
-    if (this.mode !== 'online') this.players.forEach((p, i) => { if (p.dead && p.deathT > 1.2) this.respawn(p, i); });
+    if (this.mode !== 'online' && this.mode !== 'ffa') this.players.forEach((p, i) => { if (p.dead && p.deathT > 1.2) this.respawn(p, i); });
     else { const me = this.players[this.localId]; if (me.dead && me.deathT > 1.2) this.respawn(me, this.localId); }
 
     this.cam.x = clamp((this.level.pixelW - VIEW_W) / 2, 0, Math.max(0, this.level.pixelW - VIEW_W));
@@ -243,12 +258,18 @@ export class VersusScene {
     }
   }
 
-  localKO(me) {
+  localKO(me, killerIdx) {
     me.die(this); SFX.hurt();
-    this.kos[1 - this.localId]++;
+    if (killerIdx != null && this.kos[killerIdx] != null) {
+      this.kos[killerIdx]++;
+      if (this.kos[killerIdx] >= KO_TO_WIN && this.localId === 0) this.finish(killerIdx);
+    } else {
+      const otherId = 1 - this.localId;
+      this.kos[otherId]++;
+      if (this.kos[otherId] >= KO_TO_WIN && this.localId === 0) this.finish(otherId);
+    }
     this.burst(me.x + 7, me.y + 7, '#ff5d5d', 12);
-    this.net.relay({ t: 'ko' });
-    if (this.kos[1 - this.localId] >= KO_TO_WIN && this.localId === 0) this.finish(1 - this.localId);
+    if (this.net) this.net.relay({ t: 'ko', killer: killerIdx, victim: this.localId });
   }
 
   sendState(dt) {
@@ -285,8 +306,18 @@ export class VersusScene {
   }
 
   finishByScore() {
-    if (this.kos[0] === this.kos[1]) this.finish(-1);
-    else this.finish(this.kos[0] > this.kos[1] ? 0 : 1);
+    if (this.players.length <= 2) {
+      if (this.kos[0] === this.kos[1]) this.finish(-1);
+      else this.finish(this.kos[0] > this.kos[1] ? 0 : 1);
+    } else {
+      let maxKo = -1, best = [];
+      this.kos.forEach((k, idx) => {
+        if (k > maxKo) { maxKo = k; best = [idx]; }
+        else if (k === maxKo) { best.push(idx); }
+      });
+      if (best.length === 1) this.finish(best[0]);
+      else this.finish(-1); // égalité
+    }
   }
   finish(winner) {
     if (this.over) return;
@@ -295,11 +326,11 @@ export class VersusScene {
     // sauvegarde le déplacement du joueur comme fantôme rival pour cette arène
     if (this.rec) { const d = this.rec.data(); if (d.f.length >= 60) GhostStore.save(`vghost.${this.arenaIdx}`, d); }
     // succès: victoire du joueur humain
-    const humanWon = this.mode === 'online' ? (winner === this.localId)
+    const humanWon = (this.mode === 'online' || this.mode === 'ffa') ? (winner === this.localId)
       : (this.mode === 'bot' || this.mode === 'rival') ? (winner === 0)
       : (winner >= 0);
     if (humanWon) this.game.stat?.('vwin');
-    if (this.mode === 'online' && this.localId === 0) this.net.relay({ t: 'end', winner });
+    if ((this.mode === 'online' || this.mode === 'ffa') && this.localId === 0 && this.net) this.net.relay({ t: 'end', winner });
   }
   endByPeer() { this.finish(this.localId); }
 

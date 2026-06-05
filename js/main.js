@@ -46,6 +46,8 @@ class Game {
     this.use3D = Save.get('render3d', false); // 3D OFF par défaut pour garantir la visibilité des personnages
     this.canvas3d = null;
     this._installPrompt = null;
+    const difficulty = Save.get('aiDifficulty', 'medium');
+    this._botSkill = AI_PRESETS[difficulty]?.skill ?? AI_PRESETS.medium.skill;
     if (Save.get('muted', false)) toggleMute(); // restaure le réglage son
     this.resize();
     // initialisation 3D (asynchrone ; repli 2D si échec)
@@ -234,10 +236,10 @@ class Game {
     this.scene = new GameScene(this, worldIdx, levelIdx);
     this.checkOrientation();
   }
-  startVersusLocal(arenaIdx = 0) {
+  startVersusLocal(arenaIdx = 0, playerCount = 2) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
-    this._restart = () => this.startVersusLocal(arenaIdx);
-    this.scene = new VersusScene(this, { mode: 'local', arenaIdx });
+    this._restart = () => this.startVersusLocal(arenaIdx, playerCount);
+    this.scene = new VersusScene(this, { mode: 'local', arenaIdx, playerCount });
     this.checkOrientation();
   }
   startVersusBot(arenaIdx = 0) {
@@ -588,43 +590,59 @@ class Game {
       <div class="menu-list">
         <button class="btn" id="m-bot">🤖 Contre l'IA</button>
         <button class="btn" id="m-rival">🏁 Contre un Fantôme rival</button>
-        <button class="btn secondary" id="m-local">🎹 Meme clavier — 2 joueurs sur cet ecran</button>
+        <button class="btn secondary" id="m-local">🎮 Local - Libre (2 à 4 joueurs)</button>
+        <button class="btn secondary" id="m-local-tourney">🏆 Tournoi Local (4 à 8 joueurs)</button>
         <button class="btn secondary" id="m-p2p">📡 2–8 PC / LAN — sans serveur (P2P)</button>
+        <button class="btn secondary" id="m-online">🌐 En Ligne / LAN — Serveur WebSocket</button>
         <button class="btn ghost" id="m-back">← Retour</button>
       </div>
       <p class="hint" style="margin-top:8px">
-        🎹 = 1 seul ordinateur, clavier partage &nbsp;|&nbsp;
-        📡 = 2 a 8 PC, lobby WebRTC sans serveur, modes 1v1 / FFA / Tournoi
+        🎹 = Clavier partage &nbsp;|&nbsp;
+        📡 = 2 a 8 PC sans serveur &nbsp;|&nbsp;
+        🌐 = Serveur de relais WebSocket (Render)
       </p>
     `);
     p.querySelector('#m-bot').onclick    = () => { resumeAudio(); this.showDifficultyPicker('bot'); };
     p.querySelector('#m-rival').onclick  = () => { resumeAudio(); this.showDifficultyPicker('rival'); };
     p.querySelector('#m-local').onclick  = () => this.showLocalHelp();
+    p.querySelector('#m-local-tourney').onclick  = () => this.showLocalTournamentSetup();
     p.querySelector('#m-p2p').onclick    = () => { resumeAudio(); this.showP2PLobby(); };
+    p.querySelector('#m-online').onclick = () => { resumeAudio(); this.showOnline(); };
     p.querySelector('#m-back').onclick   = () => this.showTitle();
   }
 
-  // Explique les controles local avant de choisir l'arene
   showLocalHelp() {
     resumeAudio();
     const p = this.panel(`
-      <div class="title"><span class="big" style="font-size:28px">🎹 MODE LOCAL</span><span class="sub">MEME CLAVIER, MEME ECRAN</span></div>
-      <p class="hint">Les 2 joueurs jouent sur <b>le meme ordinateur</b> avec un clavier partage.</p>
-      <table style="margin:10px auto;border-collapse:collapse;font-size:13px;text-align:center">
-        <tr style="background:#1a2a3a">
-          <th style="padding:6px 14px;color:#7fc6ff">JOUEUR 1</th>
-          <th style="padding:6px 14px;color:#37c24a">JOUEUR 2</th>
-        </tr>
-        <tr><td style="padding:5px 14px">← → &nbsp; Fleches / ZQSD</td><td style="padding:5px 14px">F / H &nbsp; (gauche / droite)</td></tr>
-        <tr><td>Saut : Espace / W / K</td><td>Saut : T / Y</td></tr>
-        <tr><td>Feu : J / Shift / L</td><td>Feu : U</td></tr>
-      </table>
-      <div class="menu-list" style="margin-top:12px">
-        <button class="btn" id="go">🎮 Choisir l'arene</button>
-        <button class="btn ghost" id="back">← Retour</button>
+      <div class="title"><span class="big" style="font-size:28px">🎮 MODE LOCAL FFA</span><span class="sub">SUR CE PC</span></div>
+      <p class="hint">Jusqu'à 4 joueurs sur le même ordinateur avec manettes ou clavier partagé.</p>
+      <div style="display:flex; justify-content:center; gap: 15px; margin: 10px 0;">
+        <button class="btn" id="go-2">2 Joueurs</button>
+        <button class="btn" id="go-3">3 Joueurs</button>
+        <button class="btn" id="go-4">4 Joueurs</button>
       </div>
+      <div class="row" style="margin-top:16px"><button class="btn ghost" id="back">← Retour</button></div>
     `);
-    p.querySelector('#go').onclick   = () => this.showArenaSelect('local');
+    [2,3,4].forEach(n => {
+       p.querySelector('#go-'+n).onclick = () => this.showArenaSelect('local', null, null, n);
+    });
+    p.querySelector('#back').onclick = () => this.showVersusMenu();
+  }
+
+  showLocalTournamentSetup() {
+    resumeAudio();
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:28px">🏆 TOURNOI LOCAL</span><span class="sub">SUR CE PC</span></div>
+      <p class="hint">Un bracket d'élimination s'affichera. Les joueurs jouent à tour de rôle en 1v1.</p>
+      <div style="display:flex; justify-content:center; gap: 15px; margin: 10px 0;">
+        <button class="btn" id="tourney-4">Tournoi 4 Joueurs</button>
+        <button class="btn" id="tourney-8">Tournoi 8 Joueurs</button>
+      </div>
+      <div class="row" style="margin-top:16px"><button class="btn ghost" id="back">← Retour</button></div>
+    `);
+    [4,8].forEach(n => {
+       p.querySelector('#tourney-'+n).onclick = () => this.showArenaSelect('tourney_local', null, null, n);
+    });
     p.querySelector('#back').onclick = () => this.showVersusMenu();
   }
 
@@ -671,15 +689,13 @@ class Game {
   // ================================================================
   showP2PLobby() {
     resumeAudio();
-    let hostObj = null;
+    let hostObj  = null;
     let guestPeer = null;
-    let slots = [];
-    const MAX = 8;
 
     const p = this.panel(`
-      <div class="title"><span class="big" style="font-size:24px">📡 LOBBY P2P</span><span class="sub">JUSQU'A 8 JOUEURS SANS SERVEUR</span></div>
+      <div class="title"><span class="big" style="font-size:24px">📡 LOBBY MULTI P2P</span><span class="sub">JUSQU'À 4 JOUEURS (PEERJS)</span></div>
       <div style="display:flex;gap:8px;margin-bottom:10px">
-        <button class="btn" id="tab-h" style="flex:1">🏠 Heberger</button>
+        <button class="btn" id="tab-h" style="flex:1">🏠 Héberger</button>
         <button class="btn ghost" id="tab-g" style="flex:1">🔗 Rejoindre</button>
       </div>
       <div id="content"></div>
@@ -689,126 +705,165 @@ class Game {
     const st = p.querySelector('#st');
     const content = p.querySelector('#content');
 
-    // ---- Onglet HOTE ----
+    const cleanUp = () => {
+      if (hostObj) { hostObj.disconnect(); hostObj = null; }
+      if (guestPeer) { guestPeer.disconnect(); guestPeer = null; }
+    };
+
+    // ---- Onglet HÔTE ----
     const showHost = () => {
+      cleanUp();
       p.querySelector('#tab-h').className = 'btn';
       p.querySelector('#tab-g').className = 'btn ghost';
       content.innerHTML = `
-        <div id="slots" style="max-height:250px;overflow-y:auto"></div>
-        <button class="btn secondary" id="add" style="width:100%;margin-top:6px">+ Ajouter un joueur (slot)</button>
-        <div id="modes" style="margin-top:10px"></div>
+        <div style="text-align:center;padding:15px;background:rgba(255,255,255,0.04);border:1px solid #334;border-radius:8px">
+          <p class="hint" style="margin-bottom:8px">Créer un salon et partager le code à 4 lettres</p>
+          <button class="btn" id="create-room">🎮 Créer un salon</button>
+          <div id="room-info" style="display:none;margin-top:12px">
+            <div style="font-size:11px;color:#888;text-transform:uppercase">Code du salon</div>
+            <div id="room-code-display" style="font-size:32px;font-weight:900;color:#ffd23b;letter-spacing:4px;margin:6px 0">----</div>
+            <button class="btn ghost" id="cp-code" style="padding:4px 10px;font-size:12px;margin-bottom:10px">📋 Copier le lien de partage</button>
+          </div>
+        </div>
+        <div id="player-list-section" style="display:none;margin-top:14px">
+          <div style="font-size:12px;color:#7fc6ff;font-weight:bold;margin-bottom:6px">Joueurs connectés (<span id="player-count">1</span>/4) :</div>
+          <div id="players-box" style="display:flex;flex-direction:column;gap:5px">
+            <div style="padding:6px;background:rgba(55,194,74,0.1);border:1px solid #37c24a;border-radius:5px;font-size:13px">👑 <b>J1 (Vous)</b> - Hôte</div>
+          </div>
+          <div id="host-actions" style="margin-top:14px;display:none">
+            <button class="btn" id="start-game" style="width:100%;margin-bottom:8px">⚔️ Mode Libre (FFA)</button>
+            <button class="btn secondary" id="start-tourney" style="width:100%">🏆 Créer un Tournoi</button>
+          </div>
+        </div>
       `;
 
-      const renderSlots = () => {
-        const sd = content.querySelector('#slots');
-        if (!slots.length) { sd.innerHTML = '<p class="hint" style="text-align:center">Clique + pour generer un code par joueur.</p>'; return; }
-        sd.innerHTML = slots.map((s, i) => `
-          <div style="background:${s.connected?'rgba(55,194,74,0.12)':'rgba(127,198,255,0.07)'};border:1px solid ${s.connected?'#37c24a':'#334'};border-radius:7px;padding:8px;margin-bottom:5px">
-            <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
-              <b style="color:${s.connected?'#37c24a':'#7fc6ff'}">J${i+2}</b>
-              <span style="font-size:11px;color:${s.connected?'#37c24a':'#888'}">${s.connected?'✓ Connecte':'En attente...'}</span>
-            </div>
-            ${!s.connected ? `
-              <textarea id="c${s.id}" rows="2" readonly style="width:100%;font-size:9px;font-family:monospace;resize:none;background:#0a1a2a;color:#aaa;margin-bottom:4px">${s.code}</textarea>
-              <div style="display:flex;gap:4px;flex-wrap:wrap">
-                <button class="btn ghost" id="cp${s.id}" style="padding:3px 8px;font-size:11px">📋 Copier</button>
-                <input id="ai${s.id}" placeholder="Reponse de J${i+2}..." style="flex:1;min-width:100px;font-size:11px">
-                <button class="btn secondary" id="ac${s.id}" style="padding:3px 8px;font-size:11px">✅</button>
-              </div>
-            ` : ''}
-          </div>
-        `).join('');
-        slots.forEach(s => {
-          document.getElementById(`cp${s.id}`)?.addEventListener('click', () => { navigator.clipboard?.writeText(s.code); st.textContent = 'Code J' + (slots.indexOf(s)+2) + ' copie !'; });
-          const acBtn = document.getElementById(`ac${s.id}`);
-          if (acBtn) acBtn.onclick = async () => {
-            const ans = document.getElementById(`ai${s.id}`)?.value.trim();
-            if (!ans) { st.textContent = 'Colle la reponse.'; return; }
-            st.textContent = 'Connexion J' + (slots.indexOf(s)+2) + '...';
-            try { await hostObj.acceptAnswer(s.id, ans); }
-            catch(e) { st.textContent = 'Erreur: ' + e.message; }
-          };
-        });
-      };
+      const createBtn = content.querySelector('#create-room');
+      const roomInfo = content.querySelector('#room-info');
+      const codeDisp = content.querySelector('#room-code-display');
+      const cpBtn = content.querySelector('#cp-code');
+      const listSec = content.querySelector('#player-list-section');
+      const countDisp = content.querySelector('#player-count');
+      const box = content.querySelector('#players-box');
+      const hostActs = content.querySelector('#host-actions');
 
-      const renderModes = () => {
-        const n = hostObj ? hostObj.connectedCount : 1;
-        const md = content.querySelector('#modes');
-        if (!md) return;
-        if (n < 2) { md.innerHTML = '<p class="hint" style="text-align:center">Connecte au moins 1 ami pour jouer.</p>'; return; }
-        const ids = [0, ...(hostObj?.connectedIds || [])].slice(0, n);
-        md.innerHTML = `
-          <p class="hint" style="margin-bottom:6px"><b>${n} joueur${n>1?'s':''}</b> connectes</p>
-          <div class="menu-list">
-            <button class="btn" id="m1v1">⚔️ 1v1 (J1 vs J2)</button>
-            ${n >= 3 ? `<button class="btn secondary" id="mffa">🎯 FFA ${n} joueurs (simultane)</button>` : ''}
-            ${n >= 4 ? `<button class="btn secondary" id="mtour">🏆 Tournoi 1v1 progressif (${n} joueurs)</button>` : ''}
-          </div>
-        `;
-        md.querySelector('#m1v1').onclick = () => this._p2pArenaSelect(hostObj, [0, hostObj.connectedIds[0] ?? 1], false);
-        md.querySelector('#mffa')?.addEventListener('click', () => this._p2pArenaSelect(hostObj, ids, false));
-        md.querySelector('#mtour')?.addEventListener('click', () => this._p2pArenaSelect(hostObj, ids, true));
-      };
-
-      hostObj = new MultiPeerHost();
-      hostObj.on('peerjoin', ({ id }) => {
-        const s = slots.find(s => s.id === id);
-        if (s) s.connected = true;
-        renderSlots(); renderModes();
-      });
-
-      content.querySelector('#add').onclick = async () => {
-        if (slots.length >= MAX - 1) { st.textContent = 'Maximum ' + MAX + ' joueurs.'; return; }
-        st.textContent = 'Generation du code...';
+      createBtn.onclick = async () => {
+        createBtn.disabled = true;
+        st.textContent = 'Création du salon PeerJS...';
         try {
-          const { id, code } = await hostObj.addSlot();
-          slots.push({ id, code, connected: false });
-          renderSlots(); renderModes();
-          st.textContent = 'Code genere pour J' + (slots.length+1) + '. Envoie-le a ton ami.';
-        } catch(e) { st.textContent = 'Erreur: ' + e.message; }
+          hostObj = new MultiPeerHost();
+          const code = await hostObj.open();
+          st.textContent = 'Salon ouvert avec succès !';
+          createBtn.style.display = 'none';
+          roomInfo.style.display = 'block';
+          codeDisp.textContent = code;
+          listSec.style.display = 'block';
+
+          const shareUrl = `${window.location.origin}${window.location.pathname}?room=${code}`;
+          cpBtn.onclick = () => {
+            navigator.clipboard?.writeText(shareUrl);
+            st.textContent = 'Lien de partage copié !';
+            setTimeout(() => { st.textContent = ''; }, 2500);
+          };
+
+          hostObj.on('peerjoin', ({ id, total }) => {
+            st.textContent = `Un joueur a rejoint ! (Total: ${total})`;
+            updatePlayerList();
+          });
+
+          hostObj.on('peerleave', ({ id }) => {
+            st.textContent = 'Un joueur s\'est déconnecté.';
+            updatePlayerList();
+          });
+
+          const updatePlayerList = () => {
+            const n = hostObj.connectedCount;
+            countDisp.textContent = n;
+            box.innerHTML = `<div style="padding:6px;background:rgba(55,194,74,0.1);border:1px solid #37c24a;border-radius:5px;font-size:13px">👑 <b>J1 (Vous)</b> - Hôte</div>`;
+            hostObj.connectedIds.forEach((pid, idx) => {
+              box.innerHTML += `<div style="padding:6px;background:rgba(127,198,255,0.1);border:1px solid #334;border-radius:5px;font-size:13px">👤 <b>J${idx+2}</b> - Connecté</div>`;
+            });
+            hostActs.style.display = n >= 2 ? 'block' : 'none';
+          };
+
+          content.querySelector('#start-game').onclick = () => {
+            const ids = [0, ...hostObj.connectedIds];
+            this._p2pArenaSelect(hostObj, ids, false);
+          };
+
+          content.querySelector('#start-tourney').onclick = () => {
+            const ids = [0, ...hostObj.connectedIds];
+            this._p2pArenaSelect(hostObj, ids, true);
+          };
+
+        } catch (err) {
+          st.textContent = `Erreur de création: ${err.message}`;
+          createBtn.disabled = false;
+        }
       };
-      renderSlots(); renderModes();
     };
 
     // ---- Onglet GUEST ----
     const showGuest = () => {
+      cleanUp();
       p.querySelector('#tab-h').className = 'btn ghost';
       p.querySelector('#tab-g').className = 'btn';
       content.innerHTML = `
-        <p class="hint">Colle le code que l'hote t'a envoye, genere ta reponse et renvoie-la a l'hote.</p>
-        <textarea id="ofin" rows="3" placeholder="Code de l'hote..." style="width:100%;font-size:9px;font-family:monospace;resize:none;background:#0a1a2a;color:#aaa"></textarea>
-        <button class="btn" id="gans" style="width:100%;margin-top:6px">⚙️ Generer ma reponse</button>
-        <textarea id="anout" rows="3" readonly placeholder="Ton code de reponse..." style="width:100%;font-size:9px;font-family:monospace;resize:none;background:#0a1a2a;color:#aaa;margin-top:6px"></textarea>
-        <button class="btn ghost" id="cpans" style="display:none;width:100%;margin-top:4px">📋 Copier ma reponse</button>
+        <div style="text-align:center;padding:15px;background:rgba(255,255,255,0.04);border:1px solid #334;border-radius:8px">
+          <p class="hint" style="margin-bottom:8px">Entrer le code à 4 lettres de l'hôte</p>
+          <input id="room-code-input" placeholder="CODE" maxlength="4" style="font-size:24px;text-align:center;width:120px;text-transform:uppercase;font-weight:900;letter-spacing:3px;margin-bottom:10px">
+          <button class="btn" id="join-room" style="width:100%">🔌 Rejoindre le salon</button>
+        </div>
       `;
-      content.querySelector('#gans').onclick = async () => {
-        const offer = content.querySelector('#ofin').value.trim();
-        if (!offer) { st.textContent = "Colle le code de l'hote."; return; }
-        st.textContent = 'Generation...';
+
+      const joinBtn = content.querySelector('#join-room');
+      const input = content.querySelector('#room-code-input');
+
+      // Pré-remplir si présent dans l'URL (?room=CODE)
+      const urlCode = new URLSearchParams(window.location.search).get('room');
+      if (urlCode && urlCode.length === 4) {
+        input.value = urlCode.toUpperCase();
+      }
+
+      joinBtn.onclick = async () => {
+        const code = input.value.trim().toUpperCase();
+        if (code.length !== 4) { st.textContent = 'Le code doit faire 4 caractères.'; return; }
+        joinBtn.disabled = true;
+        st.textContent = `Connexion au salon ${code}...`;
+
         try {
           guestPeer = new PeerClient();
-          const { answerCode, waitForConnection } = await guestPeer.answerOffer(offer);
-          content.querySelector('#anout').value = answerCode;
-          const cb = content.querySelector('#cpans');
-          cb.style.display = '';
-          cb.onclick = () => { navigator.clipboard?.writeText(answerCode); st.textContent = 'Copie !'; };
-          st.textContent = "Envoie ce code a l'hote. En attente de connexion...";
-          waitForConnection().then(() => {
-            st.innerHTML = '<b style="color:#37c24a">Connecte !</b> L\'hote va lancer la partie...';
-            guestPeer.on('msg', (m) => {
-              const d = m.d || m;
-              if (d.t === 'arena') this.startVersusP2P(guestPeer, d.guestId ?? 1, d.i, d.playerCount || 2);
-              if (d.t === 'tournament_match') this.startVersusP2P(guestPeer, d.localId, d.arenaIdx, 2);
-            });
-          }).catch(() => { st.textContent = 'Timeout. Recommence.'; });
-        } catch(e) { st.textContent = 'Code invalide: ' + e.message; }
+          const info = await guestPeer.connect(code);
+          st.innerHTML = `<b style="color:#37c24a">Connecté !</b> En attente du choix d'arène de l'hôte...`;
+          joinBtn.style.display = 'none';
+          input.style.display = 'none';
+
+          guestPeer.on('msg', (m) => {
+            const d = m.d || m;
+            if (d.t === 'arena') {
+              this.startVersusP2P(guestPeer, info.localId, d.i, d.playerCount || 2);
+            } else if (d.t === 'tournament_match') {
+              this.startVersusP2P(guestPeer, d.localId, d.arenaIdx, 2);
+            }
+          });
+
+        } catch (err) {
+          st.textContent = `Échec de connexion: ${err.message}`;
+          joinBtn.disabled = false;
+        }
       };
     };
 
     p.querySelector('#tab-h').onclick = showHost;
     p.querySelector('#tab-g').onclick = showGuest;
-    p.querySelector('#back').onclick  = () => { guestPeer?.disconnect(); hostObj?.disconnect(); this.showVersusMenu(); };
-    showHost();
+    p.querySelector('#back').onclick  = () => { cleanUp(); this.showVersusMenu(); };
+
+    // Auto-join guest si ?room= dans l'URL
+    const urlRoom = new URLSearchParams(window.location.search).get('room');
+    if (urlRoom && urlRoom.length === 4) {
+      showGuest();
+    } else {
+      showHost();
+    }
   }
 
   // ---- Selection arene P2P (host annonce aux guests) ----
@@ -848,8 +903,9 @@ class Game {
   }
 
   // ---- Bracket de tournoi ----
-  showTournamentBracket(host, playerIds, arenaIdx) {
+  showTournamentBracket(mode, playerIds, arenaIdx) {
     const bracket = this._tournamentBracket;
+    const host = mode === 'local' ? null : mode;
     const lbl = (id) => id === 0 ? 'Vous' : `J${playerIds.indexOf(id)+1}`;
     const colFor = (id) => ['#7fc6ff','#37c24a','#ff8a3b','#ff5d5d','#c084fc','#f9a825','#4dd0e1','#ef9a9a'][playerIds.indexOf(id) % 8];
 
@@ -898,27 +954,37 @@ class Game {
     if (pair && !bracket.isComplete) {
       const [p1Id, p2Id] = pair;
       pp.querySelector('#launch').onclick = () => {
-        const myLocalId = p1Id === 0 ? 0 : p2Id === 0 ? 1 : -1;
-        if (p1Id !== 0) host.sendTo(p1Id, { t: 'relay', d: { t: 'tournament_match', localId: 0, arenaIdx } });
-        if (p2Id !== 0) host.sendTo(p2Id, { t: 'relay', d: { t: 'tournament_match', localId: 1, arenaIdx } });
-        if (myLocalId >= 0) {
+        if (mode === 'local') {
           this._onVersusEnd = (scene) => {
             const w = scene.winner;
             const winId = w === 0 ? p1Id : p2Id;
             bracket.recordWinner(winId);
-            delete this._onVersusEnd;
-            this.showTournamentBracket(host, playerIds, arenaIdx);
+            this.showTournamentBracket('local', playerIds, arenaIdx);
           };
-          this.startVersusP2P(host, myLocalId, arenaIdx, 2);
+          this.startVersusLocal(arenaIdx, 2);
         } else {
-          pp.querySelector('#tst').textContent = 'Match en cours...';
-          host.on('msg', (m) => {
-            if (m.d?.t === 'end') {
-              const w = m.d.winner; const winId = w === 0 ? p1Id : p2Id;
+          const myLocalId = p1Id === 0 ? 0 : p2Id === 0 ? 1 : -1;
+          if (p1Id !== 0) host.sendTo(p1Id, { t: 'relay', d: { t: 'tournament_match', localId: 0, arenaIdx } });
+          if (p2Id !== 0) host.sendTo(p2Id, { t: 'relay', d: { t: 'tournament_match', localId: 1, arenaIdx } });
+          if (myLocalId >= 0) {
+            this._onVersusEnd = (scene) => {
+              const w = scene.winner;
+              const winId = w === 0 ? p1Id : p2Id;
               bracket.recordWinner(winId);
+              delete this._onVersusEnd;
               this.showTournamentBracket(host, playerIds, arenaIdx);
-            }
-          });
+            };
+            this.startVersusP2P(host, myLocalId, arenaIdx, 2);
+          } else {
+            pp.querySelector('#tst').textContent = 'Match en cours...';
+            host.on('msg', (m) => {
+              if (m.d?.t === 'end') {
+                const w = m.d.winner; const winId = w === 0 ? p1Id : p2Id;
+                bracket.recordWinner(winId);
+                this.showTournamentBracket(host, playerIds, arenaIdx);
+              }
+            });
+          }
         }
       };
     }
@@ -1042,7 +1108,7 @@ class Game {
     p.querySelector('#back').onclick = () => this.showTitle();
   }
 
-  showArenaSelect(mode, net, localId) {
+  showArenaSelect(mode, net, localId, playerCount = 2) {
     let cards = ARENAS.map((a, i) => {
       const hasGhost = mode === 'rival' && GhostStore.has(`vghost.${i}`);
       return `<div class="lvl-card" data-i="${i}">${a.name}<small>${a.theme}${hasGhost ? ' 👻' : ''}</small></div>`;
@@ -1066,7 +1132,12 @@ class Game {
         if (mode === 'online') this.startVersusOnline(net, localId, i);
         else if (mode === 'bot') this.startVersusBot(i);
         else if (mode === 'rival') this.startVersusRival(i);
-        else this.startVersusLocal(i);
+        else if (mode === 'tourney_local') {
+          const ids = Array.from({length: Math.max(2, playerCount)}, (_, k) => k);
+          this._tournamentBracket = this._mkBracket(ids);
+          this.showTournamentBracket('local', ids, i);
+        }
+        else this.startVersusLocal(i, playerCount);
       };
     });
     p.querySelector('#back').onclick = () => (mode === 'online' ? this.showOnline() : this.showVersusMenu());

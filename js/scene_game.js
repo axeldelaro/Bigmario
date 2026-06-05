@@ -131,8 +131,10 @@ export class GameScene {
 
   // Écrasement piqué (slam) : déclenche les blocs juste sous les pieds du joueur,
   // comme s'il les frappait par en dessous — ouvre les ? et casse les briques (si grand).
+  // Provoque aussi une onde de choc au sol qui blesse les ennemis proches.
   onPoundLand(player) {
-    const feetTy = Math.floor((player.y + player.h + 2) / TILE); // tuile juste sous les pieds
+    // 1. Ouvre les blocs d'objets (? et briques) sous les pieds
+    const feetTy = Math.floor((player.y + player.h + 2) / TILE);
     const x0 = Math.floor((player.x + 2) / TILE);
     const x1 = Math.floor((player.x + player.w - 3) / TILE);
     let hit = false;
@@ -140,10 +142,35 @@ export class GameScene {
       const ev = this.level.hitBlock(tx, feetTy);
       if (ev) { this.onBlockHit(ev, player); hit = true; }
     }
-    // impact visuel + retour haptique même sans bloc
-    this.addShake(hit ? 6 : 3);
-    this.burst(player.x + player.w / 2, player.y + player.h, hit ? '#ffd23b' : '#ccc', hit ? 14 : 6, 180);
-    if (hit) this.freeze = Math.max(this.freeze, 0.04); // mini hitstop
+
+    // 2. Secousse de caméra, freeze et SFX
+    this.addShake(hit ? 8 : 6);
+    this.freeze = 0.05;
+    if (SFX.boom) SFX.boom();
+    else SFX.stomp();
+
+    // 3. Impact visuel et particules
+    const cx = player.x + player.w / 2, gy = player.y + player.h;
+    this.burst(cx, gy, hit ? '#ffd23b' : '#e8dcc0', hit ? 14 : 6, 180);
+    // Particules de poussière latérales
+    for (let i = 0; i < 12; i++) {
+      const s = i < 6 ? -1 : 1;
+      this.particles.push(new Particle(cx, gy - 1, s * rand(40, 160), rand(-40, -5), '#e8dcc0', rand(0.3, 0.6), 2, 200));
+    }
+
+    // 4. Dégâts de zone (onde de choc) aux ennemis proches
+    const R = 34;
+    for (const e of this.enemies) {
+      if (e.dead || e.removed) continue;
+      if (Math.abs((e.x + e.w / 2) - cx) < R && Math.abs((e.y + e.h) - gy) < 20) {
+        e.kill(e.x < cx ? -1 : 1);
+        this.addCombo(e.x + 7, e.y);
+        this.burst(e.x + 7, e.y + 7, '#ffd23b', 6);
+      }
+    }
+    if (this.boss && !this.boss.dead && Math.abs((this.boss.x + this.boss.w / 2) - cx) < R + 12 && (this.boss.y + this.boss.h) - gy > -24) {
+      this.boss.hitTop(this);
+    }
   }
 
 
@@ -293,18 +320,7 @@ export class GameScene {
     }
   }
 
-  // impact de l'écrasement piqué : onde de choc au sol
-  onPoundLand(p) {
-    this.addShake(6); this.freeze = 0.05; SFX.boom?.();
-    const cx = p.x + p.w / 2, gy = p.y + p.h;
-    for (let i = 0; i < 12; i++) { const s = i < 6 ? -1 : 1; this.particles.push(new Particle(cx, gy - 1, s * rand(40, 160), rand(-40, -5), '#e8dcc0', rand(0.3, 0.6), 2, 200)); }
-    const R = 34;
-    for (const e of this.enemies) {
-      if (e.dead || e.removed) continue;
-      if (Math.abs((e.x + e.w / 2) - cx) < R && Math.abs((e.y + e.h) - gy) < 20) { e.kill(e.x < cx ? -1 : 1); this.addCombo(e.x + 7, e.y); this.burst(e.x + 7, e.y + 7, '#ffd23b', 6); }
-    }
-    if (this.boss && !this.boss.dead && Math.abs((this.boss.x + this.boss.w / 2) - cx) < R + 12 && (this.boss.y + this.boss.h) - gy > -24) this.boss.hitTop(this);
-  }
+  // (onPoundLand est défini plus haut pour gérer les blocs et l'onde de choc)
 
   bossClear() {
     this.state = 'levelclear'; this.stateT = 0; SFX.win(); playMusic('overworld');
@@ -452,7 +468,7 @@ export class GameScene {
     return {
       left: I.isDown('left', 0), right: I.isDown('right', 0), down: I.isDown('down', 0), downPressed: I.justPressed('down', 0),
       jump: I.isDown('jump', 0), jumpPressed: I.justPressed('jump', 0),
-      fire: I.isDown('fire', 0), firePressed: I.justPressed('fire', 0), run: I.isDown('fire', 0),
+      fire: I.isDown('fire', 0), firePressed: I.justPressed('fire', 0), run: I.isDown('run', 0),
     };
   }
 

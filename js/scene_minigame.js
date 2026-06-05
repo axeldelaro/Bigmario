@@ -72,7 +72,7 @@ export class MiniGameScene {
       left: I.isDown('left', 0), right: I.isDown('right', 0),
       down: I.isDown('down', 0), downPressed: I.justPressed('down', 0),
       jump: I.isDown('jump', 0), jumpPressed: I.justPressed('jump', 0),
-      fire: I.isDown('fire', 0), firePressed: I.justPressed('fire', 0), run: I.isDown('fire', 0),
+      fire: I.isDown('fire', 0), firePressed: I.justPressed('fire', 0), run: I.isDown('run', 0),
     };
   }
 
