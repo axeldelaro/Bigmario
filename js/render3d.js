@@ -160,7 +160,12 @@ function buildRenderer() {
 
   const boxGeo = new THREE.BoxGeometry(1, 1, 1.15);
   const matCache = new Map();
-  const mat = (hex) => { if (!matCache.has(hex)) matCache.set(hex, new THREE.MeshStandardMaterial({ color: hex, roughness: 0.7, metalness: 0.05 })); return matCache.get(hex); };
+  const mat = (hex) => { if (!matCache.has(hex)) matCache.set(hex, new THREE.MeshStandardMaterial({ color: hex, roughness: 0.62, metalness: 0.06, envMapIntensity: 0.7 })); return matCache.get(hex); };
+  // matériau lisse (perso) — plus doux et légèrement brillant
+  const smoothCache = new Map();
+  const smooth = (hex, rough = 0.45, metal = 0.05) => { const k = hex + ':' + rough; if (!smoothCache.has(k)) smoothCache.set(k, new THREE.MeshStandardMaterial({ color: hex, roughness: rough, metalness: metal, envMapIntensity: 0.9 })); return smoothCache.get(k); };
+  // éclairage d'environnement (IBL) à partir du ciel -> réflexions douces
+  let pmrem = null; try { pmrem = new THREE.PMREMGenerator(renderer); pmrem.compileEquirectangularShader && pmrem.compileEquirectangularShader(); } catch {}
 
   // sprite (canvas pixel-art) -> texture nette
   const texCache = new Map();
@@ -187,10 +192,22 @@ function buildRenderer() {
   };
 
   return {
-    THREE, renderer, scene, cam, root, boxGeo, mat, tex, tileMats, key,
+    THREE, renderer, scene, cam, root, boxGeo, mat, smooth, tex, tileMats, key, pmrem,
     pools: { tile: [], ti: 0, ent: new Map() },
-    models: {}, skyCache: new Map(),
+    models: {}, skyCache: new Map(), envCache: {},
   };
+}
+
+// environnement IBL généré depuis le ciel du thème (réflexions/ambiance douces)
+function updateEnv(theme) {
+  if (!R.pmrem) return;
+  if (!(theme in R.envCache)) {
+    try {
+      const tex = skyTexture(theme); tex.mapping = THREE.EquirectangularReflectionMapping;
+      R.envCache[theme] = R.pmrem.fromEquirectangular(tex).texture;
+    } catch { R.envCache[theme] = null; }
+  }
+  R.scene.environment = R.envCache[theme] || null;
 }
 
 // texture de ciel en dégradé (par thème) pour le fond 3D
@@ -348,15 +365,34 @@ function limb(px, py, w, h, d, tx) {
   return piv;
 }
 // ---- modèles texturés ----
+// membre lisse articulé (capsule qui pend sous le pivot)
+function smoothLimb(px, py, r, len, hex) {
+  const piv = new THREE.Group(); piv.position.set(px, py, 0);
+  const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 12), R.smooth(hex, 0.5));
+  m.position.y = -(len / 2 + r * 0.4); m.castShadow = true; piv.add(m);
+  return piv;
+}
 function makeHero() {
   const g = new THREE.Group();
-  const torso = texBox(0.95, 0.55, 0.85, 'overalls', 'overalls', 0, 0.28, 0); g.add(torso);
-  const head = texBox(0.9, 0.62, 0.84, 'skin', 'face', 0, 0.82, 0); g.add(head);
-  const cap = texBox(1.0, 0.3, 0.96, 'cap', 'cap', 0, 1.12, 0); g.add(cap);
-  const lL = limb(-0.22, 0.0, 0.36, 0.5, 0.52, 'shoe');
-  const lR = limb(0.22, 0.0, 0.36, 0.5, 0.52, 'shoe');
-  const aL = limb(-0.56, 0.55, 0.22, 0.42, 0.5, 'skin');
-  const aR = limb(0.56, 0.55, 0.22, 0.42, 0.5, 'skin');
+  const S = R.smooth;
+  // torse arrondi (salopette)
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.36, 0.34, 6, 16), S(0x2f6cff, 0.5)); torso.position.y = 0.4; torso.scale.set(1, 1, 0.86); torso.castShadow = true; g.add(torso);
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.55, 0.7), S(0x1c3fb0, 0.5)); strap.position.set(0, 0.42, 0.18); g.add(strap);
+  const btn = new THREE.Mesh(new THREE.SphereGeometry(0.06, 12, 12), S(0xffd23b, 0.25, 0.4)); btn.position.set(0, 0.58, 0.34); g.add(btn);
+  // tête (sphère)
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 22, 18), S(0xffcb9c, 0.7)); head.position.y = 0.98; head.scale.set(1, 1.06, 0.96); head.castShadow = true; g.add(head);
+  const eye = (x) => { const w = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 12), S(0xffffff, 0.25)); w.position.set(x, 1.02, 0.3); w.scale.set(1, 1.2, 0.6); g.add(w); const p = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 10), S(0x241b14, 0.2)); p.position.set(x, 1.02, 0.38); g.add(p); };
+  eye(0.15); eye(-0.15);
+  const nose = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), S(0xe8a878, 0.6)); nose.position.set(0, 0.94, 0.4); g.add(nose);
+  // casquette : demi-sphère + visière
+  const cap = new THREE.Group(); cap.position.y = 1.2;
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(0.42, 20, 14, 0, 6.2832, 0, Math.PI / 2), S(0xe23b3b, 0.45)); dome.castShadow = true; cap.add(dome);
+  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.05, 18, 1, false, 0, Math.PI), S(0xc12d12, 0.45)); brim.position.set(0, 0.02, 0.22); cap.add(brim);
+  g.add(cap);
+  const lL = smoothLimb(-0.19, 0.06, 0.14, 0.34, 0x241b14);
+  const lR = smoothLimb(0.19, 0.06, 0.14, 0.34, 0x241b14);
+  const aL = smoothLimb(-0.44, 0.52, 0.11, 0.34, 0xffcb9c);
+  const aR = smoothLimb(0.44, 0.52, 0.11, 0.34, 0xffcb9c);
   g.add(lL, lR, aL, aR);
   g.userData = { torso, head, cap, lL, lR, aL, aR };
   return g;
@@ -450,6 +486,7 @@ function drawScene(scene) {
   const lvl = scene.level, cam = scene.cam;
   // ciel + brouillard selon thème
   R.scene.background = skyTexture(lvl.theme);
+  updateEnv(lvl.theme);
   R.scene.fog.color.setHex(THEME_FOG[lvl.theme] ?? 0x9fd6ff);
 
   // caméra suit le centre de vue
@@ -546,7 +583,7 @@ function drawScene(scene) {
     if (!p) return;
     const g = place('hero' + idx, makeHero, p.x, p.y, p.w, p.h, (g) => {
       const ud = g.userData;
-      if (ud.torso) ud.torso.material = texMat(p.power === 'fire' ? 'overalls_fire' : p.power === 'glide' ? 'overalls_glide' : 'overalls');
+      if (ud.torso) ud.torso.material = R.smooth(p.power === 'fire' ? 0xff5d2e : p.power === 'glide' ? 0x46c8ff : 0x2f6cff, 0.5);
       const moving = Math.abs(p.vx) > 8 && p.onGround;
       const sp = Math.min(Math.abs(p.vx) / 110, 1);
       // squash & stretch + taille
