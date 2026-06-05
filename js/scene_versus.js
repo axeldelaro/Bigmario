@@ -17,8 +17,12 @@ export class VersusScene {
     this.mode = opts.mode || 'local'; // 'local' | 'bot' | 'rival' | 'online'
     this.coop = !!opts.coop;          // co-op : pas de combat, collecte commune
     this.coopCoins = 0;
+    this.coop = opts.mode === 'coop';
+    this.localId = opts.localId || 0;
+    this.playerCount = opts.playerCount || 2;
+    this.ids = opts.ids || Array.from({length: Math.max(2, this.playerCount)}, (_, k) => k);
+    this._brains = {}; // index du joueur contrôlé en ligne
     this.net = opts.net || null;
-    this.localId = opts.localId ?? 0; // index du joueur contrôlé en ligne
     this.arenaIdx = opts.arenaIdx ?? 0;
     this.botSkill = opts.botSkill ?? 0.92; // difficulté de l'IA (0..1)
     this.playerCount = opts.playerCount || 2;
@@ -122,9 +126,14 @@ export class VersusScene {
 
   inputFor(idx) {
     // joueur 1 piloté par l'IA en mode bot, ou en mode rival sans fantôme enregistré
-    if (idx === 1 && (this.mode === 'bot' || (this.mode === 'rival' && !this.rivalGhost))) return this.aiInput();
+    if (idx === 1 && (this.mode === 'bot' || (this.mode === 'rival' && !this.rivalGhost))) return this.aiInput(idx);
+    
+    // IA personnalisées dans le tableau ids (pour FFA et tournois locaux)
+    const realId = this.ids && this.ids[idx];
+    if (typeof realId === 'string' && realId.startsWith('AI')) return this.aiInput(idx);
+
     const I = this.game.input;
-    // en ligne, le joueur local utilise le contrôleur 0; en local, p0=clavier1/manette1, p1=clavier2/manette2
+    // en ligne, le joueur local utilise le contrôleur 0; en local, p0=clavier1/manette1, p1=clavier2/manette2, etc.
     const player = (this.mode === 'online' || this.mode === 'ffa') ? 0 : idx;
     if (idx === 0 && I.justPressed('pause', 0)) this.game.togglePause();
     return {
@@ -138,10 +147,18 @@ export class VersusScene {
   // - poursuit et écrase l'adversaire, tire si plume de feu,
   // - va chercher un power-up disponible quand il est "petit",
   // - esquive boules de feu et projectiles.
-  aiInput(dt = 1 / 120) {
-    const me = this.players[1], foe = this.players[0];
-    // Créer le cerveau avec le skill configuré (botSkill) si pas encore instancié
-    this._brain = this._brain || new BotBrain({ skill: this.botSkill });
+  aiInput(idx = 1, dt = 1 / 120) {
+    const me = this.players[idx];
+    // Trouver l'adversaire le plus proche
+    let foe = null, minDist = Infinity;
+    for (let i = 0; i < this.players.length; i++) {
+      if (i === idx || this.players[i].dead) continue;
+      const d = Math.abs(this.players[i].x - me.x) + Math.abs(this.players[i].y - me.y) * 1.5;
+      if (d < minDist) { minDist = d; foe = this.players[i]; }
+    }
+    if (!foe) foe = this.players[0] !== me ? this.players[0] : this.players[1];
+
+    this._brains[idx] = this._brains[idx] || new BotBrain({ skill: this.botSkill });
     // priorité : ramasser un power-up proche si on est encore petit
     let target = null, collect = false;
     if (me.power === 'small' && this.items.length) {
@@ -149,8 +166,8 @@ export class VersusScene {
       for (const it of this.items) { const d = Math.abs(it.x - me.x) + Math.abs(it.y - me.y) * 1.3; if (d < bd) { bd = d; best = it; } }
       if (best && bd < 130) { target = { x: best.x + best.w / 2, y: best.y }; collect = true; }
     }
-    const threats = this.fireballs.filter((f) => f.owner !== 1);
-    return this._brain.think(dt, { me, level: this.level, opponent: foe, target, collect, threats });
+    const threats = this.fireballs.filter((f) => f.owner !== idx);
+    return this._brains[idx].think(dt, { me, level: this.level, opponent: foe, target, collect, threats });
   }
 
   // Pilote l'adversaire (joueur 1) en rejouant un fantôme enregistré (boucle).
@@ -352,7 +369,18 @@ export class VersusScene {
     for (const co of this.coins) co.draw(c, this.cam);
     for (const it of this.items) it.draw(c, this.cam);
     for (const fb of this.fireballs) fb.draw(c, this.cam);
-    for (const p of this.players) p.draw(c, this.cam);
+    for (const p of this.players) {
+      p.draw(c, this.cam);
+      if (!p.dead) {
+        let ps = this.net?.pseudos?.get(p.id) || (this.ids[p.id] && typeof this.ids[p.id] === 'string' && this.ids[p.id].startsWith('AI') ? 'IA' : `J${p.id+1}`);
+        if (this.mode === 'bot' && p.id === 1) ps = 'IA';
+        if (this.mode === 'rival' && p.id === 1) ps = 'Rival';
+        c.font = '8px monospace'; c.textAlign = 'center';
+        c.fillStyle = p.id === this.localId ? '#ffd23b' : '#fff';
+        c.fillText(ps.slice(0,10), Math.round(p.x + p.w/2 - this.cam.x), Math.round(p.y - 6 - this.cam.y));
+        c.textAlign = 'left';
+      }
+    }
     for (const p of this.particles) p.draw(c, this.cam);
     for (const f of this.floats) f.draw(c, this.cam);
   }
@@ -361,13 +389,14 @@ export class VersusScene {
     this.drawHUD(c);
     if (this.over) {
       const w = this.winner;
+      const wPseudo = this.net?.pseudos?.get(w) || `JOUEUR ${w + 1}`;
       const txt = this.coop ? `COOP : ${this.coopCoins}` :
         w < 0 ? 'EGALITE !' :
         (this.mode === 'online' || this.mode === 'ffa')
-          ? (w === this.localId ? 'VICTOIRE !' : 'DEFAITE')
+          ? (w === this.localId ? 'VICTOIRE !' : `${wPseudo} GAGNE !`)
           : (this.mode === 'bot' || this.mode === 'rival')
             ? (w === 0 ? 'VICTOIRE !' : (this.mode === 'rival' ? 'LE RIVAL GAGNE' : 'L\'IA GAGNE'))
-            : `JOUEUR ${w + 1} GAGNE !`;
+            : `${wPseudo} GAGNE !`;
       c.fillStyle = '#000'; c.globalAlpha = 0.55; c.fillRect(0, VIEW_H/2-18, VIEW_W, 36); c.globalAlpha = 1;
       c.font = '16px monospace'; c.textAlign = 'center';
       c.fillStyle = this.winner < 0 ? '#fff' : '#ffd23b';
@@ -382,11 +411,14 @@ export class VersusScene {
       c.fillStyle = '#ffd23b'; c.textAlign = 'right'; c.fillText('x' + this.coopCoins, VIEW_W - 6, 11);
     } else {
       const cols = ['#7fc6ff','#37c24a','#ff8a3b','#ff5d5d'];
-      const labels = ['J1','J2','J3','J4'].slice(0, this.players.length);
+      const labels = this.ids.map(id => typeof id === 'string' && id.startsWith('AI') ? 'IA' : `J${id+1}`);
       const slot = VIEW_W / (labels.length + 1);
-      labels.forEach((lbl, i) => {
+      this.players.forEach((p, i) => {
+        let ps = this.net?.pseudos?.get(i) || labels[i];
+        if (this.mode === 'bot' && i === 1) ps = 'IA';
+        if (this.mode === 'rival' && i === 1) ps = 'Rival';
         c.fillStyle = cols[i % 4]; c.textAlign = 'center';
-        c.fillText(lbl + ' ' + (this.kos[i] || 0) + 'ko', slot * (i + 1), 11);
+        c.fillText(ps.slice(0, 8) + ' ' + (this.kos[i] || 0) + 'ko', slot * (i + 1), 11);
       });
     }
     c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(String(this.timeLeft).padStart(2,'0'), VIEW_W/2, 11);

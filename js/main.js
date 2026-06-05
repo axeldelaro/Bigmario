@@ -236,10 +236,10 @@ class Game {
     this.scene = new GameScene(this, worldIdx, levelIdx);
     this.checkOrientation();
   }
-  startVersusLocal(arenaIdx = 0, playerCount = 2) {
+  startVersusLocal(arenaIdx = 0, playerCount = 2, ids = null) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
-    this._restart = () => this.startVersusLocal(arenaIdx, playerCount);
-    this.scene = new VersusScene(this, { mode: 'local', arenaIdx, playerCount });
+    this._restart = () => this.startVersusLocal(arenaIdx, playerCount, ids);
+    this.scene = new VersusScene(this, { mode: 'local', arenaIdx, playerCount, ids });
     this.checkOrientation();
   }
   startVersusBot(arenaIdx = 0) {
@@ -615,17 +615,26 @@ class Game {
     resumeAudio();
     const p = this.panel(`
       <div class="title"><span class="big" style="font-size:28px">🎮 MODE LOCAL FFA</span><span class="sub">SUR CE PC</span></div>
-      <p class="hint">Jusqu'à 4 joueurs sur le même ordinateur avec manettes ou clavier partagé.</p>
+      <p class="hint">Jusqu'à 4 combattants dans l'arène.</p>
       <div style="display:flex; justify-content:center; gap: 15px; margin: 10px 0;">
-        <button class="btn" id="go-2">2 Joueurs</button>
-        <button class="btn" id="go-3">3 Joueurs</button>
-        <button class="btn" id="go-4">4 Joueurs</button>
+        <label>Humains: <select id="h-count"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
+        <label>Bots (IA): <select id="b-count"><option selected>0</option><option>1</option><option>2</option><option>3</option></select></label>
       </div>
-      <div class="row" style="margin-top:16px"><button class="btn ghost" id="back">← Retour</button></div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn ghost" id="back">← Retour</button>
+        <button class="btn" id="go">Choisir l'arène →</button>
+      </div>
     `);
-    [2,3,4].forEach(n => {
-       p.querySelector('#go-'+n).onclick = () => this.showArenaSelect('local', null, null, n);
-    });
+    p.querySelector('#go').onclick = () => {
+      const h = +p.querySelector('#h-count').value;
+      const b = +p.querySelector('#b-count').value;
+      const total = h + b;
+      if (total < 2 || total > 4) { alert("Le total doit être entre 2 et 4."); return; }
+      const ids = [];
+      for (let i=0; i<h; i++) ids.push(i);
+      for (let i=0; i<b; i++) ids.push('AI_' + i);
+      this.showArenaSelect('local', null, null, total, ids);
+    };
     p.querySelector('#back').onclick = () => this.showVersusMenu();
   }
 
@@ -633,16 +642,26 @@ class Game {
     resumeAudio();
     const p = this.panel(`
       <div class="title"><span class="big" style="font-size:28px">🏆 TOURNOI LOCAL</span><span class="sub">SUR CE PC</span></div>
-      <p class="hint">Un bracket d'élimination s'affichera. Les joueurs jouent à tour de rôle en 1v1.</p>
+      <p class="hint">Un bracket d'élimination s'affichera. Total max: 8.</p>
       <div style="display:flex; justify-content:center; gap: 15px; margin: 10px 0;">
-        <button class="btn" id="tourney-4">Tournoi 4 Joueurs</button>
-        <button class="btn" id="tourney-8">Tournoi 8 Joueurs</button>
+        <label>Humains: <select id="h-count-t"><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>8</option></select></label>
+        <label>Bots (IA): <select id="b-count-t"><option selected>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label>
       </div>
-      <div class="row" style="margin-top:16px"><button class="btn ghost" id="back">← Retour</button></div>
+      <div class="row" style="margin-top:16px">
+        <button class="btn ghost" id="back">← Retour</button>
+        <button class="btn" id="go">Générer le Tournoi →</button>
+      </div>
     `);
-    [4,8].forEach(n => {
-       p.querySelector('#tourney-'+n).onclick = () => this.showArenaSelect('tourney_local', null, null, n);
-    });
+    p.querySelector('#go').onclick = () => {
+      const h = +p.querySelector('#h-count-t').value;
+      const b = +p.querySelector('#b-count-t').value;
+      const total = h + b;
+      if (total < 3 || total > 8) { alert("Le total doit être entre 3 et 8 pour un tournoi intéressant."); return; }
+      const ids = [];
+      for (let i=0; i<h; i++) ids.push(i);
+      for (let i=0; i<b; i++) ids.push('AI_' + i);
+      this.showArenaSelect('tourney_local', null, null, total, ids);
+    };
     p.querySelector('#back').onclick = () => this.showVersusMenu();
   }
 
@@ -770,20 +789,27 @@ class Game {
             updatePlayerList();
           });
 
+          hostObj.on('pseudo_update', () => {
+            updatePlayerList();
+          });
+
           hostObj.on('peerleave', ({ id }) => {
-            st.textContent = 'Un joueur s\'est déconnecté.';
+            st.textContent = 'Un joueur s\\'est déconnecté.';
             updatePlayerList();
           });
 
           const updatePlayerList = () => {
             const n = hostObj.connectedCount;
             countDisp.textContent = n;
-            box.innerHTML = `<div style="padding:6px;background:rgba(55,194,74,0.1);border:1px solid #37c24a;border-radius:5px;font-size:13px">👑 <b>J1 (Vous)</b> - Hôte</div>`;
+            const hPseudo = escapeHtml(hostObj.pseudos?.get(0) || hostObj.pseudo || 'Hôte');
+            box.innerHTML = `<div style="padding:6px;background:rgba(55,194,74,0.1);border:1px solid #37c24a;border-radius:5px;font-size:13px">👑 <b>${hPseudo}</b> - Hôte</div>`;
             hostObj.connectedIds.forEach((pid, idx) => {
-              box.innerHTML += `<div style="padding:6px;background:rgba(127,198,255,0.1);border:1px solid #334;border-radius:5px;font-size:13px">👤 <b>J${idx+2}</b> - Connecté</div>`;
+              const pPseudo = escapeHtml(hostObj.pseudos?.get(pid) || `J${idx+2}`);
+              box.innerHTML += `<div style="padding:6px;background:rgba(127,198,255,0.1);border:1px solid #334;border-radius:5px;font-size:13px">👤 <b>${pPseudo}</b> - Connecté</div>`;
             });
             hostActs.style.display = n >= 2 ? 'block' : 'none';
           };
+
 
           content.querySelector('#start-game').onclick = () => {
             const ids = [0, ...hostObj.connectedIds];
@@ -846,6 +872,24 @@ class Game {
             }
           });
 
+          content.insertAdjacentHTML('beforeend', `<div id="guest-players-box" style="margin-top:14px;display:flex;flex-direction:column;gap:5px"></div>`);
+          const gBox = content.querySelector('#guest-players-box');
+          const renderGuestPlayers = () => {
+            if (!guestPeer) return;
+            gBox.innerHTML = '<div style="font-size:12px;color:#7fc6ff;font-weight:bold;margin-bottom:6px">Joueurs dans le salon :</div>';
+            guestPeer.pseudos.forEach((pseudo, pid) => {
+               const pName = escapeHtml(pseudo);
+               const isMe = pid === info.localId;
+               const isHost = pid === 0;
+               const icon = isHost ? '👑' : '👤';
+               gBox.innerHTML += `<div style="padding:6px;background:${isMe?'rgba(255,210,59,0.1)':'rgba(127,198,255,0.1)'};border:1px solid ${isMe?'#ffd23b':'#334'};border-radius:5px;font-size:13px">${icon} <b>${pName}</b> ${isMe?'(Vous)':isHost?'- Hôte':''}</div>`;
+            });
+          };
+          renderGuestPlayers();
+          guestPeer.on('pseudo_update', renderGuestPlayers);
+          guestPeer.on('peerjoin', renderGuestPlayers);
+          guestPeer.on('peerleave', renderGuestPlayers);
+
         } catch (err) {
           st.textContent = `Échec de connexion: ${err.message}`;
           joinBtn.disabled = false;
@@ -905,8 +949,12 @@ class Game {
   // ---- Bracket de tournoi ----
   showTournamentBracket(mode, playerIds, arenaIdx) {
     const bracket = this._tournamentBracket;
-    const host = mode === 'local' ? null : mode;
-    const lbl = (id) => id === 0 ? 'Vous' : `J${playerIds.indexOf(id)+1}`;
+    const host = (mode === 'local' || mode === 'tourney_local') ? null : mode;
+    const lbl = (id) => {
+      if (typeof id === 'string' && id.startsWith('AI')) return 'IA';
+      if (host && host.pseudos && host.pseudos.has(id)) return escapeHtml(host.pseudos.get(id));
+      return id === 0 ? 'Vous' : `J${playerIds.indexOf(id)+1}`;
+    };
     const colFor = (id) => ['#7fc6ff','#37c24a','#ff8a3b','#ff5d5d','#c084fc','#f9a825','#4dd0e1','#ef9a9a'][playerIds.indexOf(id) % 8];
 
     const bHTML = bracket.rounds.map((round, ri) => {
@@ -1108,7 +1156,7 @@ class Game {
     p.querySelector('#back').onclick = () => this.showTitle();
   }
 
-  showArenaSelect(mode, net, localId, playerCount = 2) {
+  showArenaSelect(mode, net, localId, playerCount = 2, ids = null) {
     let cards = ARENAS.map((a, i) => {
       const hasGhost = mode === 'rival' && GhostStore.has(`vghost.${i}`);
       return `<div class="lvl-card" data-i="${i}">${a.name}<small>${a.theme}${hasGhost ? ' 👻' : ''}</small></div>`;
@@ -1133,11 +1181,11 @@ class Game {
         else if (mode === 'bot') this.startVersusBot(i);
         else if (mode === 'rival') this.startVersusRival(i);
         else if (mode === 'tourney_local') {
-          const ids = Array.from({length: Math.max(2, playerCount)}, (_, k) => k);
-          this._tournamentBracket = this._mkBracket(ids);
-          this.showTournamentBracket('local', ids, i);
+          const tIds = ids || Array.from({length: Math.max(2, playerCount)}, (_, k) => k);
+          this._tournamentBracket = this._mkBracket(tIds);
+          this.showTournamentBracket('local', tIds, i);
         }
-        else this.startVersusLocal(i, playerCount);
+        else this.startVersusLocal(i, Math.max(2, playerCount), ids);
       };
     });
     p.querySelector('#back').onclick = () => (mode === 'online' ? this.showOnline() : this.showVersusMenu());

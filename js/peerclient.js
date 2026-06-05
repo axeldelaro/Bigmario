@@ -23,6 +23,7 @@ export class MultiPeerHost {
     this._conns      = new Map(); // guestId -> DataConnection
     this.connectedIds = [];
     this.handlers    = {};
+    this.pseudos     = new Map(); // id -> pseudo
     this.connected   = true;
     this.nextId      = 1;
   }
@@ -61,8 +62,9 @@ export class MultiPeerHost {
     conn.on('open', () => {
       this._conns.set(id, conn);
       if (!this.connectedIds.includes(id)) this.connectedIds.push(id);
+      this.pseudos.set(0, this.pseudo || 'Hôte');
       // Informer le guest de son ID dans la salle
-      conn.send({ t: 'hello', id, total: this.connectedCount });
+      conn.send({ t: 'hello', id, total: this.connectedCount, pseudo: this.pseudo || 'Hôte', pseudos: Array.from(this.pseudos.entries()) });
       this._emit('peerjoin', { id, total: this.connectedCount });
     });
     conn.on('data', (m) => {
@@ -72,6 +74,12 @@ export class MultiPeerHost {
         for (const [pid, c] of this._conns)
           if (pid !== id && c.open) c.send(out);
         this._emit('msg', { d: m.d, from: id });
+      } else if (m.t === 'set_pseudo') {
+        this.pseudos.set(id, m.pseudo || 'Joueur ' + id);
+        const out = { t: 'set_pseudo', from: id, pseudo: m.pseudo };
+        for (const [pid, c] of this._conns)
+          if (pid !== id && c.open) c.send(out);
+        this._emit('pseudo_update', { pseudos: this.pseudos });
       }
     });
     conn.on('close', () => {
@@ -106,6 +114,7 @@ export class PeerClient {
     this.localId   = null;
     this.connected = false;
     this.handlers  = {};
+    this.pseudos   = new Map();
     this._peer     = null;
     this._conn     = null;
   }
@@ -137,11 +146,17 @@ export class PeerClient {
             clearTimeout(to);
             this.localId  = m.id;
             this.connected = true;
+            this.pseudos = new Map(m.pseudos || []);
+            this.pseudos.set(0, m.pseudo || 'Hôte');
+            this._conn.send({ t: 'set_pseudo', pseudo: this.pseudo || 'Guest' });
             this._emit('open',     {});
             this._emit('peerjoin', {});
             res({ role: 'guest', localId: m.id });
           } else if (m.t === 'relay') {
             this._emit('msg', { d: m.d, from: m.from });
+          } else if (m.t === 'set_pseudo') {
+            this.pseudos.set(m.from, m.pseudo);
+            this._emit('pseudo_update', { pseudos: this.pseudos });
           }
         });
         this._conn.on('close', () => this._emit('peerleave', {}));
