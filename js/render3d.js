@@ -113,8 +113,10 @@ export async function ensure3D() {
   if (R) return true;
   if (failed) return false;
   try {
-    try { THREE = await import(/* @vite-ignore */ THREE_LOCAL); }
-    catch { THREE = await import(/* @vite-ignore */ THREE_CDN); } // repli réseau
+    // CDN d'abord (comportement d'origine qui fonctionne) ; copie locale en
+    // repli, ce qui permet quand même la 3D hors-ligne.
+    try { THREE = await import(/* @vite-ignore */ THREE_CDN); }
+    catch { THREE = await import(/* @vite-ignore */ THREE_LOCAL); }
     R = buildRenderer();
     return true;
   } catch (e) {
