@@ -7,6 +7,7 @@ import { Player, Enemy, Coin, PowerUp, Fireball, Particle, FloatText } from './e
 import { SFX, playMusic } from './audio.js';
 import { ARENAS } from './levels.js';
 import { GhostRecorder, GhostPlayer, GhostStore } from './ghost.js';
+import { BotBrain } from './ai.js';
 
 const KO_TO_WIN = 5;
 
@@ -97,36 +98,22 @@ export class VersusScene {
     };
   }
 
-  // IA simple pour le bot (joueur 2)
-  aiInput() {
+  // IA du bot (joueur 2) : cerveau combatif partagé, avec prise d'initiative.
+  // - poursuit et écrase l'adversaire, tire si plume de feu,
+  // - va chercher un power-up disponible quand il est "petit",
+  // - esquive boules de feu et projectiles.
+  aiInput(dt = 1 / 120) {
     const me = this.players[1], foe = this.players[0];
-    this._ai = this._ai || { jumpT: 0, fireT: 0, jumpPressed: false, firePressed: false };
-    const ai = this._ai;
-    ai.jumpT -= 1 / 120; ai.fireT -= 1 / 120;
-    const dx = foe.x - me.x, ady = me.y - foe.y;
-    const wantRight = dx > 4, wantLeft = dx < -4;
-    // sauter pour passer au-dessus de l'adversaire, franchir un mur, ou éviter un vide
-    let jump = false;
-    const aheadX = me.dir > 0 ? me.x + me.w + 2 : me.x - 2;
-    const wallAhead = this.level.solidAt(aheadX, me.y + me.h - 4);
-    const gapAhead = !this.level.solidAt(aheadX, me.y + me.h + 4);
-    if (me.onGround && ai.jumpT <= 0) {
-      if (Math.abs(dx) < 40 && foe.y >= me.y - 4) { jump = true; }      // sauter sur sa tête
-      else if (wallAhead || gapAhead) jump = true;
-      else if (Math.random() < 0.02) jump = true;
-      if (jump) ai.jumpT = 0.5 + Math.random() * 0.4;
+    this._brain = this._brain || new BotBrain({ skill: 0.92 });
+    // priorité : ramasser un power-up proche si on est encore petit
+    let target = null, collect = false;
+    if (me.power === 'small' && this.items.length) {
+      let best = null, bd = 1e9;
+      for (const it of this.items) { const d = Math.abs(it.x - me.x) + Math.abs(it.y - me.y) * 1.3; if (d < bd) { bd = d; best = it; } }
+      if (best && bd < 130) { target = { x: best.x + best.w / 2, y: best.y }; collect = true; }
     }
-    ai.jumpPressed = jump;
-    // tir si à portée horizontale et à peu près même hauteur
-    let firePressed = false;
-    if (me.power === 'fire' && ai.fireT <= 0 && Math.abs(ady) < 24 && Math.abs(dx) < 140 && (dx > 0) === (me.dir > 0)) {
-      firePressed = true; ai.fireT = 0.6 + Math.random() * 0.5;
-    }
-    return {
-      left: wantLeft, right: wantRight, down: false,
-      jump: jump || (me.vy < 0 && Math.random() < 0.6), jumpPressed: jump,
-      fire: firePressed, firePressed, run: Math.abs(dx) > 80,
-    };
+    const threats = this.fireballs.filter((f) => f.owner !== 1);
+    return this._brain.think(dt, { me, level: this.level, opponent: foe, target, collect, threats });
   }
 
   // Pilote l'adversaire (joueur 1) en rejouant un fantôme enregistré (boucle).

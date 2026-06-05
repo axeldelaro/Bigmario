@@ -6,10 +6,11 @@ import { setArt } from './entities.js';
 import { resumeAudio, toggleMute, isMuted, playMusic, stopMusic, SFX } from './audio.js';
 import { GameScene } from './scene_game.js';
 import { VersusScene } from './scene_versus.js';
+import { MiniGameScene } from './scene_minigame.js';
 import { MapScene } from './scene_map.js';
 import { ReplayScene } from './scene_replay.js';
 import { EditorScene } from './scene_editor.js';
-import { WORLDS, ARENAS } from './levels.js';
+import { WORLDS, ARENAS, MINIGAMES } from './levels.js';
 import { NetClient } from './net.js';
 import { ensure3D, is3DReady, renderScene, resize3D, get3DCanvas } from './render3d.js';
 import { Leaderboard, fmtTime } from './leaderboard.js';
@@ -502,6 +503,7 @@ class Game {
         <button class="btn" id="b-solo">🗺 Aventure</button>
         <button class="btn" id="b-speed">⏱ Contre-la-montre</button>
         <button class="btn secondary" id="b-vs">⚔ Versus</button>
+        <button class="btn secondary" id="b-mini">🎮 Mini-jeux</button>
         <button class="btn secondary" id="b-edit">🛠 Créer un niveau</button>
         <button class="btn ghost" id="b-options">⚙ Options & Aide</button>
       </div>
@@ -510,6 +512,7 @@ class Game {
     p.querySelector('#b-solo').onclick = () => { resumeAudio(); this.showMap('solo'); };
     p.querySelector('#b-speed').onclick = () => { resumeAudio(); this.showSpeedMenu(); };
     p.querySelector('#b-vs').onclick = () => { resumeAudio(); this.showVersusMenu(); };
+    p.querySelector('#b-mini').onclick = () => { resumeAudio(); this.showMiniMenu(); };
     p.querySelector('#b-edit').onclick = () => { resumeAudio(); this.startEditor(); };
     p.querySelector('#b-options').onclick = () => this.showOptions();
   }
@@ -533,6 +536,64 @@ class Game {
     p.querySelector('#m-online').onclick = () => this.showOnline();
     p.querySelector('#m-coop').onclick = () => { this._coopMode = true; this.showOnline(); };
     p.querySelector('#m-back').onclick = () => this.showTitle();
+  }
+
+  // ---- Mini-jeux : courses à la collecte contre l'IA ----
+  showMiniMenu() {
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:34px">MINI-JEUX</span><span class="sub">COURSE CONTRE L'IA</span></div>
+      <div class="menu-list">
+        <button class="btn" id="coin">● Course aux pièces</button>
+        <button class="btn secondary" id="star">✦ Course aux étoiles</button>
+        <button class="btn ghost" id="back">← Retour</button>
+      </div>
+      <p class="hint">Ramasse plus d'objets que l'IA avant la fin du temps.<br>L'IA fonce vers le collectible le plus proche : sois plus rapide !</p>
+    `);
+    p.querySelector('#coin').onclick = () => this.showMiniMapSelect('coin');
+    p.querySelector('#star').onclick = () => this.showMiniMapSelect('star');
+    p.querySelector('#back').onclick = () => this.showTitle();
+  }
+
+  showMiniMapSelect(kind) {
+    const cards = MINIGAMES.map((m, i) => `<div class="lvl-card" data-i="${i}">${m.name}</div>`).join('');
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:30px">${kind === 'star' ? '✦ ÉTOILES' : '● PIÈCES'}</span><span class="sub">CHOISIS UN TERRAIN</span></div>
+      <div class="grid-levels">${cards}</div>
+      <div class="row" style="margin-top:16px"><button class="btn ghost" id="back">← Retour</button></div>
+    `);
+    p.querySelectorAll('.lvl-card').forEach((card) => { card.onclick = () => this.startMiniGame(kind, +card.dataset.i); });
+    p.querySelector('#back').onclick = () => this.showMiniMenu();
+  }
+
+  startMiniGame(kind, mapIdx = 0) {
+    this.clearUI(); this.mode = 'versus'; this.paused = false;
+    this._restart = () => this.startMiniGame(kind, mapIdx);
+    this._miniReturn = () => this.showMiniMapSelect(kind);
+    this.scene = new MiniGameScene(this, { kind, mapIdx });
+    this.checkOrientation();
+  }
+
+  endMiniGame() {
+    const sc = this.scene ? this.scene.scores : [0, 0];
+    const kind = this.scene ? this.scene.kind : 'coin';
+    const winner = this.scene ? this.scene.winner : -1;
+    const icon = kind === 'star' ? '✦' : '●';
+    this.mode = 'menu';
+    const verdict = winner < 0 ? 'ÉGALITÉ' : winner === 0 ? '🏆 VICTOIRE !' : 'DÉFAITE';
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:28px;color:${winner === 0 ? '#ffd23b' : '#7fc6ff'}">${verdict}</span></div>
+      <p style="font-size:20px;font-weight:900;margin:8px 0">TOI ${icon} ${sc[0]} &nbsp;—&nbsp; ${sc[1]} ${icon} IA</p>
+      <div class="menu-list" style="margin-top:10px">
+        <button class="btn" id="retry">↻ Rejouer</button>
+        <button class="btn secondary" id="other">🎮 Autre terrain</button>
+        <button class="btn ghost" id="menu">Menu</button>
+      </div>
+    `);
+    const ret = this._miniReturn || (() => this.showMiniMenu());
+    p.querySelector('#retry').onclick = () => this._restart();
+    p.querySelector('#other').onclick = () => ret();
+    p.querySelector('#menu').onclick = () => this.returnToMenu();
+    this.scene = null; stopMusic(); this.checkOrientation();
   }
 
   showWorldSelect() {

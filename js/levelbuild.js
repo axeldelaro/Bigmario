@@ -231,6 +231,79 @@ function L43() { // 4-3 Gardien Suprême — boss en grande arène
   return { name: '4-3 Gardien Suprême', theme: 'castle', time: 240, map: rows(g) };
 }
 
+// =================== MONDE 5 — CAVERNES DE CRISTAL ===================
+function L51() { // 5-1 Vallée de cristal — overworld franchissable (modèle 1-1/3-1)
+  const W = 118, g = grid(W); floorX(g, [[30, 32], [58, 60], [90, 92]]);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  put(g, 6, 8, '?'); put(g, 6, 10, 'M'); put(g, 6, 12, '?'); coins(g, 5, 8, 3);
+  mesa(g, 16, 24, 8); put(g, 7, 19, 'g'); put(g, 7, 22, 'g'); coins(g, 6, 26, 2);
+  pipe(g, 38, 8); pipe(g, 48, 8);
+  plat(g, 5, 40, 5); put(g, 4, 42, 'j'); plat(g, 4, 50, 4);
+  put(g, 9, 66, 'T'); put(g, 2, 66, 'j');
+  put(g, 7, 72, '====='); coins(g, 6, 73, 3);
+  mesa(g, 96, 104, 8); put(g, 7, 100, 'k');
+  put(g, 6, 108, '?'); put(g, 6, 110, 'W');
+  put(g, 9, 20, 'g'); put(g, 9, 54, 'g'); put(g, 9, 80, 'g'); put(g, 9, 106, 'g');
+  return { name: '5-1 Vallée de cristal', theme: 'overworld', time: 340, map: rows(g) };
+}
+function L52() { // 5-2 Galeries oubliées — souterrain à deux routes (modèle 1-2/2-3)
+  const W = 100, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  box(g, 14, 20, 1, 4, 'H'); box(g, 44, 50, 1, 4, 'H'); box(g, 72, 78, 1, 4, 'H');
+  plat(g, 4, 24, 6); put(g, 3, 26, 'j'); plat(g, 4, 54, 6); coins(g, 3, 55, 3); plat(g, 4, 82, 6); put(g, 3, 84, 'W');
+  plat(g, 7, 10, 4); plat(g, 7, 32, 5); plat(g, 7, 60, 5); plat(g, 7, 86, 4);
+  pipe(g, 28, 8); pipe(g, 66, 8);
+  put(g, 6, 36, 'B?B'); put(g, 6, 70, 'BMB');
+  put(g, 9, 16, 'g'); put(g, 9, 40, 'k'); put(g, 9, 56, 'g'); put(g, 9, 90, 'g');
+  put(g, 6, 33, 'k'); put(g, 6, 61, 'k');
+  return { name: '5-2 Galeries oubliées', theme: 'underground', time: 340, map: rows(g) };
+}
+function L53() { // 5-3 Cœur du Cristal — combat de boss (modèle 3-3/4-3)
+  const W = 52, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S');
+  plat(g, 5, 8, 5); plat(g, 5, 38, 5); plat(g, 7, 22, 6);
+  put(g, 3, 10, 'M'); put(g, 3, 40, 'W'); put(g, 2, 24, 'U');
+  put(g, 6, 24, 'j'); put(g, 6, 27, 'j');
+  coins(g, 8, 14, 3); coins(g, 8, 32, 3);
+  put(g, 9, 26, 'O');
+  return { name: '5-3 Cœur du Cristal', theme: 'castle', time: 240, map: rows(g) };
+}
+
+// =================== MINI-JEUX (courses de collecte vs IA) ===================
+// Chaque disposition place le collectible donné (`ch` = 'o' pièces | 'j' étoiles).
+// Géométrie navigable par l'IA : trous ≤ 3, marches ≤ 3, ressorts pour le haut.
+function scatter(g, ch, pts) { for (const [r, x, n] of pts) for (let i = 0; i < n; i++) g[r][x + i * 2] = ch; }
+function miniA(ch) { // Jardin suspendu (overworld)
+  const W = 46, g = grid(W); floorX(g, [[14, 16], [30, 32]]);
+  mesa(g, 6, 11, 8); plat(g, 6, 18, 5); plat(g, 5, 24, 4); mesa(g, 36, 42, 8);
+  put(g, 9, 21, 'T');
+  scatter(g, ch, [[7, 4, 3], [5, 7, 2], [8, 18, 3], [4, 24, 3], [3, 20, 2], [8, 34, 2], [6, 38, 3], [7, 12, 2]]);
+  g[9][2] = '1'; g[9][W - 3] = '2';
+  return { name: 'Jardin suspendu', theme: 'overworld', time: 70, map: rows(g) };
+}
+function miniB(ch) { // Galerie scintillante (souterrain)
+  const W = 48, g = grid(W); floorH(g);
+  plat(g, 7, 8, 5); plat(g, 5, 16, 5); plat(g, 7, 26, 5); plat(g, 5, 34, 5);
+  put(g, 9, 13, 'T'); put(g, 9, 31, 'T');
+  scatter(g, ch, [[8, 4, 3], [6, 17, 3], [4, 17, 2], [8, 27, 3], [4, 35, 3], [8, 40, 3], [6, 9, 2], [3, 24, 2]]);
+  g[9][2] = '1'; g[9][W - 3] = '2';
+  return { name: 'Galerie scintillante', theme: 'underground', time: 75, map: rows(g) };
+}
+function miniC(ch) { // Terrasses du donjon (castle)
+  const W = 50, g = grid(W); floorX(g, [[18, 20], [34, 36]]);
+  stairs(g, 6, 9, 3, 1); mesa(g, 9, 14, 7); plat(g, 5, 24, 6); mesa(g, 40, 46, 8);
+  put(g, 9, 30, 'T');
+  scatter(g, ch, [[8, 3, 3], [6, 10, 2], [4, 25, 3], [8, 23, 2], [2, 28, 2], [7, 42, 3], [5, 45, 2], [8, 14, 2]]);
+  g[9][2] = '1'; g[9][W - 3] = '2';
+  return { name: 'Terrasses du donjon', theme: 'castle', time: 75, map: rows(g) };
+}
+// méta exposée aux menus ; chaque entrée sait se construire pour pièces ou étoiles
+export const MINIGAMES = [
+  { name: 'Jardin suspendu', build: miniA },
+  { name: 'Galerie scintillante', build: miniB },
+  { name: 'Terrasses du donjon', build: miniC },
+];
+
 // =================== ARÈNES VERSUS (20 tuiles = 1 écran exact, murs de contour) ===================
 function arena(name, theme, decorate) {
   const W = 20, g = grid(W);
@@ -267,4 +340,5 @@ export const BUILT = {
   L11: L11(), L12: L12(), L13: L13(), L21: L21(), L22: L22(), L23: L23(),
   L31: L31(), L32: L32(), L33: L33(),
   L41: L41(), L42: L42(), L43: L43(),
+  L51: L51(), L52: L52(), L53: L53(),
 };

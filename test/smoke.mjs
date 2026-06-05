@@ -64,6 +64,7 @@ import { buildArt } from '../js/art.js';
 import { setArt } from '../js/entities.js';
 import { GameScene } from '../js/scene_game.js';
 import { VersusScene } from '../js/scene_versus.js';
+import { MiniGameScene } from '../js/scene_minigame.js';
 import { MapScene } from '../js/scene_map.js';
 import { ReplayScene } from '../js/scene_replay.js';
 import { parTimes, medalFor } from '../js/medals.js';
@@ -99,7 +100,7 @@ function fakeGame(input) {
   return {
     input, art, canvas: makeCanvas(),
     togglePause() {}, gameOver() { this._go = true; }, gameComplete() { this._gc = true; },
-    saveProgress() {}, endVersus() { this._ev = true; },
+    saveProgress() {}, endVersus() { this._ev = true; }, endMiniGame() { this._emg = true; },
     getGems(k) { return gemStore[k] || 0; }, setGems(k, n) { gemStore[k] = n; },
     startSolo() { this._solo = true; }, startSpeedrun() { this._sr = true; }, showGhostPick() { this._gp = true; },
     startMarathon() { this._mar = true; }, onMarathonFinish() { this._marfin = true; },
@@ -122,7 +123,7 @@ function runScene(makeScene, label, frames) {
     try { scene.update(1 / 120); } catch (e) { console.error('UPDATE FAIL', label, 'frame', i, e); errors++; break; }
     if (i % 2 === 0) { try { scene.draw(ctxStub); } catch (e) { console.error('DRAW FAIL', label, 'frame', i, e); errors++; break; } }
   }
-  console.log(`${label}: ${frames} frames ran, player at ` + (scene.player ? `x=${scene.player.x|0}` : `kos=${scene.kos}`));
+  console.log(`${label}: ${frames} frames ran, ` + (scene.player ? `player at x=${scene.player.x|0}` : scene.scores ? `scores=${scene.scores}` : `kos=${scene.kos}`));
 }
 
 // Solo: chaque niveau, beaucoup de frames
@@ -141,6 +142,11 @@ runScene((g) => new VersusScene(g, { mode: 'bot', arenaIdx: 0 }), 'VERSUS vs IA 
 runScene((g) => new VersusScene(g, { mode: 'bot', arenaIdx: 2 }), 'VERSUS vs IA A2', 1500);
 runScene((g) => new VersusScene(g, { mode: 'online', net: netStub, localId: 0, arenaIdx: 0 }), 'VERSUS online host', 1200);
 runScene((g) => new VersusScene(g, { mode: 'online', net: netStub, localId: 1, arenaIdx: 0 }), 'VERSUS online guest', 1200);
+
+// Mini-jeux : course aux pièces et aux étoiles, sur les 3 terrains, vs IA
+runScene((g) => new MiniGameScene(g, { kind: 'coin', mapIdx: 0 }), 'MINI coin M0', 1200);
+runScene((g) => new MiniGameScene(g, { kind: 'coin', mapIdx: 1 }), 'MINI coin M1', 1200);
+runScene((g) => new MiniGameScene(g, { kind: 'star', mapIdx: 2 }), 'MINI star M2', 1200);
 
 // Carte du monde (solo + speedrun) et contre-la-montre
 runScene((g) => new MapScene(g, 'solo'), 'MAP solo', 600);
