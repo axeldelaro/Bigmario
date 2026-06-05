@@ -12,7 +12,7 @@ import { ReplayScene } from './scene_replay.js';
 import { EditorScene } from './scene_editor.js';
 import { WORLDS, ARENAS, MINIGAMES } from './levels.js';
 import { NetClient } from './net.js';
-import { PeerClient } from './peerclient.js';
+import { PeerClient, MultiPeerHost } from './peerclient.js';
 import { ensure3D, is3DReady, renderScene, resize3D, get3DCanvas } from './render3d.js';
 import { Leaderboard, fmtTime } from './leaderboard.js';
 import { GhostStore } from './ghost.js';
@@ -428,25 +428,37 @@ class Game {
   gameComplete(score) { this.bestScore(score); this.showComplete(score); }
   bestScore(s) { if (s > Save.get('best', 0)) Save.set('best', s); }
   endVersus() {
-    if (this.net) { this.net.close(); this.net = null; }
+    if (this.net) { this.net.close?.(); this.net = null; }
     // Afficher un écran de résultats après un match versus
     const sc = this.scene;
     const kos = sc ? sc.kos : [0, 0];
     const winner = sc ? sc.winner : -1;
     const modeName = sc ? sc.mode : 'bot';
+
+    // Hook tournoi : si un callback est enregistré, on l'appelle à la place du menu résultat
+    if (this._onVersusEnd) {
+      const cb = this._onVersusEnd;
+      delete this._onVersusEnd;
+      this.paused = false; this.mode = 'menu';
+      this.scene?.dispose?.(); this.scene = null;
+      stopMusic(); this.checkOrientation();
+      cb(sc || { winner: -1, kos: [] });
+      return;
+    }
+
     const isBot = modeName === 'bot' || modeName === 'rival';
     let winLabel, winColor;
     if (winner < 0) { winLabel = 'EGALITÉ !'; winColor = '#fff'; }
     else if (isBot) { winLabel = winner === 0 ? '🏆 VICTOIRE !' : '❌ DÉFAITE'; winColor = winner === 0 ? '#ffd23b' : '#ff5d5d'; }
+    else if (modeName === 'online' || modeName === 'ffa') { winLabel = winner === sc?.localId ? '🏆 VICTOIRE !' : '❌ DÉFAITE'; winColor = winner === sc?.localId ? '#ffd23b' : '#ff5d5d'; }
     else { winLabel = `JOUEUR ${winner + 1} GAGNE !`; winColor = '#ffd23b'; }
     this.paused = false; this.mode = 'menu';
     this.scene?.dispose?.(); this.scene = null;
     stopMusic(); this.checkOrientation();
+    const koLine = kos.map((k, i) => `J${i+1} ${k}ko`).join(' — ');
     const p = this.panel(`
       <div class="title"><span class="big" style="font-size:28px;color:${winColor}">${winLabel}</span></div>
-      <p style="font-size:18px;font-weight:900;margin:10px 0">
-        ${isBot ? `TOI ${kos[0]} KO &nbsp;—&nbsp; IA ${kos[1]} KO` : `J1 ${kos[0]} KO &nbsp;—&nbsp; J2 ${kos[1]} KO`}
-      </p>
+      <p style="font-size:18px;font-weight:900;margin:10px 0">${koLine}</p>
       <div class="menu-list">
         <button class="btn" id="retry">↻ Rejouer</button>
         <button class="btn secondary" id="others">⚔ Autre arène</button>
@@ -576,25 +588,19 @@ class Game {
       <div class="menu-list">
         <button class="btn" id="m-bot">🤖 Contre l'IA</button>
         <button class="btn" id="m-rival">🏁 Contre un Fantôme rival</button>
-        <button class="btn secondary" id="m-local">🎹 Même clavier — 2 joueurs sur cet écran</button>
-        <button class="btn secondary" id="m-p2p">📡 2 PC / LAN — sans serveur (P2P)</button>
-        <button class="btn secondary" id="m-online">🌐 2 PC en ligne (avec serveur)</button>
-        <button class="btn secondary" id="m-coop">🤝 Co-op en ligne</button>
+        <button class="btn secondary" id="m-local">🎹 Meme clavier — 2 joueurs sur cet ecran</button>
+        <button class="btn secondary" id="m-p2p">📡 2–8 PC / LAN — sans serveur (P2P)</button>
         <button class="btn ghost" id="m-back">← Retour</button>
       </div>
       <p class="hint" style="margin-top:8px">
-        🎹 = 1 seul ordinateur, clavier partagé &nbsp;|&nbsp;
-        📡 = 2 PC, aucun serveur requis &nbsp;|&nbsp;
-        🌐 = 2 PC, via un serveur Render
+        🎹 = 1 seul ordinateur, clavier partage &nbsp;|&nbsp;
+        📡 = 2 a 8 PC, lobby WebRTC sans serveur, modes 1v1 / FFA / Tournoi
       </p>
     `);
-    this._coopMode = false;
     p.querySelector('#m-bot').onclick    = () => { resumeAudio(); this.showDifficultyPicker('bot'); };
     p.querySelector('#m-rival').onclick  = () => { resumeAudio(); this.showDifficultyPicker('rival'); };
     p.querySelector('#m-local').onclick  = () => this.showLocalHelp();
-    p.querySelector('#m-p2p').onclick    = () => { resumeAudio(); this.showP2P(); };
-    p.querySelector('#m-online').onclick = () => this.showOnline();
-    p.querySelector('#m-coop').onclick   = () => { this._coopMode = true; this.showOnline(); };
+    p.querySelector('#m-p2p').onclick    = () => { resumeAudio(); this.showP2PLobby(); };
     p.querySelector('#m-back').onclick   = () => this.showTitle();
   }
 
@@ -622,101 +628,304 @@ class Game {
     p.querySelector('#back').onclick = () => this.showVersusMenu();
   }
 
-  // Mode P2P direct WebRTC : 2 PC sans aucun serveur
-  showP2P() {
-    const mkStatus = (msg, col = '#aaa') => `<span style="color:${col}">${msg}</span>`;
-    let tab = 'host'; // 'host' | 'guest'
-    const render = () => {
-      const p = this.panel(`
-        <div class="title"><span class="big" style="font-size:26px">📡 P2P DIRECT</span><span class="sub">SANS SERVEUR</span></div>
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <button class="btn ${tab==='host'?'':'ghost'}" id="tab-host" style="flex:1">🏠 Heberger</button>
-          <button class="btn ${tab==='guest'?'':'ghost'}" id="tab-guest" style="flex:1">🔗 Rejoindre</button>
-        </div>
-        ${tab === 'host' ? `
-          <p class="hint">1. Clique <b>Generer</b> — tu obtiens un code.<br>
-             2. Envoie ce code a ton ami (message, chat...).<br>
-             3. Ton ami colle le code dans l'onglet Rejoindre et te renvoie son code de reponse.<br>
-             4. Colle le code de reponse ici et clique Connecter.</p>
-          <div class="menu-list" style="gap:6px">
-            <button class="btn" id="gen">⚙️ Generer mon code d'offre</button>
-            <textarea id="offer-out" rows="3" readonly placeholder="Ton code apparait ici..." style="width:100%;font-size:11px;font-family:monospace;resize:none"></textarea>
-            <button class="btn ghost" id="copy-offer" style="display:none">📋 Copier le code</button>
-            <label style="font-size:12px;margin-top:6px">Code de reponse de ton ami :</label>
-            <textarea id="answer-in" rows="3" placeholder="Colle ici..." style="width:100%;font-size:11px;font-family:monospace;resize:none"></textarea>
-            <button class="btn secondary" id="accept">✅ Connecter</button>
-          </div>
-        ` : `
-          <p class="hint">1. Ton ami clique Heberger → Generer et te donne son code.<br>
-             2. Colle-le ci-dessous et clique Generer ma reponse.<br>
-             3. Envoie le code de reponse a ton ami.<br>
-             4. La connexion s'etablit automatiquement !</p>
-          <div class="menu-list" style="gap:6px">
-            <label style="font-size:12px">Code d'offre de ton ami :</label>
-            <textarea id="offer-in" rows="3" placeholder="Colle ici..." style="width:100%;font-size:11px;font-family:monospace;resize:none"></textarea>
-            <button class="btn" id="answer">⚙️ Generer ma reponse</button>
-            <textarea id="answer-out" rows="3" readonly placeholder="Ton code de reponse apparait ici..." style="width:100%;font-size:11px;font-family:monospace;resize:none"></textarea>
-            <button class="btn ghost" id="copy-answer" style="display:none">📋 Copier la reponse</button>
-          </div>
-        `}
-        <div class="status" id="st" style="margin-top:8px"></div>
-        <div class="row" style="margin-top:10px"><button class="btn ghost" id="back">← Retour</button></div>
-      `);
-
-      p.querySelector('#tab-host').onclick  = () => { tab = 'host';  render(); };
-      p.querySelector('#tab-guest').onclick = () => { tab = 'guest'; render(); };
-      p.querySelector('#back').onclick      = () => this.showVersusMenu();
-      const st = p.querySelector('#st');
-
-      if (tab === 'host') {
-        let peer = null;
-        p.querySelector('#gen').onclick = async () => {
-          st.innerHTML = 'Generation du code... (max 5s)';
-          try {
-            peer = new PeerClient();
-            const offerCode = await peer.createOffer();
-            p.querySelector('#offer-out').value = offerCode;
-            const cb = p.querySelector('#copy-offer');
-            cb.style.display = '';
-            cb.onclick = () => navigator.clipboard?.writeText(offerCode).then(() => { st.textContent = 'Code copie !'; });
-            st.innerHTML = 'Code genere. Envoie-le a ton ami, puis colle sa reponse.';
-          } catch(e) { st.textContent = 'Erreur : ' + e.message; }
-        };
-        p.querySelector('#accept').onclick = async () => {
-          if (!peer) { st.textContent = 'Genere un code d\'offre d\'abord.'; return; }
-          const ans = p.querySelector('#answer-in').value.trim();
-          if (!ans) { st.textContent = 'Colle le code de reponse de ton ami.'; return; }
-          st.textContent = 'Connexion en cours...';
-          try {
-            const info = await peer.acceptAnswer(ans);
-            st.innerHTML = '<b style="color:#37c24a">Connecte !</b> Choix de l\'arene...';
-            setTimeout(() => this.showArenaSelect('online', peer, 0), 700);
-          } catch(e) { st.textContent = 'Echec : ' + (e.message || 'timeout'); }
-        };
-      } else {
-        let peer = null;
-        p.querySelector('#answer').onclick = async () => {
-          const offer = p.querySelector('#offer-in').value.trim();
-          if (!offer) { st.textContent = 'Colle le code d\'offre de ton ami.'; return; }
-          st.textContent = 'Generation de la reponse...';
-          try {
-            peer = new PeerClient();
-            const { answerCode, waitForConnection } = await peer.answerOffer(offer);
-            p.querySelector('#answer-out').value = answerCode;
-            const cb = p.querySelector('#copy-answer');
-            cb.style.display = '';
-            cb.onclick = () => navigator.clipboard?.writeText(answerCode).then(() => { st.textContent = 'Code copie !'; });
-            st.innerHTML = 'Envoie ce code a ton ami. Connexion en attente...';
-            waitForConnection().then(() => {
-              st.innerHTML = '<b style="color:#37c24a">Connecte !</b> En attente du choix de l\'arene...';
-              peer.on('msg', (m) => { const d = m.d || m; if (d.t === 'arena') this.startVersusOnline(peer, 1, d.i); });
-            }).catch(e => { st.textContent = 'Timeout : ton ami n\'a pas valide. Recommence.'; });
-          } catch(e) { st.textContent = 'Code invalide : ' + e.message; }
-        };
+  // ================================================================
+  // TOURNOI — bracket single elimination
+  // ================================================================
+  // (classe interne, pas exportee)
+  _mkBracket(ids) {
+    let n = 1; while (n < ids.length) n *= 2;
+    const pad = [...ids]; while (pad.length < n) pad.push(null);
+    const rounds = []; let cur = [...pad];
+    while (cur.length > 1) {
+      const r = []; for (let i = 0; i < cur.length; i += 2) r.push([cur[i], cur[i+1] ?? null]);
+      rounds.push(r); cur = r.map(() => null);
+    }
+    const obj = { players: ids, rounds, currentRound: 0, currentMatch: 0, _w: {} };
+    const skipByes = () => {
+      while (obj.currentRound < obj.rounds.length) {
+        const pair = obj.rounds[obj.currentRound]?.[obj.currentMatch];
+        if (!pair || (pair[0] != null && pair[1] != null)) break;
+        obj.recordWinner(pair[0] ?? pair[1]);
       }
     };
-    render();
+    obj.recordWinner = (id) => {
+      const key = `${obj.currentRound}_${obj.currentMatch}`;
+      obj._w[key] = id;
+      if (obj.currentRound + 1 < obj.rounds.length) {
+        const slot = Math.floor(obj.currentMatch / 2);
+        obj.rounds[obj.currentRound + 1][slot][obj.currentMatch % 2] = id;
+      }
+      obj.currentMatch++;
+      if (obj.currentMatch >= obj.rounds[obj.currentRound].length) { obj.currentRound++; obj.currentMatch = 0; }
+      skipByes();
+    };
+    Object.defineProperty(obj, 'currentPair', { get: () => obj.currentRound < obj.rounds.length ? obj.rounds[obj.currentRound]?.[obj.currentMatch] ?? null : null });
+    Object.defineProperty(obj, 'isComplete',   { get: () => obj.currentRound >= obj.rounds.length });
+    Object.defineProperty(obj, 'champion',      { get: () => obj._w[`${obj.rounds.length-1}_0`] ?? null });
+    skipByes();
+    return obj;
   }
+
+  // ================================================================
+  // LOBBY P2P — jusqu'a 8 joueurs
+  // ================================================================
+  showP2PLobby() {
+    resumeAudio();
+    let hostObj = null;
+    let guestPeer = null;
+    let slots = [];
+    const MAX = 8;
+
+    const p = this.panel(`
+      <div class="title"><span class="big" style="font-size:24px">📡 LOBBY P2P</span><span class="sub">JUSQU'A 8 JOUEURS SANS SERVEUR</span></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn" id="tab-h" style="flex:1">🏠 Heberger</button>
+        <button class="btn ghost" id="tab-g" style="flex:1">🔗 Rejoindre</button>
+      </div>
+      <div id="content"></div>
+      <div class="status" id="st"></div>
+      <div class="row" style="margin-top:8px"><button class="btn ghost" id="back">← Retour</button></div>
+    `);
+    const st = p.querySelector('#st');
+    const content = p.querySelector('#content');
+
+    // ---- Onglet HOTE ----
+    const showHost = () => {
+      p.querySelector('#tab-h').className = 'btn';
+      p.querySelector('#tab-g').className = 'btn ghost';
+      content.innerHTML = `
+        <div id="slots" style="max-height:250px;overflow-y:auto"></div>
+        <button class="btn secondary" id="add" style="width:100%;margin-top:6px">+ Ajouter un joueur (slot)</button>
+        <div id="modes" style="margin-top:10px"></div>
+      `;
+
+      const renderSlots = () => {
+        const sd = content.querySelector('#slots');
+        if (!slots.length) { sd.innerHTML = '<p class="hint" style="text-align:center">Clique + pour generer un code par joueur.</p>'; return; }
+        sd.innerHTML = slots.map((s, i) => `
+          <div style="background:${s.connected?'rgba(55,194,74,0.12)':'rgba(127,198,255,0.07)'};border:1px solid ${s.connected?'#37c24a':'#334'};border-radius:7px;padding:8px;margin-bottom:5px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+              <b style="color:${s.connected?'#37c24a':'#7fc6ff'}">J${i+2}</b>
+              <span style="font-size:11px;color:${s.connected?'#37c24a':'#888'}">${s.connected?'✓ Connecte':'En attente...'}</span>
+            </div>
+            ${!s.connected ? `
+              <textarea id="c${s.id}" rows="2" readonly style="width:100%;font-size:9px;font-family:monospace;resize:none;background:#0a1a2a;color:#aaa;margin-bottom:4px">${s.code}</textarea>
+              <div style="display:flex;gap:4px;flex-wrap:wrap">
+                <button class="btn ghost" id="cp${s.id}" style="padding:3px 8px;font-size:11px">📋 Copier</button>
+                <input id="ai${s.id}" placeholder="Reponse de J${i+2}..." style="flex:1;min-width:100px;font-size:11px">
+                <button class="btn secondary" id="ac${s.id}" style="padding:3px 8px;font-size:11px">✅</button>
+              </div>
+            ` : ''}
+          </div>
+        `).join('');
+        slots.forEach(s => {
+          document.getElementById(`cp${s.id}`)?.addEventListener('click', () => { navigator.clipboard?.writeText(s.code); st.textContent = 'Code J' + (slots.indexOf(s)+2) + ' copie !'; });
+          const acBtn = document.getElementById(`ac${s.id}`);
+          if (acBtn) acBtn.onclick = async () => {
+            const ans = document.getElementById(`ai${s.id}`)?.value.trim();
+            if (!ans) { st.textContent = 'Colle la reponse.'; return; }
+            st.textContent = 'Connexion J' + (slots.indexOf(s)+2) + '...';
+            try { await hostObj.acceptAnswer(s.id, ans); }
+            catch(e) { st.textContent = 'Erreur: ' + e.message; }
+          };
+        });
+      };
+
+      const renderModes = () => {
+        const n = hostObj ? hostObj.connectedCount : 1;
+        const md = content.querySelector('#modes');
+        if (!md) return;
+        if (n < 2) { md.innerHTML = '<p class="hint" style="text-align:center">Connecte au moins 1 ami pour jouer.</p>'; return; }
+        const ids = [0, ...(hostObj?.connectedIds || [])].slice(0, n);
+        md.innerHTML = `
+          <p class="hint" style="margin-bottom:6px"><b>${n} joueur${n>1?'s':''}</b> connectes</p>
+          <div class="menu-list">
+            <button class="btn" id="m1v1">⚔️ 1v1 (J1 vs J2)</button>
+            ${n >= 3 ? `<button class="btn secondary" id="mffa">🎯 FFA ${n} joueurs (simultane)</button>` : ''}
+            ${n >= 4 ? `<button class="btn secondary" id="mtour">🏆 Tournoi 1v1 progressif (${n} joueurs)</button>` : ''}
+          </div>
+        `;
+        md.querySelector('#m1v1').onclick = () => this._p2pArenaSelect(hostObj, [0, hostObj.connectedIds[0] ?? 1], false);
+        md.querySelector('#mffa')?.addEventListener('click', () => this._p2pArenaSelect(hostObj, ids, false));
+        md.querySelector('#mtour')?.addEventListener('click', () => this._p2pArenaSelect(hostObj, ids, true));
+      };
+
+      hostObj = new MultiPeerHost();
+      hostObj.on('peerjoin', ({ id }) => {
+        const s = slots.find(s => s.id === id);
+        if (s) s.connected = true;
+        renderSlots(); renderModes();
+      });
+
+      content.querySelector('#add').onclick = async () => {
+        if (slots.length >= MAX - 1) { st.textContent = 'Maximum ' + MAX + ' joueurs.'; return; }
+        st.textContent = 'Generation du code...';
+        try {
+          const { id, code } = await hostObj.addSlot();
+          slots.push({ id, code, connected: false });
+          renderSlots(); renderModes();
+          st.textContent = 'Code genere pour J' + (slots.length+1) + '. Envoie-le a ton ami.';
+        } catch(e) { st.textContent = 'Erreur: ' + e.message; }
+      };
+      renderSlots(); renderModes();
+    };
+
+    // ---- Onglet GUEST ----
+    const showGuest = () => {
+      p.querySelector('#tab-h').className = 'btn ghost';
+      p.querySelector('#tab-g').className = 'btn';
+      content.innerHTML = `
+        <p class="hint">Colle le code que l'hote t'a envoye, genere ta reponse et renvoie-la a l'hote.</p>
+        <textarea id="ofin" rows="3" placeholder="Code de l'hote..." style="width:100%;font-size:9px;font-family:monospace;resize:none;background:#0a1a2a;color:#aaa"></textarea>
+        <button class="btn" id="gans" style="width:100%;margin-top:6px">⚙️ Generer ma reponse</button>
+        <textarea id="anout" rows="3" readonly placeholder="Ton code de reponse..." style="width:100%;font-size:9px;font-family:monospace;resize:none;background:#0a1a2a;color:#aaa;margin-top:6px"></textarea>
+        <button class="btn ghost" id="cpans" style="display:none;width:100%;margin-top:4px">📋 Copier ma reponse</button>
+      `;
+      content.querySelector('#gans').onclick = async () => {
+        const offer = content.querySelector('#ofin').value.trim();
+        if (!offer) { st.textContent = "Colle le code de l'hote."; return; }
+        st.textContent = 'Generation...';
+        try {
+          guestPeer = new PeerClient();
+          const { answerCode, waitForConnection } = await guestPeer.answerOffer(offer);
+          content.querySelector('#anout').value = answerCode;
+          const cb = content.querySelector('#cpans');
+          cb.style.display = '';
+          cb.onclick = () => { navigator.clipboard?.writeText(answerCode); st.textContent = 'Copie !'; };
+          st.textContent = "Envoie ce code a l'hote. En attente de connexion...";
+          waitForConnection().then(() => {
+            st.innerHTML = '<b style="color:#37c24a">Connecte !</b> L\'hote va lancer la partie...';
+            guestPeer.on('msg', (m) => {
+              const d = m.d || m;
+              if (d.t === 'arena') this.startVersusP2P(guestPeer, d.guestId ?? 1, d.i, d.playerCount || 2);
+              if (d.t === 'tournament_match') this.startVersusP2P(guestPeer, d.localId, d.arenaIdx, 2);
+            });
+          }).catch(() => { st.textContent = 'Timeout. Recommence.'; });
+        } catch(e) { st.textContent = 'Code invalide: ' + e.message; }
+      };
+    };
+
+    p.querySelector('#tab-h').onclick = showHost;
+    p.querySelector('#tab-g').onclick = showGuest;
+    p.querySelector('#back').onclick  = () => { guestPeer?.disconnect(); hostObj?.disconnect(); this.showVersusMenu(); };
+    showHost();
+  }
+
+  // ---- Selection arene P2P (host annonce aux guests) ----
+  _p2pArenaSelect(host, playerIds, tournament) {
+    const cards = ARENAS.map((a, i) => `<div class="lvl-card" data-i="${i}"><div class="lvl-thumb" style="background:${a.bg||'#1a3a5c'}"></div><div class="lvl-name">${a.name||'Arena '+(i+1)}</div></div>`).join('');
+    const n = playerIds.length;
+    const label = tournament ? `Tournoi ${n}J` : n > 2 ? `FFA ${n}J` : '1v1';
+    const pp = this.panel(`
+      <div class="title"><span class="big">🏁 ARENE</span><span class="sub">${label}</span></div>
+      <div class="grid-levels">${cards}</div>
+      <div class="row" style="margin-top:16px"><button class="btn ghost" id="back">← Retour</button></div>
+    `);
+    pp.querySelectorAll('.lvl-card').forEach(card => {
+      card.onclick = () => {
+        const i = +card.dataset.i;
+        if (tournament) {
+          this._tournamentBracket = this._mkBracket(playerIds);
+          this.showTournamentBracket(host, playerIds, i);
+        } else {
+          playerIds.forEach((pid, idx) => {
+            if (pid === 0) return;
+            host.sendTo(pid, { t: 'relay', d: { t: 'arena', i, playerCount: n, guestId: idx } });
+          });
+          this.startVersusP2P(host, 0, i, n);
+        }
+      };
+    });
+    pp.querySelector('#back').onclick = () => this.showP2PLobby();
+  }
+
+  // ---- Lancer une partie P2P ----
+  startVersusP2P(net, localId, arenaIdx, playerCount = 2) {
+    this.clearUI(); this.mode = 'versus'; this.paused = false;
+    this._restart = () => this.startVersusP2P(net, localId, arenaIdx, playerCount);
+    this.scene = new VersusScene(this, { mode: playerCount > 2 ? 'ffa' : 'online', net, localId, arenaIdx, playerCount });
+    this.checkOrientation();
+  }
+
+  // ---- Bracket de tournoi ----
+  showTournamentBracket(host, playerIds, arenaIdx) {
+    const bracket = this._tournamentBracket;
+    const lbl = (id) => id === 0 ? 'Vous' : `J${playerIds.indexOf(id)+1}`;
+    const colFor = (id) => ['#7fc6ff','#37c24a','#ff8a3b','#ff5d5d','#c084fc','#f9a825','#4dd0e1','#ef9a9a'][playerIds.indexOf(id) % 8];
+
+    const bHTML = bracket.rounds.map((round, ri) => {
+      const rname = ri === bracket.rounds.length-1 ? 'FINALE' : ri === bracket.rounds.length-2 ? 'DEMI-FINALES' : `ROUND ${ri+1}`;
+      const matches = round.map((pair, mi) => {
+        const key = `${ri}_${mi}`;
+        const winner = bracket._w[key];
+        const isCur = ri === bracket.currentRound && mi === bracket.currentMatch;
+        const p1 = pair[0]; const p2 = pair[1];
+        return `<div style="display:inline-flex;flex-direction:column;margin:3px;padding:6px 10px;background:${isCur?'rgba(255,210,59,0.18)':'rgba(255,255,255,0.05)'};border:1px solid ${isCur?'#ffd23b':'#334'};border-radius:6px;font-size:11px;text-align:center;min-width:72px">
+          <span style="color:${winner===p1?'#ffd23b':p1!=null?colFor(p1):'#444'}">${p1!=null?lbl(p1):'BYE'}</span>
+          <span style="color:#555;font-size:9px">vs</span>
+          <span style="color:${winner===p2?'#ffd23b':p2!=null?colFor(p2):'#444'}">${p2!=null?lbl(p2):'BYE'}</span>
+          ${winner!=null?`<span style="color:#ffd23b;font-size:9px;margin-top:2px">→ ${lbl(winner)}</span>`:''}
+        </div>`;
+      }).join('');
+      return `<div style="margin-bottom:10px"><div style="font-size:10px;color:#888;margin-bottom:3px">${rname}</div>${matches}</div>`;
+    }).join('');
+
+    const pair = bracket.currentPair;
+    let matchSection = '';
+    if (bracket.isComplete) {
+      matchSection = `<div style="text-align:center;padding:14px;background:rgba(255,210,59,0.12);border-radius:8px">
+        <div style="font-size:22px;color:#ffd23b">🏆 CHAMPION : ${lbl(bracket.champion)} 🏆</div>
+      </div>`;
+    } else if (pair) {
+      const [p1, p2] = pair;
+      matchSection = `<div style="padding:10px;background:rgba(255,210,59,0.1);border-radius:8px;text-align:center">
+        <div style="font-size:12px;color:#aaa">Match suivant :</div>
+        <div style="font-size:16px;margin:4px 0"><b style="color:${colFor(p1)}">${lbl(p1)}</b> <span style="color:#ffd23b">VS</span> <b style="color:${colFor(p2)}">${lbl(p2)}</b></div>
+        <button class="btn" id="launch" style="margin-top:6px">⚔️ Lancer ce match</button>
+      </div>`;
+    }
+
+    const pp = this.panel(`
+      <div class="title"><span class="big" style="font-size:24px">🏆 TOURNOI</span></div>
+      <div style="overflow-x:auto;margin:6px 0">${bHTML}</div>
+      ${matchSection}
+      <div class="status" id="tst" style="margin-top:6px"></div>
+      <div class="row" style="margin-top:8px"><button class="btn ghost" id="tback">← Quitter tournoi</button></div>
+    `);
+
+    pp.querySelector('#tback').onclick = () => { delete this._tournamentBracket; this.showVersusMenu(); };
+
+    if (pair && !bracket.isComplete) {
+      const [p1Id, p2Id] = pair;
+      pp.querySelector('#launch').onclick = () => {
+        const myLocalId = p1Id === 0 ? 0 : p2Id === 0 ? 1 : -1;
+        if (p1Id !== 0) host.sendTo(p1Id, { t: 'relay', d: { t: 'tournament_match', localId: 0, arenaIdx } });
+        if (p2Id !== 0) host.sendTo(p2Id, { t: 'relay', d: { t: 'tournament_match', localId: 1, arenaIdx } });
+        if (myLocalId >= 0) {
+          this._onVersusEnd = (scene) => {
+            const w = scene.winner;
+            const winId = w === 0 ? p1Id : p2Id;
+            bracket.recordWinner(winId);
+            delete this._onVersusEnd;
+            this.showTournamentBracket(host, playerIds, arenaIdx);
+          };
+          this.startVersusP2P(host, myLocalId, arenaIdx, 2);
+        } else {
+          pp.querySelector('#tst').textContent = 'Match en cours...';
+          host.on('msg', (m) => {
+            if (m.d?.t === 'end') {
+              const w = m.d.winner; const winId = w === 0 ? p1Id : p2Id;
+              bracket.recordWinner(winId);
+              this.showTournamentBracket(host, playerIds, arenaIdx);
+            }
+          });
+        }
+      };
+    }
+  }
+
+  // Mode P2P direct WebRTC : 2 PC sans aucun serveur (legacy 2-joueurs, garde pour compat)
+  showP2P() { this.showP2PLobby(); }
 
   // ---- Mini-jeux : courses à la collecte contre l'IA ----
   showMiniMenu() {

@@ -21,12 +21,13 @@ export class VersusScene {
     this.localId = opts.localId ?? 0; // index du joueur contrôlé en ligne
     this.arenaIdx = opts.arenaIdx ?? 0;
     this.botSkill = opts.botSkill ?? 0.92; // difficulté de l'IA (0..1)
+    this.playerCount = opts.playerCount || 2;
     this.cam = { x: 0, y: 0 };
     this.particles = []; this.floats = []; this.fireballs = [];
     this.timeLeft = 99; this.timeAcc = 0;
     this.over = false; this.winner = -1; this.stateT = 0;
-    this.netAcc = 0; this.remoteBuf = null;
-    this.kos = [0, 0];
+    this.netAcc = 0; this.remoteBuf = null; this.remoteStates = new Map();
+    this.kos = [];
     // Fantôme rival: enregistre le joueur 0 (hors ligne) pour créer un adversaire fantôme
     this.matchMs = 0;
     this.rec = (this.mode !== 'online') ? new GhostRecorder() : null;
@@ -43,28 +44,41 @@ export class VersusScene {
     const def = ARENAS[this.arenaIdx];
     this.level = new Level({ ...def });
     // points de spawn marqués '1' et '2'
-    this.spawnPts = [{ x: 32, y: 64 }, { x: this.level.pixelW - 48, y: 64 }];
+    const W = this.level.pixelW;
+    this.spawnPts = [
+      { x: 32, y: 64 },
+      { x: W - 48, y: 64 },
+      { x: Math.round(W * 0.35), y: 64 },
+      { x: Math.round(W * 0.65), y: 64 },
+    ];
     for (let ty = 0; ty < this.level.h; ty++) for (let tx = 0; tx < this.level.w; tx++) {
       const ch = this.level.rows[ty][tx];
       if (ch === '1') { this.spawnPts[0] = { x: tx * TILE, y: ty * TILE }; this.level.rows[ty][tx] = ' '; }
       if (ch === '2') { this.spawnPts[1] = { x: tx * TILE, y: ty * TILE }; this.level.rows[ty][tx] = ' '; }
+      if (ch === '3') { this.spawnPts[2] = { x: tx * TILE, y: ty * TILE }; this.level.rows[ty][tx] = ' '; }
+      if (ch === '4') { this.spawnPts[3] = { x: tx * TILE, y: ty * TILE }; this.level.rows[ty][tx] = ' '; }
     }
     this.coins = this.level.coins.map((cc) => new Coin(cc.tx, cc.ty));
     this.items = [];
-    this.players = [
-      new Player(this.spawnPts[0].x, this.spawnPts[0].y, { skin: 'p1', id: 0 }),
-      new Player(this.spawnPts[1].x, this.spawnPts[1].y, { skin: 'p2', id: 1 }),
-    ];
-    this.players[0].power = 'big'; this.players[0].setSize(true);
-    this.players[1].power = 'big'; this.players[1].setSize(true);
-    this.players[1].dir = -1;
+    this.players = [];
+    this.kos = [];
+    const skins = ['p1','p2','p1','p2'];
+    const dirs  = [1, -1, 1, -1];
+    const N = Math.max(2, Math.min(4, this.playerCount));
+    for (let i = 0; i < N; i++) {
+      const sp = this.spawnPts[i];
+      const pl = new Player(sp.x, sp.y, { skin: skins[i], id: i });
+      pl.power = 'big'; pl.setSize(true); pl.dir = dirs[i];
+      this.players.push(pl);
+      this.kos.push(0);
+    }
     playMusic('versus');
   }
 
   bindNet() {
     this.net.on('msg', (m) => {
       const d = m.d || m;
-      if (d.t === 'state') { this.remoteBuf = d; }
+      if (d.t === 'state') { const from = d.from ?? (1 - this.localId); this.remoteStates.set(from, d); this.remoteBuf = d; }
       else if (d.t === 'ko') { // l'adversaire annonce qu'on l'a éliminé
         this.kos[this.localId]++; this.addFloat(VIEW_W/2, 40, 'KO !', '#ffd23b');
       }
@@ -171,11 +185,11 @@ export class VersusScene {
       if (this.rec && !this.over) this.rec.update(dt, this.players[0], this.matchMs);
       if (this.mode === 'rival' && this.rivalGhost && !this.players[1].dead) this.puppetRival(dt);
       else this.players[1].update(dt, this.level, this, this.inputFor(1));
-      this.resolveCombat(0, 1); this.resolveCombat(1, 0);
+      for (let i = 0; i < this.players.length; i++) for (let j = 0; j < this.players.length; j++) if (i !== j) this.resolveCombat(i, j);
     } else {
       const me = this.players[this.localId];
       me.update(dt, this.level, this, this.inputFor(this.localId));
-      this.applyRemote(dt);
+      this._applyRemoteAll(dt);
       // détecte si JE me fais écraser par l'adversaire (autorité locale sur ma propre mort)
       const other = this.players[1 - this.localId];
       if (!this.coop && !me.dead && me.invuln <= 0 && aabb(me, other)) {
@@ -242,7 +256,7 @@ export class VersusScene {
     if (this.netAcc < 1 / 20) return; // 20 Hz
     this.netAcc = 0;
     const me = this.players[this.localId];
-    this.net.relay({ t: 'state', x: me.x, y: me.y, vx: me.vx, vy: me.vy, dir: me.dir, power: me.power, dead: me.dead, walkT: me.walkT, onGround: me.onGround });
+    this.net.relay({ t: 'state', from: this.localId, x: me.x, y: me.y, vx: me.vx, vy: me.vy, dir: me.dir, power: me.power, dead: me.dead, walkT: me.walkT, onGround: me.onGround });
   }
   applyRemote(dt) {
     const r = this.players[1 - this.localId];
@@ -254,6 +268,20 @@ export class VersusScene {
     r.vx = b.vx; r.vy = b.vy; r.dir = b.dir; r.power = b.power; r.onGround = b.onGround; r.walkT = b.walkT;
     if (b.power !== 'small') r.setSize(true); else r.setSize(false);
     r.dead = b.dead;
+  }
+
+  _applyRemoteAll(dt) {
+    if (this.playerCount <= 2) { this.applyRemote(dt); return; }
+    for (const [id, b] of this.remoteStates) {
+      if (id === this.localId) continue;
+      const r = this.players[id];
+      if (!r) continue;
+      r.x += (b.x - r.x) * Math.min(1, dt * 14);
+      r.y += (b.y - r.y) * Math.min(1, dt * 14);
+      r.vx = b.vx; r.vy = b.vy; r.dir = b.dir; r.power = b.power;
+      r.onGround = b.onGround; r.walkT = b.walkT; r.dead = b.dead;
+      if (b.power !== 'small') r.setSize(true); else r.setSize(false);
+    }
   }
 
   finishByScore() {
@@ -291,11 +319,14 @@ export class VersusScene {
   drawOverlay(c) {
     this.drawHUD(c);
     if (this.over) {
-      const txt = this.coop ? `COOP : ${this.coopCoins} ●` : this.winner < 0 ? 'ÉGALITÉ !' : (this.mode === 'online'
-        ? (this.winner === this.localId ? 'VICTOIRE !' : 'DÉFAITE')
-        : (this.mode === 'bot' || this.mode === 'rival')
-        ? (this.winner === 0 ? 'VICTOIRE !' : (this.mode === 'rival' ? 'LE RIVAL GAGNE' : 'L\'IA GAGNE'))
-        : `JOUEUR ${this.winner + 1} GAGNE !`);
+      const w = this.winner;
+      const txt = this.coop ? `COOP : ${this.coopCoins}` :
+        w < 0 ? 'EGALITE !' :
+        (this.mode === 'online' || this.mode === 'ffa')
+          ? (w === this.localId ? 'VICTOIRE !' : 'DEFAITE')
+          : (this.mode === 'bot' || this.mode === 'rival')
+            ? (w === 0 ? 'VICTOIRE !' : (this.mode === 'rival' ? 'LE RIVAL GAGNE' : 'L\'IA GAGNE'))
+            : `JOUEUR ${w + 1} GAGNE !`;
       c.fillStyle = '#000'; c.globalAlpha = 0.55; c.fillRect(0, VIEW_H/2-18, VIEW_W, 36); c.globalAlpha = 1;
       c.font = '16px monospace'; c.textAlign = 'center';
       c.fillStyle = this.winner < 0 ? '#fff' : '#ffd23b';
@@ -306,12 +337,16 @@ export class VersusScene {
     c.fillStyle = '#000'; c.globalAlpha = 0.4; c.fillRect(0, 0, VIEW_W, 16); c.globalAlpha = 1;
     c.font = '9px monospace';
     if (this.coop) {
-      c.fillStyle = '#37c24a'; c.textAlign = 'left'; c.fillText('🤝 CO-OP', 6, 11);
-      c.fillStyle = '#ffd23b'; c.textAlign = 'right'; c.fillText('● ' + this.coopCoins, VIEW_W - 6, 11);
+      c.fillStyle = '#37c24a'; c.textAlign = 'left'; c.fillText('CO-OP', 6, 11);
+      c.fillStyle = '#ffd23b'; c.textAlign = 'right'; c.fillText('x' + this.coopCoins, VIEW_W - 6, 11);
     } else {
-      c.fillStyle = '#7fc6ff'; c.textAlign = 'left'; c.fillText('J1  ' + this.kos[0] + ' KO', 6, 11);
-      const p2label = this.mode === 'bot' ? 'IA' : this.mode === 'rival' ? '👻RIVAL' : 'J2';
-      c.fillStyle = '#37c24a'; c.textAlign = 'right'; c.fillText(this.kos[1] + ' KO  ' + p2label, VIEW_W - 6, 11);
+      const cols = ['#7fc6ff','#37c24a','#ff8a3b','#ff5d5d'];
+      const labels = ['J1','J2','J3','J4'].slice(0, this.players.length);
+      const slot = VIEW_W / (labels.length + 1);
+      labels.forEach((lbl, i) => {
+        c.fillStyle = cols[i % 4]; c.textAlign = 'center';
+        c.fillText(lbl + ' ' + (this.kos[i] || 0) + 'ko', slot * (i + 1), 11);
+      });
     }
     c.fillStyle = '#fff'; c.textAlign = 'center'; c.fillText(String(this.timeLeft).padStart(2,'0'), VIEW_W/2, 11);
     c.textAlign = 'left';
