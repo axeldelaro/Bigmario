@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#1a1030" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Bigmario — Plateforme rétro en ligne</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="game-shell">
+    <canvas id="screen"></canvas>
+
+    <!-- Overlay UI (menus) -->
+    <div id="ui" class="ui-layer"></div>
+
+    <!-- Touch controls (mobile, landscape) -->
+    <div id="touch" class="touch-layer hidden">
+      <div class="touch-left">
+        <button class="tbtn" data-act="left" aria-label="Gauche">◀</button>
+        <button class="tbtn" data-act="down" aria-label="Bas">▼</button>
+        <button class="tbtn" data-act="right" aria-label="Droite">▶</button>
+      </div>
+      <div class="touch-right">
+        <button class="tbtn round" data-act="fire" aria-label="Tir">●</button>
+        <button class="tbtn round big" data-act="jump" aria-label="Saut">▲</button>
+      </div>
+      <button class="tbtn pause-btn" data-act="pause" aria-label="Pause">II</button>
+    </div>
+
+    <!-- Rotate device hint -->
+    <div id="rotate-hint" class="rotate-hint hidden">
+      <div class="rotate-icon">📱↻</div>
+      <p>Tourne ton téléphone en mode paysage pour jouer</p>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

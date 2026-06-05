@@ -1,0 +1,8 @@
+node_modules/
+server/scores.json
+server/ghosts.json
+server/shares.json
+*.log
+.DS_Store
+.env
+dist/
