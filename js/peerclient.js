@@ -38,11 +38,7 @@ export class MultiPeerHost {
       const tryCode = (code) => {
         this.roomCode = code;
         const p = new window.Peer(PREFIX + code, {
-          debug: 0,
-          config: { iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-          ]},
+          debug: 0
         });
         this._peer = p;
         p.on('open',  ()  => res(code));
@@ -131,16 +127,16 @@ export class PeerClient {
     if (!window.Peer) return Promise.reject(new Error('PeerJS non chargé'));
     return new Promise((res, rej) => {
       this._peer = new window.Peer({
-        debug: 0,
-        config: { iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-        ]},
+        debug: 0
       });
       const to = setTimeout(() => rej(new Error('Connexion timeout (15s)')), 15000);
+      this._peer.on('error', (err) => {
+        clearTimeout(to);
+        rej(new Error(err.type + ': ' + (err.message || '')));
+      });
       this._peer.on('open', () => {
         const hostId = PREFIX + code.trim().toUpperCase();
-        this._conn = this._peer.connect(hostId, { reliable: true, serialization: 'json' });
+        this._conn = this._peer.connect(hostId);
         this._conn.on('data', (m) => {
           if (m.t === 'hello') {
             clearTimeout(to);
@@ -159,8 +155,11 @@ export class PeerClient {
             this._emit('pseudo_update', { pseudos: this.pseudos });
           }
         });
+        this._conn.on('error', (err) => {
+          clearTimeout(to);
+          rej(new Error('Erreur de connexion: ' + err.message));
+        });
         this._conn.on('close', () => this._emit('peerleave', {}));
-        this._conn.on('error', (e) => { clearTimeout(to); rej(new Error(String(e.type || e))); });
       });
       this._peer.on('error', (e) => { clearTimeout(to); rej(new Error(String(e.type || e))); });
     });
