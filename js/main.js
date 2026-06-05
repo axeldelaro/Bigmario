@@ -71,7 +71,8 @@ class Game {
     canvas.width = VIEW_W * dpr; canvas.height = VIEW_H * dpr;
     canvas.style.width = cssW + 'px'; canvas.style.height = cssH + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = Save.get('smooth2d', false);
+    canvas.style.imageRendering = Save.get('smooth2d', false) ? 'auto' : 'pixelated';
     // canvas 3D superposé exactement sur le canvas 2D
     if (this.canvas3d) {
       const left = Math.round((innerWidth - cssW) / 2), top = Math.round((innerHeight - cssH) / 2);
@@ -136,6 +137,8 @@ class Game {
   }
 
   fadeIn() { this.fadeAlpha = 1; }
+
+  applySmooth2d() { const on = Save.get('smooth2d', false); canvas.style.imageRendering = on ? 'auto' : 'pixelated'; ctx.imageSmoothingEnabled = on; }
 
   set3DVisible(on) {
     if (!this.canvas3d || this._3dOn === on) return;
@@ -642,6 +645,7 @@ class Game {
         <button class="btn secondary" id="render">${this.use3D ? '🧊 Rendu: 3D' : '🟦 Rendu: 2D'}${is3DReady() ? '' : ' (3D indispo.)'}</button>
         <button class="btn secondary" id="pseudo">✏ Pseudo : ${escapeHtml(Save.get('playerName', 'MOI'))}</button>
         <button class="btn secondary" id="motion">${this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'}</button>
+        <button class="btn secondary" id="smooth2d">${Save.get('smooth2d', false) ? '🖼 Lissage 2D: ON' : '🖼 Lissage 2D: OFF (pixel)'}</button>
         <button class="btn secondary" id="touch">🎮 Boutons tactiles</button>
         ${this._installPrompt ? '<button class="btn" id="install">📲 Installer l\'appli</button>' : ''}
         <button class="btn ghost" id="fs">⛶ Plein écran</button>
@@ -656,6 +660,7 @@ class Game {
     p.querySelector('#render').onclick = (e) => { this.use3D = !this.use3D; Save.set('render3d', this.use3D); e.target.textContent = (this.use3D ? '🧊 Rendu: 3D' : '🟦 Rendu: 2D') + (is3DReady() ? '' : ' (3D indispo.)'); };
     p.querySelector('#pseudo').onclick = (e) => { const n = (prompt('Ton pseudo (nom de tes fantômes) :', Save.get('playerName', 'MOI')) || '').trim().slice(0, 12); if (n) { Save.set('playerName', n); e.target.textContent = '✏ Pseudo : ' + n; } };
     p.querySelector('#motion').onclick = (e) => { this.reduceMotion = !this.reduceMotion; Save.set('reduceMotion', this.reduceMotion); e.target.textContent = this.reduceMotion ? '🌀 Animations: RÉDUITES' : '🌀 Animations: NORMALES'; };
+    p.querySelector('#smooth2d').onclick = (e) => { const v = !Save.get('smooth2d', false); Save.set('smooth2d', v); this.applySmooth2d(); e.target.textContent = v ? '🖼 Lissage 2D: ON' : '🖼 Lissage 2D: OFF (pixel)'; };
     p.querySelector('#touch').onclick = () => this.showTouchSettings();
     const ib = p.querySelector('#install');
     if (ib) ib.onclick = async () => { const pr = this._installPrompt; if (!pr) return; pr.prompt(); try { await pr.userChoice; } catch {} this._installPrompt = null; this.showOptions(); };
