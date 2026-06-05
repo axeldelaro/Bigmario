@@ -205,9 +205,19 @@ export class VersusScene {
         for (let i = 0; i < this.players.length; i++) {
           if (i === this.localId) continue;
           const other = this.players[i];
-          if (other && !other.dead && !me.dead && me.invuln <= 0 && aabb(me, other)) {
-            const fromAbove = (other.y + other.h) - me.y < 12 && other.vy > 30 && other.y < me.y;
-            if (fromAbove) { this.localKO(me, i); }
+          if (other && !other.dead && !me.dead && aabb(me, other)) {
+            const otherPrevFeet = other.prevFeet != null ? other.prevFeet : (other.y + other.h);
+            const otherFromAbove = (other.vy > 0 && otherPrevFeet <= me.y + 12) || other.pounding;
+            if (otherFromAbove && me.invuln <= 0) {
+              this.localKO(me, i);
+            }
+            
+            const mePrevFeet = me.prevFeet != null ? me.prevFeet : (me.y + me.h);
+            const meFromAbove = (me.vy > 0 && mePrevFeet <= other.y + 12) || me.pounding;
+            if (meFromAbove && other.invuln <= 0) {
+              me.vy = me.pounding ? -350 : -260;
+              me.pounding = false; me.poundT = 0;
+            }
           }
         }
         if (!this.coop) for (const fb of this.fireballs) {
