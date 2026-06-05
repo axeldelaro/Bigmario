@@ -84,11 +84,11 @@ export class MultiPeerHost {
 
   sendTo(id, msg) {
     const c = this._conns.get(id);
-    if (c?.open) c.send(msg);
+    if (c) c.send(msg);
   }
   broadcast(msg, excl = -1) {
     for (const [id, c] of this._conns)
-      if (id !== excl && c.open) c.send(msg);
+      if (id !== excl) c.send(msg);
   }
   relay(obj)   { this.broadcast({ t: 'relay', d: obj }); }
   announceArena(arenaIdx, playerCount = 2) {
@@ -114,7 +114,7 @@ export class PeerClient {
   _emit(ev, d){ const h = this.handlers[ev]; if (h) h(d); }
 
   relay(obj) {
-    if (this._conn?.open) this._conn.send({ t: 'relay', d: obj });
+    if (this._conn) this._conn.send({ t: 'relay', d: obj });
   }
 
   // Se connecte à la salle identifiée par "code" (ex: "M7K2")
