@@ -6,7 +6,7 @@
 const WS_URL = (() => {
   if (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
     return 'ws://localhost:8080';
-  return 'wss://bigmario-relay.onrender.com';
+  return 'wss://bigmario.onrender.com';
 })();
 
 const HTTP_URL = WS_URL.replace('wss://', 'https://').replace('ws://', 'http://');
