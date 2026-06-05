@@ -13,6 +13,31 @@ const { WebSocketServer } = require('ws');
 const PORT = process.env.PORT || 8080;
 const MAX_PLAYERS = 8;
 
+// Dossier racine du jeu (parent de server/)
+const GAME_ROOT = path.join(__dirname, '..');
+
+// Types MIME pour les fichiers statiques du jeu
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.svg':  'image/svg+xml',
+  '.png':  'image/png',
+  '.webp': 'image/webp',
+  '.ico':  'image/x-icon',
+  '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
+};
+
+function serveFile(res, filePath) {
+  fs.readFile(filePath, (err, data) => {
+    if (err) { res.writeHead(404); res.end('Not found'); return; }
+    const ext = path.extname(filePath).toLowerCase();
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream', ...CORS });
+    res.end(data);
+  });
+}
+
 // ------------------------------------------------------------------ salons --
 // room = { code, maxPlayers, clients: Map<id, ws>, nextId, hostId }
 const rooms = new Map(); // code -> room
@@ -150,8 +175,12 @@ const server = http.createServer((req, res) => {
       return sendJSON(res, 200, { ok: true, rank, total: list.length, scores: list.slice(0, 10) });
     }); return;
   }
-  res.writeHead(200, { 'Content-Type': 'text/plain', ...CORS });
-  res.end('Bigmario relay OK — ' + rooms.size + ' salon(s) actif(s).');
+  // Fichiers statiques du jeu (fallback)
+  let urlPath = url.pathname === '/' ? '/index.html' : url.pathname;
+  // Empêcher la traversée de répertoire
+  const filePath = path.join(GAME_ROOT, urlPath.replace(/\.\./g, ''));
+  if (!filePath.startsWith(GAME_ROOT)) { res.writeHead(403); res.end('Forbidden'); return; }
+  serveFile(res, filePath);
 });
 
 // --------------------------------------------------------- WebSocket lobby --
@@ -244,7 +273,9 @@ wss.on('connection', (ws) => {
     // ── Lancer la partie (hôte seul) ──────────────────────────────────
     if (m.t === 'start') {
       const room = rooms.get(ws.room); if (!room || ws.playerId !== room.hostId) return;
-      broadcast(room, { t: 'start', arenaIdx: m.arenaIdx | 0, playerCount: room.clients.size, ids: Array.from(room.clients.keys()), botCount: m.botCount | 0, tournament: !!m.tournament });
+      // Utiliser les IDs fournis par l'hôte (inclut les bots) ou fallback sur les clients connectés
+      const ids = Array.isArray(m.ids) && m.ids.length > 0 ? m.ids : Array.from(room.clients.keys());
+      broadcast(room, { t: 'start', arenaIdx: m.arenaIdx | 0, playerCount: ids.length, ids, tournament: !!m.tournament }, ws.playerId);
       return;
     }
 

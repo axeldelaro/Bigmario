@@ -1,16 +1,21 @@
-# Déploiement gratuit du serveur de relais sur Render (https://render.com).
-# 1) Pousse ce dépôt sur GitHub.
-# 2) Sur Render: New > Blueprint, pointe vers ce dépôt.
-# 3) Render lit ce fichier et crée le service. Tu obtiens une URL https://...onrender.com
-#    -> dans le jeu, utilise wss://...onrender.com (wss, pas https).
+# Configuration Render pour bigmario.onrender.com
+# Ce service Node.js fait DEUX choses :
+#   1. Sert les fichiers statiques du jeu (HTML, JS, CSS...)
+#   2. Gère les salons multijoueurs via WebSocket
+#
+# Configuration sur render.com :
+#   - Type : Web Service
+#   - Root Directory : . (laisser vide / racine du repo)
+#   - Build Command : cd server && npm install
+#   - Start Command : node server/server.js
 services:
   - type: web
-    name: bigmario-relay
+    name: bigmario
     runtime: node
-    rootDir: server
+    rootDir: .
     plan: free
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: cd server && npm install
+    startCommand: node server/server.js
     healthCheckPath: /
     envVars:
       - key: NODE_VERSION
