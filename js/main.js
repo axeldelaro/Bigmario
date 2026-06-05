@@ -590,10 +590,10 @@ class Game {
       <div class="menu-list">
         <button class="btn" id="m-bot">🤖 Contre l'IA</button>
         <button class="btn" id="m-rival">🏁 Contre un Fantôme rival</button>
-        <button class="btn secondary" id="m-local">🎮 Local - Libre (2 à 4 joueurs)</button>
-        <button class="btn secondary" id="m-local-tourney">🏆 Tournoi Local (4 à 8 joueurs)</button>
-        <button class="btn secondary" id="m-p2p">📡 2–8 PC / LAN — sans serveur (P2P)</button>
-        <button class="btn secondary" id="m-online">🌐 En Ligne / LAN — Serveur WebSocket</button>
+        <button class="btn secondary" id="m-local">🎮 Local sur ce PC : Libre (2-4)</button>
+        <button class="btn secondary" id="m-local-tourney">🏆 Tournoi Local sur ce PC (3-8)</button>
+        <button class="btn secondary" id="m-p2p">📡 En Ligne (P2P par code) : Libre & Tournoi</button>
+        <button class="btn secondary" id="m-online">🌐 Serveur central WebSocket (1v1)</button>
         <button class="btn ghost" id="m-back">← Retour</button>
       </div>
       <p class="hint" style="margin-top:8px">
@@ -750,6 +750,9 @@ class Game {
             <div style="padding:6px;background:rgba(55,194,74,0.1);border:1px solid #37c24a;border-radius:5px;font-size:13px">👑 <b>J1 (Vous)</b> - Hôte</div>
           </div>
           <div id="host-actions" style="margin-top:14px;display:none">
+            <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:12px">
+              <label>Ajouter des Bots (IA): <select id="p2p-bots"><option selected>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option><option>7</option></select></label>
+            </div>
             <button class="btn" id="start-game" style="width:100%;margin-bottom:8px">⚔️ Mode Libre (FFA)</button>
             <button class="btn secondary" id="start-tourney" style="width:100%">🏆 Créer un Tournoi</button>
           </div>
@@ -812,12 +815,18 @@ class Game {
 
 
           content.querySelector('#start-game').onclick = () => {
+            const bots = parseInt(content.querySelector('#p2p-bots').value, 10);
             const ids = [0, ...hostObj.connectedIds];
+            for (let i = 0; i < bots; i++) ids.push('AI_' + i);
+            if (ids.length > 4) { st.textContent = 'Le mode Libre (FFA) est limité à 4 joueurs max (bots inclus).'; return; }
             this._p2pArenaSelect(hostObj, ids, false);
           };
 
           content.querySelector('#start-tourney').onclick = () => {
+            const bots = parseInt(content.querySelector('#p2p-bots').value, 10);
             const ids = [0, ...hostObj.connectedIds];
+            for (let i = 0; i < bots; i++) ids.push('AI_' + i);
+            if (ids.length > 8) { st.textContent = 'Le Tournoi est limité à 8 joueurs max (bots inclus).'; return; }
             this._p2pArenaSelect(hostObj, ids, true);
           };
 
@@ -866,9 +875,9 @@ class Game {
           guestPeer.on('msg', (m) => {
             const d = m.d || m;
             if (d.t === 'arena') {
-              this.startVersusP2P(guestPeer, info.localId, d.i, d.playerCount || 2);
+              this.startVersusP2P(guestPeer, info.localId, d.i, d.playerCount || 2, d.ids);
             } else if (d.t === 'tournament_match') {
-              this.startVersusP2P(guestPeer, d.localId, d.arenaIdx, 2);
+              this.startVersusP2P(guestPeer, d.localId, d.arenaIdx, 2, d.ids);
             }
           });
 
@@ -928,10 +937,10 @@ class Game {
           this.showTournamentBracket(host, playerIds, i);
         } else {
           playerIds.forEach((pid, idx) => {
-            if (pid === 0) return;
-            host.sendTo(pid, { t: 'relay', d: { t: 'arena', i, playerCount: n, guestId: idx } });
+            if (pid === 0 || typeof pid === 'string') return;
+            host.sendTo(pid, { t: 'relay', d: { t: 'arena', i, playerCount: n, guestId: idx, ids: playerIds } });
           });
-          this.startVersusP2P(host, 0, i, n);
+          this.startVersusP2P(host, 0, i, n, playerIds);
         }
       };
     });
@@ -939,10 +948,10 @@ class Game {
   }
 
   // ---- Lancer une partie P2P ----
-  startVersusP2P(net, localId, arenaIdx, playerCount = 2) {
+  startVersusP2P(net, localId, arenaIdx, playerCount = 2, ids = null) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
-    this._restart = () => this.startVersusP2P(net, localId, arenaIdx, playerCount);
-    this.scene = new VersusScene(this, { mode: playerCount > 2 ? 'ffa' : 'online', net, localId, arenaIdx, playerCount });
+    this._restart = () => this.startVersusP2P(net, localId, arenaIdx, playerCount, ids);
+    this.scene = new VersusScene(this, { mode: playerCount > 2 ? 'ffa' : 'online', net, localId, arenaIdx, playerCount, ids });
     this.checkOrientation();
   }
 

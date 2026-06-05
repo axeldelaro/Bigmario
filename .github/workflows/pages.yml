@@ -24,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Invalidate Service Worker Cache
+        run: sed -i "s/const CACHE = 'bigmario-v[0-9]*';/const CACHE = 'bigmario-${{ github.sha }}';/" sw.js
       - uses: actions/configure-pages@v5
       - name: Upload static site (exclut le dossier serveur)
         uses: actions/upload-pages-artifact@v3
