@@ -2,7 +2,7 @@
 import { TILE, VIEW_W, VIEW_H } from './core.js';
 import { tileCanvas } from './art.js';
 
-const SOLID = new Set(['X', 'H', 'B', '?', 'M', 'U', 'L', 'W', 'D', 'p', 'P', 'T', 'Q']);
+const SOLID = new Set(['X', 'H', 'B', '?', 'M', 'U', 'L', 'W', 'Q', 'D', 'p', 'P', 'T']);
 const SEMI = new Set(['=']); // solide seulement par le dessus
 const HAZARD = new Set(['^']);
 const ENEMY_CHARS = { g: 'goon', k: 'shell', f: 'fly', z: 'spiky', O: 'boss', v: 'plant', t: 'lob' };
@@ -60,7 +60,7 @@ export class Level {
   }
   setTile(tx, ty, ch) { if (ty>=0 && ty<this.h && tx>=0 && tx<this.w) this.rows[ty][tx] = ch; }
   isSolid(ch) { return SOLID.has(ch); }
-  isQuestion(ch) { return ch === '?' || ch === 'M' || ch === 'U' || ch === 'L' || ch === 'W'; }
+  isQuestion(ch) { return ch === '?' || ch === 'M' || ch === 'U' || ch === 'L' || ch === 'W' || ch === 'Q'; }
 
   solidAt(px, py) { return SOLID.has(this.tile(Math.floor(px / TILE), Math.floor(py / TILE))); }
   hazardAt(rect) {

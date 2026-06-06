@@ -25,7 +25,7 @@ const TILE_COL = {
   X: { top: 0x4fbe57, side: 0xb6622d },
   H: { top: 0xb0b6c4, side: 0x8a8f9c },
   B: { top: 0xd07a4a, side: 0x9a4a26 },
-  '?': { top: 0xffd23b, side: 0xc9961f }, M: { top: 0xffd23b, side: 0xc9961f }, U: { top: 0xffd23b, side: 0xc9961f },
+  '?': { top: 0xffd23b, side: 0xc9961f }, M: { top: 0xffd23b, side: 0xc9961f }, U: { top: 0xffd23b, side: 0xc9961f }, Q: { top: 0xff9b3b, side: 0xc96a1f },
   L: { top: 0x46d84a, side: 0x1f8a30 }, W: { top: 0x46c8ff, side: 0x1f6a9a }, D: { top: 0x9a7a3a, side: 0x6a4a1f },
   p: { top: 0x37c24a, side: 0x1f8a30 }, P: { top: 0x7fe88a, side: 0x1f8a30 },
   T: { top: 0xff5d5d, side: 0x9aa0b0 }, '=': { top: 0xe8c889, side: 0x7a5a2a },
@@ -98,7 +98,7 @@ function drawFace(c, S, type, face, theme) {
     case 'H': stone(false); break;
     case 'D': stone(true); break;
     case 'B': brick(); break;
-    case '?': case 'M': qblock('#ffcf3b', '#a3760f', '?'); break;
+    case '?': case 'M': case 'Q': qblock('#ffcf3b', '#a3760f', '?'); break;
     case 'U': qblock('#ffcf3b', '#a3760f', '★'); break;
     case 'L': qblock('#46d84a', '#1f7a2c', '1'); break;
     case 'W': qblock('#46c8ff', '#1f6a9a', '✦'); break;
@@ -187,7 +187,7 @@ function buildRenderer() {
   const tileMatCache = new Map();
   const faceMat = (type, face, theme) => {
     const map = tex(tex3D(type, face, theme), 'm:' + type + face + theme);
-    const emissive = (type === '?' || type === 'M' || type === 'U' || type === 'L' || type === 'W');
+    const emissive = (type === '?' || type === 'M' || type === 'U' || type === 'L' || type === 'W' || type === 'Q');
     return new THREE.MeshStandardMaterial({ map, roughness: 0.82, metalness: 0.04, emissive: emissive ? 0x332a00 : 0x000000, emissiveMap: emissive ? map : null, emissiveIntensity: emissive ? 0.35 : 1 });
   };
   const tileMats = (type, theme) => {

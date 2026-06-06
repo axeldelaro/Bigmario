@@ -576,6 +576,7 @@ function drawTile(c, type, theme) {
     case '?': // bloc mystère
     case 'M':
     case 'U':
+    case 'Q':
       px(c,0,0,16,16,'#caa12a'); px(c,0,0,16,16,'#caa12a');
       px(c,1,1,14,14,'#ffcf3b'); px(c,1,1,14,2,'#ffe79a'); px(c,1,13,14,2,'#a3760f');
       px(c,2,2,2,2,'#fff'); px(c,12,2,2,2,'#fff'); px(c,2,12,2,2,'#fff'); px(c,12,12,2,2,'#fff');
