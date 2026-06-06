@@ -1,5 +1,4 @@
-// scene_mariokart.js — Mini-jeu de karting en 3D (Style Super Mario Kart / Mode 7)
-import * as THREE from './vendor/three.module.js';
+// scene_mariokart.js — Mini-jeu de karting en Mode 7 (Pseudo-3D 100% 2D)
 import { VIEW_W, VIEW_H } from './core.js';
 import { SKIN_LIST } from './art.js';
 
@@ -45,7 +44,7 @@ const TRACKS = [
     2,0,0,0,0,0,0,0,0,1,
   ]},
   { name: 'Ligne Droite Infernale', w: 6, h: 15, data: Array(90).fill(1).map((_,i) => (i%6===0||i%6===5) && i>10 ? 0 : (i===3?2:1)) },
-  { name: 'Piste des Glaces', w: 8, h: 8, data: Array(64).fill(1).map((_,i)=>i===56?2:(Math.random()>0.7?0:1)) }, // Procédural chaotique
+  { name: 'Piste des Glaces', w: 8, h: 8, data: Array(64).fill(1).map((_,i)=>i===56?2:(Math.random()>0.7?0:1)) },
   { name: 'Zig-Zag', w: 8, h: 12, data: [
     1,1,1,1,1,1,1,1,
     1,0,0,0,0,0,0,1,
@@ -82,24 +81,32 @@ const TRACKS = [
     1,0,1,1,1,1,1,1,1,
     2,0,0,0,0,0,0,0,0,
   ]},
-  { name: 'Route Arc-en-Ciel', w: 10, h: 10, data: Array(100).fill(1).map((_,i) => i===90?2:(Math.random()>0.4?1:0)) }, // Difficile
+  { name: 'Route Arc-en-Ciel', w: 10, h: 10, data: Array(100).fill(1).map((_,i) => i===90?2:(Math.random()>0.4?1:0)) },
 ];
 
-// Couleurs de la piste
 const TILE_SIZE = 10;
-const ROAD_COL = '#777', GRASS_COL = '#3a8b3a', LINE_COL = '#fff', START_COL = '#d02020';
+// Little Endian ABGR format colors for ImageData
+const COL_GRASS = 0xFF3a8b3a;
+const COL_ROAD  = 0xFF777777;
+const COL_LINE  = 0xFFffffff;
+const COL_START = 0xFF2020d0; // d02020 -> 0xFF2020D0
+const COL_SKY   = 0xFFffc846; // 46c8ff -> 0xFFFFC846 (ciel de base)
+const COL_SPACE = 0xFF221111; // ciel nuit pour arc-en-ciel
 
 export class MarioKartScene {
   constructor(game) {
     this.game = game;
-    this.state = 'menu'; // menu -> play -> end
+    this.state = 'menu';
     this.selectedTrack = 0;
     this.selectedSkin = 0;
+    // Rendu en demi-résolution pour garantir les 60 FPS sur ImageData (pixels doublés)
+    this.renderW = Math.floor(VIEW_W / 2);
+    this.renderH = Math.floor(VIEW_H / 2);
     this.initMenu();
   }
 
   initMenu() {
-    let html = `<div class="title" style="margin-bottom:10px;"><span class="big" style="color:#d02020; font-size:40px; text-shadow: 2px 2px #fff;">KARTING 3D</span></div>`;
+    let html = `<div class="title" style="margin-bottom:10px;"><span class="big" style="color:#d02020; font-size:40px; text-shadow: 2px 2px #fff;">KARTING 2D</span></div>`;
     html += `<div style="display:flex; justify-content:space-around; width:100%;">
       <div style="flex:1;">
         <h3>Personnage</h3>
@@ -133,40 +140,25 @@ export class MarioKartScene {
     this.track = TRACKS[this.selectedTrack];
     this.karts = [];
     
-    // Initialiser 3D sur un canvas dédié (car le main canvas a déjà un contexte 2D)
-    this.mkCanvas = document.createElement('canvas');
-    this.mkCanvas.width = VIEW_W;
-    this.mkCanvas.height = VIEW_H;
-    this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(this.selectedTrack === 9 ? '#000' : '#46c8ff'); // Arc en ciel = nuit
-    this.camera = new THREE.PerspectiveCamera(75, VIEW_W/VIEW_H, 0.1, 1000);
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.mkCanvas, antialias: false });
-    
-    // Générer la texture du sol (la grille)
-    const tCanvas = document.createElement('canvas');
-    tCanvas.width = this.track.w * 64; tCanvas.height = this.track.h * 64;
-    const ctx = tCanvas.getContext('2d');
+    // Convertir la texture en grille 2D
+    this.texW = this.track.w * 64;
+    this.texH = this.track.h * 64;
+    this.texData = new Uint32Array(this.texW * this.texH);
     for (let y = 0; y < this.track.h; y++) {
       for (let x = 0; x < this.track.w; x++) {
         const t = this.track.data[y * this.track.w + x];
-        ctx.fillStyle = t === 0 ? GRASS_COL : t === 1 ? ROAD_COL : START_COL;
-        ctx.fillRect(x*64, y*64, 64, 64);
-        if (t === 1) { // Ligne pointillée
-          ctx.fillStyle = LINE_COL;
-          ctx.fillRect(x*64+30, y*64+30, 4, 4);
+        const baseCol = t === 0 ? COL_GRASS : t === 1 ? COL_ROAD : COL_START;
+        for (let py = 0; py < 64; py++) {
+          for (let px = 0; px < 64; px++) {
+            let col = baseCol;
+            // Pointillés blancs sur la route au milieu de la tuile
+            if (t === 1 && px > 30 && px < 34 && py > 30 && py < 34) col = COL_LINE;
+            this.texData[(y*64 + py) * this.texW + (x*64 + px)] = col;
+          }
         }
       }
     }
-    const tex = new THREE.CanvasTexture(tCanvas);
-    tex.magFilter = THREE.NearestFilter;
-    const planeGeo = new THREE.PlaneGeometry(this.track.w * TILE_SIZE, this.track.h * TILE_SIZE);
-    const planeMat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });
-    const plane = new THREE.Mesh(planeGeo, planeMat);
-    plane.rotation.x = -Math.PI / 2;
-    plane.position.set((this.track.w*TILE_SIZE)/2, 0, (this.track.h*TILE_SIZE)/2);
-    this.scene.add(plane);
 
-    // Trouver le point de départ
     let startX = 2, startY = 2;
     for (let i = 0; i < this.track.data.length; i++) {
       if (this.track.data[i] === 2) {
@@ -176,56 +168,47 @@ export class MarioKartScene {
       }
     }
 
-    // Créer les 8 karts
-    const geo = new THREE.BoxGeometry(2, 2, 3);
     for (let i = 0; i < 8; i++) {
       const isPlayer = i === 0;
       const skinIndex = isPlayer ? this.selectedSkin : (i % SKIN_LIST.length);
-      const color = new THREE.Color(SKIN_LIST[skinIndex].color);
-      const mat = new THREE.MeshBasicMaterial({ color: color });
-      const mesh = new THREE.Mesh(geo, mat);
-      
-      // Décalage sur la ligne de départ
       const xOff = (i%2 === 0 ? -1.5 : 1.5);
       const zOff = Math.floor(i/2) * 3;
       
-      mesh.position.set(startX + xOff, 1, startY + zOff);
-      this.scene.add(mesh);
-      
       this.karts.push({
         isPlayer,
-        mesh,
         x: startX + xOff,
         z: startY + zOff,
         angle: 0,
         speed: 0,
-        lap: 0,
-        progress: 0,
         skin: SKIN_LIST[skinIndex]
       });
     }
 
+    // Préparation du rendu ImageData pour le Mode 7
+    this.bufferCanvas = document.createElement('canvas');
+    this.bufferCanvas.width = this.renderW;
+    this.bufferCanvas.height = this.renderH;
+    this.bufferCtx = this.bufferCanvas.getContext('2d');
+    this.imgData = this.bufferCtx.createImageData(this.renderW, this.renderH);
+    this.pixels = new Uint32Array(this.imgData.data.buffer);
+
     this.state = 'play';
-    this.startTime = Date.now();
   }
 
   update(dt) {
     if (this.state !== 'play') return;
     const inputs = this.game.input.get();
     
-    // Update tous les karts
     for (let i = 0; i < this.karts.length; i++) {
       const k = this.karts[i];
       let acc = 0, steer = 0, drift = false;
       
       if (k.isPlayer) {
-        acc = inputs.jump ? 1 : 0; // A = accel
+        acc = inputs.jump ? 1 : 0;
         steer = (inputs.left ? 1 : 0) + (inputs.right ? -1 : 0);
-        drift = inputs.fire; // B = drift
+        drift = inputs.fire;
       } else {
-        // IA très basique du kart : avance et tourne vers le centre de la route
-        acc = 0.8 + Math.random()*0.2; // Toujours avancer
-        // Regarder un peu devant
+        acc = 0.8 + Math.random()*0.2;
         const lookX = k.x + Math.sin(k.angle) * 4;
         const lookZ = k.z + Math.cos(k.angle) * 4;
         const tx = Math.floor(lookX / TILE_SIZE);
@@ -233,63 +216,159 @@ export class MarioKartScene {
         const tile = (tx>=0 && tx<this.track.w && ty>=0 && ty<this.track.h) ? this.track.data[ty*this.track.w + tx] : 0;
         
         if (tile === 0) {
-          // Si on va vers l'herbe, on tourne fort (au hasard un peu)
           steer = Math.sin(Date.now()/500 + i) > 0 ? 1 : -1; 
         } else {
-          // Micro-ajustements aléatoires pour faire naturel
           steer = Math.sin(Date.now()/300 + i * 45) * 0.3;
         }
       }
       
-      // Physique
       if (acc > 0) k.speed += 20 * dt;
-      else k.speed -= 10 * dt; // Freinage naturel
+      else k.speed -= 10 * dt;
       
-      // Herbe ralentit
       const tx = Math.floor(k.x / TILE_SIZE);
       const ty = Math.floor(k.z / TILE_SIZE);
       const tile = (tx>=0 && tx<this.track.w && ty>=0 && ty<this.track.h) ? this.track.data[ty*this.track.w + tx] : 0;
-      if (tile === 0) k.speed *= 0.8; // Ralentissement massif sur l'herbe
+      if (tile === 0) k.speed *= 0.8;
       
-      k.speed = Math.max(0, Math.min(k.speed, drift ? 35 : 30)); // Vitesse max
+      k.speed = Math.max(0, Math.min(k.speed, drift ? 35 : 30));
       
-      const steerMod = drift ? 3.5 : 2.5; // Dérapage tourne plus vite
+      const steerMod = drift ? 3.5 : 2.5;
       k.angle += steer * steerMod * dt * (k.speed/30);
       
       k.x += Math.sin(k.angle) * k.speed * dt;
       k.z += Math.cos(k.angle) * k.speed * dt;
-      
-      k.mesh.position.x = k.x;
-      k.mesh.position.z = k.z;
-      k.mesh.rotation.y = k.angle;
-      
-      // Camera pour le joueur
-      if (k.isPlayer) {
-        this.camera.position.x = k.x - Math.sin(k.angle) * 10;
-        this.camera.position.z = k.z - Math.cos(k.angle) * 10;
-        this.camera.position.y = 5;
-        this.camera.lookAt(k.x, 1, k.z);
+    }
+  }
+
+  drawMode7() {
+    const W = this.renderW;
+    const H = this.renderH;
+    const player = this.karts[0];
+    
+    // Paramètres caméra Mode 7
+    const camX = player.x;
+    const camZ = player.z;
+    const camA = player.angle; // L'angle du joueur
+    
+    const fov = 1.0; 
+    const camHeight = 4.0; // Hauteur de la caméra au-dessus du sol
+    const horizon = Math.floor(H / 2); // Milieu de l'écran
+    
+    const skyCol = this.selectedTrack === 9 ? COL_SPACE : COL_SKY;
+
+    for (let y = 0; y < H; y++) {
+      if (y < horizon) {
+        // Ciel
+        this.pixels.fill(skyCol, y * W, (y + 1) * W);
+      } else {
+        // Sol (Mode 7 Raycasting horizontal)
+        const rowDist = camHeight / (y - horizon + 1) * (H/2);
+        
+        // Rayon gauche extrême
+        const rayDirX0 = Math.sin(camA) - Math.cos(camA) * fov;
+        const rayDirZ0 = Math.cos(camA) + Math.sin(camA) * fov;
+        // Rayon droit extrême
+        const rayDirX1 = Math.sin(camA) + Math.cos(camA) * fov;
+        const rayDirZ1 = Math.cos(camA) - Math.sin(camA) * fov;
+
+        const floorX0 = camX + rowDist * rayDirX0;
+        const floorZ0 = camZ + rowDist * rayDirZ0;
+        const floorX1 = camX + rowDist * rayDirX1;
+        const floorZ1 = camZ + rowDist * rayDirZ1;
+        
+        const floorStepX = (floorX1 - floorX0) / W;
+        const floorStepZ = (floorZ1 - floorZ0) / W;
+
+        let fx = floorX0;
+        let fz = floorZ0;
+
+        let offset = y * W;
+        for (let x = 0; x < W; x++) {
+          // Échantillonnage de la carte
+          // Mapping world coordinate to Texture coordinate (x * 64 / TILE_SIZE)
+          const tx = Math.floor((fx * 64) / TILE_SIZE);
+          const tz = Math.floor((fz * 64) / TILE_SIZE);
+          
+          let col = COL_GRASS;
+          if (tx >= 0 && tx < this.texW && tz >= 0 && tz < this.texH) {
+             col = this.texData[tz * this.texW + tx];
+          }
+          // Assombrissement progressif (brouillard) au loin
+          if (y < horizon + 10) {
+            // Effet d'ombre basique (bitshift pour réduire RGB)
+            col = (col & 0xFEFEFE) >> 1;
+          }
+
+          this.pixels[offset++] = col;
+          fx += floorStepX;
+          fz += floorStepZ;
+        }
       }
     }
   }
 
   draw(ctx) {
     if (this.state === 'menu') return;
-    this.renderer.render(this.scene, this.camera);
     
-    // Dessiner le canvas 3D sur le canvas principal 2D
-    ctx.drawImage(this.mkCanvas, 0, 0, VIEW_W, VIEW_H);
+    // Remplir ImageData (Sol Mode 7)
+    this.drawMode7();
+    this.bufferCtx.putImageData(this.imgData, 0, 0);
     
-    // HUD par-dessus le canvas 3D
+    // Agrandir au format de l'écran (pixels bruts sans lissage)
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.bufferCanvas, 0, 0, VIEW_W, VIEW_H);
+
+    // Dessin des Sprites par-dessus
+    const player = this.karts[0];
+    const camA = player.angle;
+    
+    // Trier les karts par distance
+    const sorted = [...this.karts].sort((a,b) => {
+      const d1 = Math.pow(a.x-player.x,2) + Math.pow(a.z-player.z,2);
+      const d2 = Math.pow(b.x-player.x,2) + Math.pow(b.z-player.z,2);
+      return d2 - d1; // Plus loin d'abord
+    });
+
+    for (const k of sorted) {
+      if (k.isPlayer) {
+        // Le joueur est toujours affiché en bas au centre
+        ctx.fillStyle = k.skin.color;
+        ctx.fillRect(VIEW_W/2 - 20, VIEW_H - 40, 40, 40);
+        // Pare-brise / Détail
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(VIEW_W/2 - 10, VIEW_H - 35, 20, 10);
+      } else {
+        // Projection simple
+        const dx = k.x - player.x;
+        const dz = k.z - player.z;
+        
+        // Rotation pour faire face à la caméra
+        const rx = dx * Math.cos(-camA) - dz * Math.sin(-camA);
+        const rz = dx * Math.sin(-camA) + dz * Math.cos(-camA);
+        
+        if (rz > 1) { // Devant la caméra
+          const scale = 200 / rz;
+          const sx = (VIEW_W / 2) + (rx * scale);
+          const sy = (VIEW_H / 2) + (4 * scale); // 4 = camHeight approximatif
+          
+          const sW = 3 * scale;
+          const sH = 3 * scale;
+          
+          if (sx > -sW && sx < VIEW_W+sW && sy > -sH && sy < VIEW_H+sH) {
+            ctx.fillStyle = k.skin.color;
+            ctx.fillRect(sx - sW/2, sy - sH, sW, sH);
+          }
+        }
+      }
+    }
+    
+    // HUD
     ctx.fillStyle = '#fff';
     ctx.font = '20px sans-serif';
-    ctx.fillText('🏎️ MARIO KART MODE', 10, 30);
-    ctx.fillText('Position : ? / 8', 10, 60);
-    const speed = Math.round(this.karts[0]?.speed * 5 || 0);
+    ctx.fillText('🏎️ PIXEL KART 2D', 10, 30);
+    const speed = Math.round(player.speed * 5);
     ctx.fillText(speed + ' km/h', VIEW_W - 100, VIEW_H - 20);
   }
 
-  dispose() {
-    this.renderer?.dispose();
-  }
+  dispose() {}
 }
