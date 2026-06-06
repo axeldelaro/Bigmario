@@ -381,11 +381,11 @@ export class MarioKartScene {
         const rowDist = camHeight / (y - horizon + 1) * (H/2);
         
         // Rayon gauche de l'écran
-        const rayX0 = Math.sin(camA) - Math.cos(camA) * fov;
-        const rayZ0 = Math.cos(camA) + Math.sin(camA) * fov;
+        const rayX0 = Math.sin(camA) + Math.cos(camA) * fov;
+        const rayZ0 = Math.cos(camA) - Math.sin(camA) * fov;
         // Rayon droit de l'écran
-        const rayX1 = Math.sin(camA) + Math.cos(camA) * fov;
-        const rayZ1 = Math.cos(camA) - Math.sin(camA) * fov;
+        const rayX1 = Math.sin(camA) - Math.cos(camA) * fov;
+        const rayZ1 = Math.cos(camA) + Math.sin(camA) * fov;
 
         const floorX0 = camX + rowDist * rayX0;
         const floorZ0 = camZ + rowDist * rayZ0;
@@ -545,9 +545,9 @@ export class MarioKartScene {
         const dx = k.x - camX;
         const dz = k.z - camZ;
         
-        // Rotation par rapport à la caméra
-        const rx = dx * Math.cos(-camA) - dz * Math.sin(-camA);
-        const rz = dx * Math.sin(-camA) + dz * Math.cos(-camA);
+        // Rotation mathématique correcte par rapport à la caméra
+        const rx = -dx * Math.cos(camA) + dz * Math.sin(camA);
+        const rz = dz * Math.cos(camA) + dx * Math.sin(camA);
         
         if (rz > 0.5) { // Devant la caméra uniquement
           const focalLength = 160; 
