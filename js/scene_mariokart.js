@@ -299,18 +299,17 @@ export class MarioKartScene {
         steer = (I.isDown('left', 0) ? 1 : 0) + (I.isDown('right', 0) ? -1 : 0);
         drift = I.isDown('fire', 0);
       } else {
-        // IA : Intelligence par 5 senseurs (Gradient Descent de la piste)
+        // IA ULTIME : Personnalités, Aspiration, Evitement, Rubberbanding, Drifting et Recovery
         acc = 0.9;
         
-        // Personnalités uniques
-        k.maxAiSpeed = k.maxAiSpeed || (29 + ((k.id * 17) % 6)); // Top speed (29-34)
-        k.handling = k.handling || (1.0 + ((k.id * 13) % 5) * 0.1); // Maniabilité (1.0 - 1.4)
-        k.laneOffset = k.laneOffset || (((k.id * 37) % 11) / 10 - 0.5); // Trajectoire préférée (-0.5 à +0.5)
-
-        const lookDist = 16;
+        // 1. Personnalités de base
+        const baseSpeed = 29 + ((k.id * 17) % 6); // 29 à 34
+        k.handling = k.handling || (1.0 + ((k.id * 13) % 5) * 0.1); 
+        k.laneOffset = k.laneOffset || (((k.id * 37) % 11) / 10 - 0.5); 
         
-        // Senseurs (L2 = Extrême Gauche, L1 = Gauche, C = Centre, R1 = Droite, R2 = Extrême Droite)
-        // Attention: +angle = Gauche, -angle = Droite
+        const lookDist = 16 + (k.speed * 0.2); // Le regard s'allonge avec la vitesse
+        
+        // 2. Senseurs de route (Gradient Descent)
         const L2_X = k.x + Math.cos(k.angle + 0.8) * lookDist;
         const L2_Z = k.z + Math.sin(k.angle + 0.8) * lookDist;
         const L1_X = k.x + Math.cos(k.angle + 0.4) * lookDist;
@@ -322,20 +321,83 @@ export class MarioKartScene {
         const R2_X = k.x + Math.cos(k.angle - 0.8) * lookDist;
         const R2_Z = k.z + Math.sin(k.angle - 0.8) * lookDist;
 
-        // Attirance vers la route (Road Pull)
         let roadPull = 0;
         if (this.getTile(L2_X, L2_Z) > 0) roadPull += 1.0;
         if (this.getTile(L1_X, L1_Z) > 0) roadPull += 0.5;
         if (this.getTile(R1_X, R1_Z) > 0) roadPull -= 0.5;
         if (this.getTile(R2_X, R2_Z) > 0) roadPull -= 1.0;
 
-        // Pilotage intelligent
         steer = (roadPull + k.laneOffset) * k.handling;
 
-        // Freinage d'urgence / Redressement si le centre fonce dans le mur
-        if (this.getTile(C_X, C_Z) === 0) {
-           steer = (roadPull >= 0 ? 2.5 : -2.5) * k.handling;
+        // 3. Interactions Sociales Humaines (Jouer avec des "amis")
+        let avoidSteer = 0;
+        let draftBoost = 0;
+        
+        for (let j = 0; j < this.karts.length; j++) {
+           if (i === j) continue;
+           const other = this.karts[j];
+           const dx = other.x - k.x;
+           const dz = other.z - k.z;
+           const distSq = dx*dx + dz*dz;
+           
+           if (distSq < 10000) { // Moins de 100 unités
+              const angleToOther = Math.atan2(dz, dx);
+              let diff = (angleToOther - k.angle) % (Math.PI*2);
+              if (diff > Math.PI) diff -= Math.PI*2;
+              if (diff < -Math.PI) diff += Math.PI*2;
+              
+              // Evitement d'Urgence (Si on risque de rentrer dans quelqu'un)
+              if (distSq < 150 && Math.abs(diff) < Math.PI/2) {
+                 avoidSteer += (diff > 0 ? -1.5 : 1.5) * (150 - distSq)/150;
+              }
+              
+              // Aspiration (Drafting - Couloir de vitesse)
+              if (distSq > 150 && distSq < 900 && Math.abs(diff) < 0.2) {
+                 draftBoost += 3.0; // Vroum !
+                 avoidSteer += diff * 0.8; // On s'aligne derrière lui
+              }
+           }
+        }
+        
+        // 4. Rubberbanding (Garder la partie compétitive)
+        const player = this.karts[0];
+        const pdx = player.x - k.x;
+        const pdz = player.z - k.z;
+        const distToPlayerSq = pdx*pdx + pdz*pdz;
+        let rubberBand = 0;
+        
+        // Le joueur va vers où ?
+        const pVelX = Math.cos(player.angle);
+        const pVelZ = Math.sin(player.angle);
+        const dot = pdx * pVelX + pdz * pVelZ; 
+        
+        if (dot > 0 && distToPlayerSq > 40000) {
+           rubberBand = 4.5; // L'IA est loin derrière, elle s'énerve !
+        } else if (dot < 0 && distToPlayerSq > 60000) {
+           rubberBand = -3.0; // L'IA est trop loin devant, elle fait des erreurs
+        }
+        
+        // 5. Synthèse du Volant et Drifting
+        steer += avoidSteer;
+        drift = (Math.abs(steer) > 1.5 && k.speed > 25); // Dérapage contrôlé
+        
+        k.maxAiSpeed = baseSpeed + draftBoost + rubberBand;
+
+        // 6. Urgence et Recovery (Si bloqué)
+        const C_tile = this.getTile(C_X, C_Z);
+        if (C_tile === 0) {
+           steer = (roadPull >= 0 ? 3.0 : -3.0) * k.handling;
            acc = 0.5;
+        }
+        
+        if (k.speed < 5 && C_tile === 0 && this.getTile(k.x, k.z) === 0) {
+           k.stuckTime = (k.stuckTime || 0) + dt;
+           if (k.stuckTime > 1.0) {
+              acc = -1.0; // Marche arrière toute !
+              steer = -steer; // Braquage inversé pour se dégager
+           }
+        } else {
+           k.stuckTime = 0;
         }
       }
       
@@ -349,17 +411,47 @@ export class MarioKartScene {
       const tile = (tx>=0 && tx<this.track.w && tz>=0 && tz<this.track.h) ? this.track.data[tz*this.track.w + tx] : 0;
       if (tile === 0) k.speed *= 0.85; // Fort ralentissement sur l'herbe
       
-      // Limite de vitesse
+      // Limite de vitesse (Permettre la marche arrière)
       const limit = k.isPlayer ? (drift ? 38 : 32) : k.maxAiSpeed;
-      k.speed = Math.max(0, Math.min(k.speed, limit));
+      k.speed = Math.max(-15, Math.min(k.speed, limit));
       
-      // Rotation (permettre de tourner même à très basse vitesse)
+      // Rotation
       const steerMod = drift ? 3.5 : 2.0;
-      k.angle += steer * steerMod * dt * Math.max(0.3, k.speed/32);
+      k.angle += steer * steerMod * dt * Math.max(0.3, Math.abs(k.speed)/32);
       
       // Déplacement (Vecteur avant)
-      k.x += Math.sin(k.angle) * k.speed * dt;
-      k.z += Math.cos(k.angle) * k.speed * dt;
+      k.x += Math.cos(k.angle) * k.speed * dt;
+      k.z += Math.sin(k.angle) * k.speed * dt;
+    }
+    
+    // 7. Collisions Physiques entre les Karts (Auto-tamponneuses)
+    for (let i = 0; i < this.karts.length; i++) {
+       for (let j = i + 1; j < this.karts.length; j++) {
+          const k1 = this.karts[i];
+          const k2 = this.karts[j];
+          const dx = k2.x - k1.x;
+          const dz = k2.z - k1.z;
+          const distSq = dx*dx + dz*dz;
+          const radius = 6.0; 
+          const minDist = radius * 2;
+          
+          if (distSq > 0 && distSq < minDist*minDist) {
+             const dist = Math.sqrt(distSq);
+             const push = (minDist - dist) / 2;
+             const nx = dx / dist;
+             const nz = dz / dist;
+             
+             // Repulsion physique
+             k1.x -= nx * push;
+             k1.z -= nz * push;
+             k2.x += nx * push;
+             k2.z += nz * push;
+             
+             // Perte de vitesse (frottement)
+             k1.speed *= 0.98;
+             k2.speed *= 0.98;
+          }
+       }
     }
   }
 
