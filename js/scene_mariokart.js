@@ -214,16 +214,16 @@ export class MarioKartScene {
 
   update(dt) {
     if (this.state !== 'play') return;
-    const inputs = this.game.input.get();
+    const I = this.game.input;
     
     for (let i = 0; i < this.karts.length; i++) {
       const k = this.karts[i];
       let acc = 0, steer = 0, drift = false;
       
       if (k.isPlayer) {
-        acc = inputs.jump ? 1 : 0;
-        steer = (inputs.left ? 1 : 0) + (inputs.right ? -1 : 0);
-        drift = inputs.fire;
+        acc = I.isDown('jump', 0) ? 1 : 0;
+        steer = (I.isDown('left', 0) ? 1 : 0) + (I.isDown('right', 0) ? -1 : 0);
+        drift = I.isDown('fire', 0);
       } else {
         acc = 0.8 + Math.random()*0.2;
         const lookX = k.x + Math.sin(k.angle) * 4;
@@ -394,7 +394,8 @@ export class MarioKartScene {
     for (const k of sorted) {
       if (k.isPlayer) {
         // Le joueur est fixe, en bas
-        const steer = this.game.input.get().left ? -1 : (this.game.input.get().right ? 1 : 0);
+        const I = this.game.input;
+        const steer = I.isDown('left', 0) ? -1 : (I.isDown('right', 0) ? 1 : 0);
         this.drawKartSprite(this.bufferCtx, this.renderW / 2, this.renderH - 10, 48, k.skin.color, true, steer);
       } else {
         const dx = k.x - player.x;
