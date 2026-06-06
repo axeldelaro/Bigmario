@@ -264,10 +264,13 @@ export class MarioKartScene {
 
     // 4. Préparer le Framebuffer (Rendu logiciel)
     this.bufferCanvas = document.createElement('canvas');
-    this.bufferCanvas.width = this.renderW;
-    this.bufferCanvas.height = this.renderH;
+    this.bufferCanvas.width = this.renderW = 384; 
+    this.bufferCanvas.height = this.renderH = 216;
     this.bufferCtx = this.bufferCanvas.getContext('2d');
-    this.imgData = this.bufferCtx.createImageData(this.renderW, this.renderH);
+    this.horizon = 108;
+    
+    // On ne crée l'ImageData que pour la moitié basse de l'écran (le sol) pour optimiser et permettre le ciel en Canvas
+    this.imgData = this.bufferCtx.createImageData(this.renderW, this.renderH - this.horizon);
     this.pixels = new Uint32Array(this.imgData.data.buffer);
 
     this.state = 'play';
@@ -296,34 +299,43 @@ export class MarioKartScene {
         steer = (I.isDown('left', 0) ? 1 : 0) + (I.isDown('right', 0) ? -1 : 0);
         drift = I.isDown('fire', 0);
       } else {
-        // IA : Intelligence par antennes (feelers)
-        acc = 0.85;
-        const lookDist = 14;
+        // IA : Intelligence par 5 senseurs (Gradient Descent de la piste)
+        acc = 0.9;
         
-        // Dispersion du peloton (lane et vitesse uniques par IA)
-        const laneOffset = ((k.id * 37) % 11) / 10 - 0.5; // -0.5 à +0.5
-        k.maxAiSpeed = k.maxAiSpeed || (29 + ((k.id * 17) % 6)); // 29 à 34
+        // Personnalités uniques
+        k.maxAiSpeed = k.maxAiSpeed || (29 + ((k.id * 17) % 6)); // Top speed (29-34)
+        k.handling = k.handling || (1.0 + ((k.id * 13) % 5) * 0.1); // Maniabilité (1.0 - 1.4)
+        k.laneOffset = k.laneOffset || (((k.id * 37) % 11) / 10 - 0.5); // Trajectoire préférée (-0.5 à +0.5)
+
+        const lookDist = 16;
         
-        const L_X = k.x + Math.sin(k.angle - 0.6) * lookDist;
-        const L_Z = k.z + Math.cos(k.angle - 0.6) * lookDist;
-        const R_X = k.x + Math.sin(k.angle + 0.6) * lookDist;
-        const R_Z = k.z + Math.cos(k.angle + 0.6) * lookDist;
-        const F_X = k.x + Math.sin(k.angle) * lookDist;
-        const F_Z = k.z + Math.cos(k.angle) * lookDist;
-        
-        const tileL = this.getTile(L_X, L_Z);
-        const tileR = this.getTile(R_X, R_Z);
-        const tileF = this.getTile(F_X, F_Z);
-        
-        if (tileF === 0) { // Mur d'herbe en face
-          if (tileL > 0) steer = 1.5; // Tourne gauche toute !
-          else if (tileR > 0) steer = -1.5; // Tourne droite toute !
-          else steer = -1.8; // Demi-tour d'urgence
-        } else {
-          // Sur la route, on évite les bords
-          if (tileL === 0 && tileR > 0) steer = -1.0; // Herbe à gauche -> droite
-          else if (tileR === 0 && tileL > 0) steer = 1.0; // Herbe à droite -> gauche
-          else steer = Math.sin(Date.now()/250 + i * 45) * 0.15 + laneOffset; // Wobble naturel
+        // Senseurs (L2 = Extrême Gauche, L1 = Gauche, C = Centre, R1 = Droite, R2 = Extrême Droite)
+        // Attention: +angle = Gauche, -angle = Droite
+        const L2_X = k.x + Math.cos(k.angle + 0.8) * lookDist;
+        const L2_Z = k.z + Math.sin(k.angle + 0.8) * lookDist;
+        const L1_X = k.x + Math.cos(k.angle + 0.4) * lookDist;
+        const L1_Z = k.z + Math.sin(k.angle + 0.4) * lookDist;
+        const C_X  = k.x + Math.cos(k.angle) * lookDist;
+        const C_Z  = k.z + Math.sin(k.angle) * lookDist;
+        const R1_X = k.x + Math.cos(k.angle - 0.4) * lookDist;
+        const R1_Z = k.z + Math.sin(k.angle - 0.4) * lookDist;
+        const R2_X = k.x + Math.cos(k.angle - 0.8) * lookDist;
+        const R2_Z = k.z + Math.sin(k.angle - 0.8) * lookDist;
+
+        // Attirance vers la route (Road Pull)
+        let roadPull = 0;
+        if (this.getTile(L2_X, L2_Z) > 0) roadPull += 1.0;
+        if (this.getTile(L1_X, L1_Z) > 0) roadPull += 0.5;
+        if (this.getTile(R1_X, R1_Z) > 0) roadPull -= 0.5;
+        if (this.getTile(R2_X, R2_Z) > 0) roadPull -= 1.0;
+
+        // Pilotage intelligent
+        steer = (roadPull + k.laneOffset) * k.handling;
+
+        // Freinage d'urgence / Redressement si le centre fonce dans le mur
+        if (this.getTile(C_X, C_Z) === 0) {
+           steer = (roadPull >= 0 ? 2.5 : -2.5) * k.handling;
+           acc = 0.5;
         }
       }
       
@@ -361,30 +373,33 @@ export class MarioKartScene {
   }
 
   drawMode7() {
-    const W = this.renderW;
-    const H = this.renderH;
     const player = this.karts[0];
-    
     const camX = player.x;
     const camZ = player.z;
-    const camA = player.angle; 
-    
+    const camA = player.angle;
+    const camHeight = 6.0;
     const fov = 1.0; 
-    const camHeight = 6.0; 
-    const horizon = Math.floor(H * 0.45); 
     
-    let offset = 0;
-    const isSpace = this.selectedTrack === 9;
+    const W = this.renderW;
+    const H = this.renderH;
+    const hHalf = H - this.horizon;
+    
+    const trackW = this.track.w;
+    const trackH = this.track.h;
+    const data = this.track.data;
+    const T = TILE_SIZE;
 
-    for (let y = 0; y < H; y++) {
-      if (y < horizon) {
-        // Ciel
-        const skyCol = isSpace ? 0xFF221111 : this.getSkyColor(y, horizon);
-        this.pixels.fill(skyCol, offset, offset + W);
-        offset += W;
-      } else {
-        // Pseudo-3D (Mode 7) - Projection du sol
-        const rowDist = camHeight / (y - horizon + 1) * (H/2);
+    // Cache des couleurs ABGR
+    const COL_GRASS1 = 0xFF28AA28, COL_GRASS2 = 0xFF229222;
+    const COL_ASPHALT = 0xFF555555, COL_START = 0xFFEEEEEE;
+    const COL_CURB_R = 0xFF0000FF, COL_CURB_W = 0xFFFFFFFF; // Vibreurs Rouge et Blanc
+
+    let offset = 0;
+    
+    // On ne boucle que sur la moitié basse
+    for (let y = 0; y < hHalf; y++) {
+        // Distance de la ligne actuelle
+        const rowDist = camHeight / (y + 1) * (H/2);
         
         // Rayon gauche de l'écran
         const rayX0 = Math.sin(camA) + Math.cos(camA) * fov;
@@ -397,40 +412,62 @@ export class MarioKartScene {
         const floorZ0 = camZ + rowDist * rayZ0;
         const floorX1 = camX + rowDist * rayX1;
         const floorZ1 = camZ + rowDist * rayZ1;
-        
+
         const stepX = (floorX1 - floorX0) / W;
         const stepZ = (floorZ1 - floorZ0) / W;
 
-        let fx = floorX0;
-        let fz = floorZ0;
+        let floorX = floorX0;
+        let floorZ = floorZ0;
 
         for (let x = 0; x < W; x++) {
-          const tx = Math.floor((fx * 64) / TILE_SIZE);
-          const tz = Math.floor((fz * 64) / TILE_SIZE);
+          const tx = Math.floor(floorX / T);
+          const tz = Math.floor(floorZ / T);
+          const tile = (tx>=0 && tx<trackW && tz>=0 && tz<trackH) ? data[tz*trackW + tx] : 0;
           
-          let col;
-          if (tx >= 0 && tx < this.texW && tz >= 0 && tz < this.texH) {
-             col = this.texData[tz * this.texW + tx];
+          let col = 0xFF000000;
+          
+          if (tile > 0) {
+             // Graphismes de la route (Asphalte + Vibreurs)
+             const lx = floorX - tx*T;
+             const lz = floorZ - tz*T;
+             const bw = 1.5; // Épaisseur du vibreur
+             
+             // Détecter si on est sur un bord adjacent à l'herbe
+             let isBorder = false;
+             if (lx < bw && (tx-1 < 0 || data[tz*trackW + tx-1] === 0)) isBorder = true;
+             else if (lx > T-bw && (tx+1 >= trackW || data[tz*trackW + tx+1] === 0)) isBorder = true;
+             else if (lz < bw && (tz-1 < 0 || data[(tz-1)*trackW + tx] === 0)) isBorder = true;
+             else if (lz > T-bw && (tz+1 >= trackH || data[(tz+1)*trackW + tx] === 0)) isBorder = true;
+             
+             if (isBorder) {
+                 const checker = Math.floor((floorX + floorZ) / 3) % 2;
+                 col = checker === 0 ? COL_CURB_R : COL_CURB_W;
+             } else if (tile === 2) {
+                 const checker = Math.floor(floorX / 2) % 2;
+                 col = checker === 0 ? COL_START : COL_ASPHALT;
+             } else {
+                 col = COL_ASPHALT;
+             }
           } else {
-             // Hors de la grille = Damier infini (Herbe ou Espace)
-             if (isSpace) col = 0xFF000000;
-             else col = ((tx >> 5) + (tz >> 5)) % 2 === 0 ? C_GRASS1 : C_GRASS2;
+             // Graphismes de l'herbe (Damier)
+             const checker = (Math.floor(floorX/T) % 2) === (Math.floor(floorZ/T) % 2);
+             col = checker ? COL_GRASS1 : COL_GRASS2;
           }
           
-          // Ombres d'horizon (Fog)
-          if (y < horizon + 15 && !isSpace) {
-             const fade = (y - horizon) / 15;
-             const r = ((col & 0xFF) * fade) | 0;
-             const g = (((col >> 8) & 0xFF) * fade) | 0;
-             const b = (((col >> 16) & 0xFF) * fade) | 0;
-             col = 0xFF000000 | (b << 16) | (g << 8) | r;
+          // Ombrage au loin
+          if (y < 20) {
+              const fade = Math.max(0.3, y / 20);
+              const r = ((col & 0xFF) * fade) & 0xFF;
+              const g = (((col >> 8) & 0xFF) * fade) & 0xFF;
+              const b = (((col >> 16) & 0xFF) * fade) & 0xFF;
+              col = 0xFF000000 | (b << 16) | (g << 8) | r;
           }
 
           this.pixels[offset++] = col;
-          fx += stepX;
-          fz += stepZ;
+          
+          floorX += stepX;
+          floorZ += stepZ;
         }
-      }
     }
   }
 
@@ -522,16 +559,24 @@ export class MarioKartScene {
   draw(ctx) {
     if (this.state === 'menu') return;
     
-    // 1. Dessiner le sol projeté dans le ImageData
-    this.drawMode7();
-    this.bufferCtx.putImageData(this.imgData, 0, 0);
+    const horizon = this.horizon;
+
+    // 1. Ciel avec dégradé et lueur
+    const grad = this.bufferCtx.createLinearGradient(0, 0, 0, horizon);
+    grad.addColorStop(0, '#369bff'); // Bleu intense en haut
+    grad.addColorStop(1, '#a6d9ff'); // Bleu clair vers l'horizon
+    this.bufferCtx.fillStyle = grad;
+    this.bufferCtx.fillRect(0, 0, this.renderW, horizon);
     
-    // 2. Dessin des IAs et du Joueur par-dessus
+    // 2. Dessiner le sol projeté dans le ImageData (moitié basse)
+    this.drawMode7();
+    this.bufferCtx.putImageData(this.imgData, 0, horizon);
+    
+    // 3. Dessin des IAs et du Joueur par-dessus
     const player = this.karts[0];
     const camA = player.angle;
     const camX = player.x;
     const camZ = player.z;
-    const horizon = this.renderH * 0.45;
     
     // Tri des entités : du plus loin au plus proche (Z-Sort)
     const sorted = [...this.karts].sort((a,b) => {
