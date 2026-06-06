@@ -383,6 +383,7 @@ export class GameScene {
       // On rebondit TOUJOURS sur un coup porté par le dessus, même si le boss
       // est invulnérable — sinon le joueur retombe dedans et se fait toucher.
       b.hitTop(this);
+      p.y = b.y - p.h; // Evite de rester coincé dans la hitbox au frame suivant
       p.vy = (this.curInput && this.curInput.jump ? -340 : -260);
       if (p.pounding) { p.pounding = false; p.vy = -300; } // rebond plus haut après slam
       this.freeze = 0.08;
