@@ -733,7 +733,11 @@ export class MarioKartScene {
 
   // ── Rendu principal ──
   draw(ctx) {
-    if (this.state === 'menu') return;
+    if (this.state !== 'play') {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+      return;
+    }
 
     const horizon = this.horizon;
     const bc = this.bufferCtx;
@@ -860,6 +864,7 @@ export class MarioKartScene {
   }
 
   dispose() {
+    this.state = 'menu';
     if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
   }
 }
