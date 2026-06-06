@@ -290,6 +290,239 @@ function L53() { // 5-3 Cœur du Cristal — combat de boss (modèle 3-3/4-3)
   return { name: '5-3 Cœur du Cristal', theme: 'castle', time: 240, map: rows(g) };
 }
 
+// =================== MONDE 6 — JUNGLE TROPICALE ===================
+function L61() { // 6-1 Canopée — plateformes hautes, lianes (plat mobiles vert), plantes de tuyau
+  const W = 120, g = grid(W); floorX(g, [[32, 34], [56, 58], [82, 84], [104, 106]]);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  // canopée basse — plateformes traversables
+  plat(g, 6, 8, 5); coins(g, 5, 9, 3); put(g, 5, 14, 'W');
+  // lianes (plateformes mobiles verticales)
+  put(g, 4, 18, 'n'); put(g, 4, 22, 'n');
+  mesa(g, 24, 30, 8); put(g, 7, 27, 'g');
+  // tuyaux avec plantes
+  pipe(g, 38, 8); put(g, 7, 38, 'v'); pipe(g, 46, 7); put(g, 6, 46, 'v');
+  // canopée haute — parcours bonus
+  plat(g, 4, 40, 5); put(g, 3, 42, 'j'); plat(g, 3, 48, 4); put(g, 2, 50, 'j');
+  put(g, 8, 52, 'C');
+  // lianes intermédiaires au-dessus du trou
+  put(g, 5, 54, 'n'); put(g, 5, 60, 'n');
+  plat(g, 6, 62, 5); put(g, 5, 64, 'M');
+  mesa(g, 68, 76, 8); put(g, 7, 72, 'k'); coins(g, 6, 70, 3);
+  // section lianes denses
+  put(g, 4, 78, 'n'); put(g, 4, 86, 'n'); put(g, 4, 90, 'n');
+  plat(g, 6, 86, 5); put(g, 5, 88, 'j');
+  pipe(g, 94, 8); put(g, 7, 94, 'v');
+  mesa(g, 108, 114, 8); put(g, 7, 111, 'g');
+  put(g, 6, 110, '?'); put(g, 6, 112, '?');
+  // ennemis au sol
+  put(g, 9, 16, 'g'); put(g, 9, 44, 'g'); put(g, 9, 66, 'k'); put(g, 9, 80, 'g'); put(g, 9, 100, 'g'); put(g, 9, 116, 'k');
+  return { name: '6-1 Canopée', theme: 'overworld', time: 360, map: rows(g) };
+}
+function L62() { // 6-2 Grottes humides — cascades (semi-solides), volants
+  const W = 110, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  // plafonds bas simulant grottes
+  box(g, 14, 20, 1, 4, 'H'); box(g, 42, 48, 1, 4, 'H'); box(g, 70, 76, 1, 4, 'H');
+  // cascades (plateformes semi-solides en colonne)
+  plat(g, 3, 24, 3); plat(g, 5, 24, 3); plat(g, 7, 24, 3);
+  plat(g, 3, 52, 3); plat(g, 5, 52, 3); plat(g, 7, 52, 3);
+  plat(g, 3, 80, 3); plat(g, 5, 80, 3); plat(g, 7, 80, 3);
+  // route haute bonus
+  plat(g, 4, 30, 6); put(g, 3, 32, 'j'); plat(g, 4, 58, 6); put(g, 3, 60, 'W');
+  plat(g, 4, 86, 5); put(g, 3, 88, 'j');
+  // route basse
+  plat(g, 7, 10, 4); plat(g, 7, 34, 5); plat(g, 7, 62, 5); plat(g, 7, 90, 4);
+  put(g, 5, 11, 'o o'); put(g, 5, 63, 'o o');
+  pipe(g, 28, 8); pipe(g, 66, 8);
+  put(g, 6, 38, 'BMB'); put(g, 6, 96, 'B?B');
+  put(g, 8, 50, 'C');
+  // volants (f) — ennemis principaux
+  put(g, 5, 18, 'f'); put(g, 5, 40, 'f'); put(g, 5, 56, 'f'); put(g, 5, 78, 'f'); put(g, 5, 100, 'f');
+  // ennemis au sol
+  put(g, 9, 16, 'g'); put(g, 9, 36, 'k'); put(g, 9, 60, 'g'); put(g, 9, 84, 'k'); put(g, 9, 104, 'g');
+  return { name: '6-2 Grottes humides', theme: 'underground', time: 360, map: rows(g) };
+}
+function L63() { // 6-3 Roi de la Jungle — boss avec 2 niveaux de plateformes + ressort
+  const W = 56, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S');
+  // Niveau bas (row 7) — large plateforme d'esquive
+  plat(g, 7, 8, 6); plat(g, 7, 40, 6);
+  // Niveau haut (row 5) — plateformes latérales
+  plat(g, 5, 6, 5); plat(g, 5, 44, 5);
+  // Marches d'accès gauche
+  plat(g, 8, 4, 3); plat(g, 6, 5, 2);
+  // Marches d'accès droite
+  plat(g, 8, 48, 3); plat(g, 6, 48, 2);
+  // Plateforme centrale haute
+  plat(g, 4, 22, 10);
+  // Ressort central
+  put(g, 9, 27, 'T');
+  // Power-ups
+  put(g, 3, 10, 'M'); put(g, 3, 44, 'W');
+  put(g, 3, 26, 'j'); put(g, 3, 28, 'j');
+  coins(g, 8, 16, 3); coins(g, 8, 34, 3);
+  put(g, 9, 28, 'O');
+  return { name: '6-3 Roi de la Jungle', theme: 'castle', time: 230, map: rows(g) };
+}
+
+// =================== MONDE 7 — PICS GLACÉS ===================
+function L71() { // 7-1 Ascension glacée — montagne, escaliers, mesas, pics, ressorts
+  const W = 124, g = grid(W); floorX(g, [[36, 38], [62, 64], [92, 94], [112, 114]]);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  // pics fréquents au sol
+  put(g, 9, 12, '^^'); put(g, 9, 28, '^^'); put(g, 9, 50, '^^'); put(g, 9, 76, '^^'); put(g, 9, 100, '^^');
+  // plateformes pour franchir les pics
+  plat(g, 7, 10, 4); plat(g, 7, 26, 4); plat(g, 7, 48, 4);
+  // escaliers et mesas progressifs
+  stairs(g, 8, 9, 3, 1); mesa(g, 11, 18, 7); put(g, 6, 14, 'g'); coins(g, 5, 12, 3);
+  mesa(g, 20, 26, 8); put(g, 7, 23, 'k');
+  put(g, 5, 32, 'M');
+  // ressort vers gemme
+  put(g, 9, 42, 'T'); put(g, 2, 42, 'j');
+  stairs(g, 44, 9, 2, 1); mesa(g, 46, 54, 8); put(g, 7, 50, 'g'); coins(g, 6, 48, 3);
+  put(g, 8, 58, 'C');
+  // grande montagne
+  stairs(g, 66, 9, 3, 1); mesa(g, 69, 78, 7); put(g, 6, 73, 'k'); put(g, 5, 71, 'W');
+  plat(g, 4, 74, 5); put(g, 3, 76, 'j');
+  plat(g, 7, 74, 4);
+  // ressort vers gemme haute
+  put(g, 9, 84, 'T'); put(g, 2, 84, 'j');
+  mesa(g, 96, 104, 8); put(g, 7, 100, 'g');
+  put(g, 6, 106, '?'); put(g, 6, 108, 'L');
+  // ennemis
+  put(g, 9, 30, 'g'); put(g, 9, 56, 'k'); put(g, 9, 80, 'g'); put(g, 9, 88, 'z'); put(g, 9, 110, 'g'); put(g, 9, 118, 'k');
+  return { name: '7-1 Ascension glacée', theme: 'overworld', time: 360, map: rows(g) };
+}
+function L72() { // 7-2 Château glacé — colonnes, pics, 2 routes, plantes et lanceurs
+  const W = 116, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  // colonnes suspendues
+  box(g, 18, 19, 1, 5, 'H'); box(g, 42, 43, 1, 5, 'H'); box(g, 68, 69, 1, 5, 'H'); box(g, 92, 93, 1, 4, 'H');
+  // pics au sol (danger route basse)
+  put(g, 9, 24, '^^^'); put(g, 9, 50, '^^^'); put(g, 9, 76, '^^^');
+  // passerelles pour franchir les pics
+  plat(g, 7, 22, 5); plat(g, 7, 48, 6); plat(g, 6, 74, 6);
+  // route haute bonus
+  plat(g, 4, 28, 6); put(g, 3, 30, 'j'); put(g, 3, 32, 'W');
+  plat(g, 4, 56, 6); coins(g, 3, 57, 3);
+  plat(g, 4, 82, 6); put(g, 3, 84, 'j');
+  // tuyaux avec plantes
+  pipe(g, 36, 8); put(g, 7, 36, 'v'); pipe(g, 62, 8); put(g, 7, 62, 'v');
+  put(g, 6, 46, 'B?B'); put(g, 6, 88, 'BMB');
+  put(g, 8, 54, 'C');
+  // lanceurs
+  put(g, 9, 32, 't'); put(g, 9, 70, 't');
+  // ennemis
+  put(g, 9, 14, 'k'); put(g, 9, 40, 'g'); put(g, 9, 58, 'z'); put(g, 9, 80, 'k'); put(g, 9, 96, 'g'); put(g, 9, 108, 'k');
+  put(g, 6, 49, 'g'); put(g, 6, 75, 'k');
+  return { name: '7-2 Château glacé', theme: 'castle', time: 360, map: rows(g) };
+}
+function L73() { // 7-3 Titan des Glaces — grande arène avec 3 niveaux de plateformes
+  const W = 58, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S');
+  // Niveau 1 (row 7) — plateformes basses
+  plat(g, 7, 6, 5); plat(g, 7, 24, 8); plat(g, 7, 46, 5);
+  // Niveau 2 (row 5) — plateformes intermédiaires
+  plat(g, 5, 10, 5); plat(g, 5, 42, 5);
+  // Niveau 3 (row 3) — plateformes hautes
+  plat(g, 3, 18, 6); plat(g, 3, 34, 6);
+  // Marches d'accès gauche
+  plat(g, 8, 3, 3); plat(g, 6, 8, 3);
+  // Marches d'accès droite
+  plat(g, 8, 50, 3); plat(g, 6, 47, 3);
+  // Power-ups
+  put(g, 2, 20, 'M'); put(g, 2, 36, 'Q'); put(g, 4, 28, 'W');
+  // Gemmes
+  put(g, 2, 28, 'j'); put(g, 4, 14, 'j'); put(g, 4, 42, 'j');
+  coins(g, 8, 14, 3); coins(g, 8, 38, 3);
+  put(g, 9, 29, 'O');
+  return { name: '7-3 Titan des Glaces', theme: 'castle', time: 240, map: rows(g) };
+}
+
+// =================== MONDE 8 — NOYAU FINAL ===================
+function L81() { // 8-1 Corridor infernal — parcours avec tous les ennemis
+  const W = 130, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  // colonnes suspendues
+  box(g, 16, 17, 1, 4, 'H'); box(g, 38, 39, 1, 5, 'H'); box(g, 62, 63, 1, 4, 'H');
+  box(g, 86, 87, 1, 5, 'H'); box(g, 108, 109, 1, 4, 'H');
+  // pics au sol
+  put(g, 9, 22, '^^^'); put(g, 9, 48, '^^'); put(g, 9, 72, '^^^'); put(g, 9, 96, '^^');
+  // passerelles
+  plat(g, 7, 20, 5); plat(g, 7, 46, 5); plat(g, 6, 70, 6); plat(g, 7, 94, 5);
+  // route haute
+  plat(g, 4, 26, 6); put(g, 3, 28, 'j'); plat(g, 4, 54, 6); put(g, 3, 56, 'W');
+  plat(g, 4, 78, 6); put(g, 3, 80, 'U'); plat(g, 4, 100, 5); coins(g, 3, 101, 3);
+  // tuyaux avec plantes
+  pipe(g, 34, 8); put(g, 7, 34, 'v'); pipe(g, 58, 8); put(g, 7, 58, 'v');
+  pipe(g, 82, 8); put(g, 7, 82, 'v');
+  put(g, 6, 42, 'BMB'); put(g, 6, 90, 'B?B');
+  // checkpoints
+  put(g, 8, 44, 'C'); put(g, 8, 88, 'C');
+  // lanceurs
+  put(g, 9, 30, 't'); put(g, 9, 66, 't'); put(g, 9, 104, 't');
+  // volants
+  put(g, 5, 40, 'f'); put(g, 5, 68, 'f'); put(g, 5, 98, 'f');
+  // ennemis au sol — tous types
+  put(g, 9, 12, 'k'); put(g, 9, 36, 'z'); put(g, 9, 52, 'g'); put(g, 9, 76, 'z'); put(g, 9, 92, 'k');
+  put(g, 9, 112, 'g'); put(g, 9, 120, 'z'); put(g, 9, 124, 'k');
+  put(g, 6, 47, 'g'); put(g, 6, 71, 'k');
+  return { name: '8-1 Corridor infernal', theme: 'castle', time: 380, map: rows(g) };
+}
+function L82() { // 8-2 Labyrinthe des abysses — 3 routes, plafonds bas, checkpoints
+  const W = 120, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S'); put(g, 9, W - 3, 'G');
+  // plafonds bas créant des couloirs
+  box(g, 12, 20, 1, 3, 'H'); box(g, 36, 44, 1, 3, 'H'); box(g, 60, 68, 1, 3, 'H'); box(g, 84, 92, 1, 3, 'H');
+  // murs intérieurs créant le labyrinthe (partiels, franchissables)
+  box(g, 24, 25, 5, 8, 'H'); box(g, 50, 51, 4, 7, 'H'); box(g, 76, 77, 5, 8, 'H');
+  // route haute (la plus rewarding)
+  plat(g, 4, 22, 3); plat(g, 4, 28, 6); put(g, 3, 30, 'j'); put(g, 3, 32, 'W');
+  plat(g, 4, 46, 4); plat(g, 4, 54, 6); put(g, 3, 56, 'U'); coins(g, 3, 57, 2);
+  plat(g, 4, 74, 3); plat(g, 4, 80, 6); put(g, 3, 82, 'j');
+  plat(g, 4, 96, 6); put(g, 3, 98, 'L');
+  // route moyenne
+  plat(g, 6, 14, 4); plat(g, 6, 28, 5); plat(g, 6, 54, 5); plat(g, 6, 80, 5); plat(g, 6, 96, 4);
+  put(g, 5, 15, 'o o'); put(g, 5, 55, 'o o'); put(g, 5, 81, 'o o');
+  // route basse — dangereuse
+  plat(g, 8, 10, 4); plat(g, 8, 30, 5); plat(g, 8, 56, 5); plat(g, 8, 82, 5); plat(g, 8, 100, 4);
+  // tuyaux
+  pipe(g, 32, 8); pipe(g, 70, 8);
+  put(g, 6, 40, 'BMB'); put(g, 6, 88, 'B?B');
+  // checkpoints
+  put(g, 8, 38, 'C'); put(g, 8, 72, 'C'); put(g, 8, 104, 'C');
+  // volants et pics-ennemis
+  put(g, 5, 20, 'f'); put(g, 5, 48, 'f'); put(g, 5, 72, 'f'); put(g, 5, 94, 'f');
+  // ennemis au sol
+  put(g, 9, 18, 'z'); put(g, 9, 34, 'k'); put(g, 9, 52, 'z'); put(g, 9, 66, 'g'); put(g, 9, 80, 'z'); put(g, 9, 98, 'k'); put(g, 9, 112, 'z');
+  put(g, 5, 29, 'k'); put(g, 5, 81, 'k');
+  return { name: '8-2 Labyrinthe des abysses', theme: 'underground', time: 380, map: rows(g) };
+}
+function L83() { // 8-3 Noyau — boss FINAL, la plus grande arène
+  const W = 64, g = grid(W); floorH(g);
+  put(g, 9, 2, 'S');
+  // Niveau 1 (row 7) — plateformes basses larges
+  plat(g, 7, 6, 6); plat(g, 7, 20, 10); plat(g, 7, 36, 10); plat(g, 7, 52, 6);
+  // Niveau 2 (row 5) — plateformes intermédiaires
+  plat(g, 5, 8, 5); plat(g, 5, 26, 6); plat(g, 5, 38, 6); plat(g, 5, 50, 5);
+  // Niveau 3 (row 3) — plateformes hautes
+  plat(g, 3, 14, 5); plat(g, 3, 28, 8); plat(g, 3, 44, 5);
+  // Marches d'accès gauche
+  plat(g, 8, 3, 3); plat(g, 6, 6, 3);
+  // Marches d'accès droite
+  plat(g, 8, 56, 3); plat(g, 6, 54, 3);
+  // Ressorts pour accès plateformes hautes
+  put(g, 9, 18, 'T'); put(g, 9, 44, 'T');
+  // Power-ups généreux (boss final)
+  put(g, 2, 16, 'M'); put(g, 2, 30, 'U'); put(g, 2, 34, 'Q'); put(g, 2, 46, 'W');
+  put(g, 4, 10, 'L');
+  // Gemmes
+  put(g, 2, 24, 'j'); put(g, 2, 40, 'j'); put(g, 4, 32, 'j');
+  coins(g, 8, 14, 4); coins(g, 8, 40, 4);
+  put(g, 9, 32, 'O');
+  return { name: '8-3 Noyau', theme: 'castle', time: 240, map: rows(g) };
+}
+
 // =================== MINI-JEUX (courses de collecte vs IA) ===================
 // Chaque disposition place le collectible donné (`ch` = 'o' pièces | 'j' étoiles).
 // Géométrie navigable par l'IA : trous ≤ 3, marches ≤ 3, ressorts pour le haut.
@@ -355,11 +588,33 @@ function A3() {
     g[9][2] = '1'; g[9][17] = '2';
   });
 }
-export const ARENAS = [A1(), A2(), A3()];
+function A4() { // Jungle — overworld, plateformes asymétriques
+  return arena('Jungle', 'overworld', (g) => {
+    plat(g, 7, 2, 4); plat(g, 5, 5, 3); plat(g, 8, 10, 4); plat(g, 6, 14, 4);
+    plat(g, 4, 8, 4);
+    put(g, 3, 9, 'M'); put(g, 3, 10, 'W'); put(g, 5, 15, '?');
+    coins(g, 8, 3, 2); coins(g, 7, 14, 2);
+    g[9][2] = '1'; g[9][17] = '2';
+  });
+}
+function A5() { // Pics de glace — castle, ressorts et pics
+  return arena('Pics de glace', 'castle', (g) => {
+    plat(g, 7, 3, 4); plat(g, 7, 13, 4); plat(g, 5, 7, 6);
+    put(g, 9, 6, '^'); put(g, 9, 13, '^');
+    put(g, 9, 4, 'T'); put(g, 9, 15, 'T');
+    put(g, 3, 9, 'M'); put(g, 3, 10, 'U');
+    coins(g, 4, 7, 3); coins(g, 8, 4, 2); coins(g, 8, 14, 2);
+    g[9][2] = '1'; g[9][17] = '2';
+  });
+}
+export const ARENAS = [A1(), A2(), A3(), A4(), A5()];
 
 export const BUILT = {
   L11: L11(), L12: L12(), L13: L13(), L21: L21(), L22: L22(), L23: L23(),
   L31: L31(), L32: L32(), L33: L33(),
   L41: L41(), L42: L42(), L43: L43(),
   L51: L51(), L52: L52(), L53: L53(),
+  L61: L61(), L62: L62(), L63: L63(),
+  L71: L71(), L72: L72(), L73: L73(),
+  L81: L81(), L82: L82(), L83: L83(),
 };

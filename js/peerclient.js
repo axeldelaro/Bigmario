@@ -136,7 +136,7 @@ export class PeerClient {
       });
       this._peer.on('open', () => {
         const hostId = PREFIX + code.trim().toUpperCase();
-        this._conn = this._peer.connect(hostId);
+        this._conn = this._peer.connect(hostId, { reliable: true, serialization: 'json' });
         this._conn.on('data', (m) => {
           if (m.t === 'hello') {
             clearTimeout(to);

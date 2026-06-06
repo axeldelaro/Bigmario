@@ -493,6 +493,61 @@ function bossFrame(mouthOpen) {
 const BOSS_1 = bossFrame(true);
 const BOSS_2 = bossFrame(false);
 
+// ---------------------------------------------------------------------------
+// SKINS — variantes de couleur du héros
+// ---------------------------------------------------------------------------
+export const SKIN_LIST = [
+  { id: 'bolt',    name: 'Bolt',     color: '#2f6cff' },
+  { id: 'flame',   name: 'Flamme',   color: '#e23b3b' },
+  { id: 'emerald', name: 'Émeraude', color: '#37c24a' },
+  { id: 'shadow',  name: 'Ombre',    color: '#2a2a3a' },
+  { id: 'royal',   name: 'Royal',    color: '#9a3ad0' },
+  { id: 'sun',     name: 'Soleil',   color: '#ff9b3b' },
+  { id: 'glacier', name: 'Glacier',  color: '#46c8ff' },
+  { id: 'sakura',  name: 'Sakura',   color: '#ff7bd5' },
+];
+
+// Toutes les clés de sprite du héros à teinter
+const HERO_KEYS = [
+  'smallIdle', 'smallWalk', 'smallWalk2',
+  'bigIdle', 'bigWalk', 'bigWalk2',
+  'jump', 'duck',
+];
+const FIRE_KEYS = [
+  'fireBigIdle', 'fireBigWalk', 'fireBigWalk2', 'fireJump',
+  'fireSmallIdle', 'fireSmallWalk', 'fireSmallWalk2',
+];
+
+const BASE_BLUE     = '#2f6cff';  // couleur 'b' dans P_HERO
+const BASE_FIRE_RED = '#ff5d2e';  // couleur 'b' dans P_FIRE
+
+/**
+ * Construit les packs de skins en récolorant les sprites du héros.
+ * @param {object} A — l'objet renvoyé par buildArt()
+ * @returns {object} skinSets — { bolt: A.hero, flame: {...}, ... }
+ */
+export function buildSkins(A) {
+  const skinSets = {};
+  for (const skin of SKIN_LIST) {
+    if (skin.id === 'bolt') {
+      // Le skin par défaut : pas de tint, on réutilise les sprites originaux
+      skinSets.bolt = A.hero;
+      continue;
+    }
+    const s = {};
+    // Sprites normaux (costume bleu → nouvelle couleur)
+    for (const k of HERO_KEYS) {
+      s[k] = tinted(A.hero[k], `skin_${skin.id}_${k}`, BASE_BLUE, skin.color);
+    }
+    // Sprites fire (costume orange → nouvelle couleur, pour garder la cohérence)
+    for (const k of FIRE_KEYS) {
+      s[k] = tinted(A.hero[k], `skin_${skin.id}_${k}`, BASE_FIRE_RED, skin.color);
+    }
+    skinSets[skin.id] = s;
+  }
+  return skinSets;
+}
+
 export function buildArt() {
   const A = {};
   A.hero = {
@@ -512,6 +567,8 @@ export function buildArt() {
     fireSmallWalk: makeSprite('h_fsw', HERO_SMALL_2, P_FIRE),
     fireSmallWalk2: makeSprite('h_fsw2', HERO_SMALL_2b, P_FIRE),
   };
+  // Construire les skins (doit être fait après A.hero)
+  A.skins = buildSkins(A);
   A.goon = { a: makeSprite('g1', GOON_1, P_GOON), b: makeSprite('g2', GOON_2, P_GOON), flat: makeSprite('gf', GOON_FLAT, P_GOON) };
   A.shell = { a: makeSprite('s1', SHELL_1, P_SHELL), hide: makeSprite('sh', SHELL_HIDE, P_SHELL) };
   A.fly = { a: makeSprite('f1', FLY_1, P_FLY), b: makeSprite('f2', FLY_2, P_FLY) };

@@ -31,6 +31,18 @@ export const WORLDS = [
     name: 'Cavernes de Cristal',
     levels: [BUILT.L51, BUILT.L52, BUILT.L53],
   },
+  {
+    name: 'Jungle Tropicale',
+    levels: [BUILT.L61, BUILT.L62, BUILT.L63],
+  },
+  {
+    name: 'Pics Glacés',
+    levels: [BUILT.L71, BUILT.L72, BUILT.L73],
+  },
+  {
+    name: 'Noyau Final',
+    levels: [BUILT.L81, BUILT.L82, BUILT.L83],
+  },
 ];
 
 // Les arènes versus (20 tuiles = 1 écran exact, avec murs de contour) sont
