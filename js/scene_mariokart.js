@@ -133,11 +133,14 @@ export class MarioKartScene {
     this.track = TRACKS[this.selectedTrack];
     this.karts = [];
     
-    // Initialiser 3D
+    // Initialiser 3D sur un canvas dédié (car le main canvas a déjà un contexte 2D)
+    this.mkCanvas = document.createElement('canvas');
+    this.mkCanvas.width = VIEW_W;
+    this.mkCanvas.height = VIEW_H;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(this.selectedTrack === 9 ? '#000' : '#46c8ff'); // Arc en ciel = nuit
     this.camera = new THREE.PerspectiveCamera(75, VIEW_W/VIEW_H, 0.1, 1000);
-    this.renderer = new THREE.WebGLRenderer({ canvas: this.game.canvas, antialias: false });
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.mkCanvas, antialias: false });
     
     // Générer la texture du sol (la grille)
     const tCanvas = document.createElement('canvas');
@@ -273,6 +276,9 @@ export class MarioKartScene {
   draw(ctx) {
     if (this.state === 'menu') return;
     this.renderer.render(this.scene, this.camera);
+    
+    // Dessiner le canvas 3D sur le canvas principal 2D
+    ctx.drawImage(this.mkCanvas, 0, 0, VIEW_W, VIEW_H);
     
     // HUD par-dessus le canvas 3D
     ctx.fillStyle = '#fff';
