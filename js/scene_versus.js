@@ -213,6 +213,11 @@ export class VersusScene {
     if (idx === this.localId) return true;
     if (this.mode === 'online' || this.mode === 'ffa') {
       // L'hôte simule les IAs pour tout le monde
+      if (this.net && this.net.role === 'host' && String(this.ids[idx]).startsWith('AI')) return true;
+    }
+    return false;
+  }
+
   update(dt) {
     this.stateT += dt;
     if (this.over) { if (this.stateT > 3.5) this.game.endVersus(); return; }
