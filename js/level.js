@@ -6,7 +6,7 @@ const SOLID = new Set(['X', 'H', 'B', '?', 'M', 'U', 'L', 'W', 'D', 'p', 'P', 'T
 const SEMI = new Set(['=']); // solide seulement par le dessus
 const HAZARD = new Set(['^']);
 const ENEMY_CHARS = { g: 'goon', k: 'shell', f: 'fly', z: 'spiky', O: 'boss', v: 'plant', t: 'lob' };
-const ITEM_QUESTION = { '?': 'coin', 'M': 'mushroom', 'U': 'star', 'L': 'oneup', 'W': 'feather' };
+const ITEM_QUESTION = { '?': 'coin', 'M': 'mushroom', 'Q': 'flower', 'U': 'star', 'L': 'oneup', 'W': 'feather' };
 
 export class Level {
   constructor(def) {

@@ -282,7 +282,20 @@ export class Enemy {
     }
 
     if (this.type === 'plant') { // plante de tuyau : monte/descend
-      this.y = this.baseY - (Math.max(0, Math.sin(this.t * 1.6)) * 18);
+      const phase = Math.sin(this.t * 1.6);
+      this.y = this.baseY - (Math.max(0, phase) * 18);
+      
+      // Tirer une boule de feu au sommet
+      if (phase > 0.95 && !this.hasShot) {
+        this.hasShot = true;
+        if (scene && scene.player && scene.spawnHazard) {
+          const dir = scene.player.x > this.x ? 1 : -1;
+          scene.spawnHazard(new EnemyShot(this.x + this.w / 2, this.y, dir * 90, 0));
+          if (typeof SFX !== 'undefined' && SFX.fire) SFX.fire();
+        }
+      } else if (phase < 0) {
+        this.hasShot = false; // reset quand elle est cachée
+      }
       return;
     }
 
