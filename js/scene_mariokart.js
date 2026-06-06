@@ -1,167 +1,437 @@
-// scene_mariokart.js — Mode Karting Rétro 2D (Mode 7) - Refonte Intégrale
+// scene_mariokart.js — Mode Karting Rétro 2D (Mode 7) - Refonte V3
 import { VIEW_W, VIEW_H } from './core.js';
 import { SKIN_LIST } from './art.js';
 
-// --- Analyseur de Circuits ---
-function M(name, str) {
+// =====================================================================
+//  CONSTANTES
+// =====================================================================
+const TILE_SIZE = 12;
+const PI  = Math.PI;
+const PI2 = PI * 2;
+
+// =====================================================================
+//  CIRCUITS — Routes larges (3-4 tuiles), techniques, sans passages étroits
+//  0 = Herbe, 1 = Route, 2 = Ligne de départ
+// =====================================================================
+function M(name, str, waypoints) {
   const lines = str.trim().split('\n').map(l => l.trim().replace(/ /g, ''));
   const h = lines.length, w = lines[0].length;
   const data = new Uint8Array(w * h);
-  for(let y=0; y<h; y++) for(let x=0; x<w; x++) data[y*w+x] = parseInt(lines[y][x]);
-  return { name, w, h, data };
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      data[y * w + x] = parseInt(lines[y][x]) || 0;
+  return { name, w, h, data, waypoints };
 }
 
-// 0: Herbe, 1: Route, 2: Ligne d'arrivée
+// Waypoints = liste de {x, z} en coordonnées TILES, l'IA suit ces points dans l'ordre en boucle
 const TRACKS = [
-  M('Circuit Basique (Ovale)', `
-    0000000000000000
-    0000111111110000
-    0001100000011000
-    0011000000001100
-    0010000000000100
-    0010000000000100
-    0010000000000100
-    0011000000001100
-    0001100000021000
-    0000111111110000
-    0000000000000000
-  `),
-  M('Circuit Nuage (En 8)', `
-    000000000000000000
-    000111100000111100
-    001100110001100110
-    001000011011000010
-    001000001110000010
-    001100000100000110
-    000110001110001100
-    000011011011011000
-    000001110001110000
-    000002100000110000
-    000000000000000000
-  `),
-  M('Labyrinthe Forestier', `
-    000000000000000000
-    001111111110011100
-    001000000011110100
-    001001111000000100
-    001001001111111100
-    001111000000000000
-    000000001111111000
-    000011111000001000
-    000010000001111000
-    000021111111000000
-    000000000000000000
-  `),
-  M('Épingle Dangereuse', `
-    0000000000000000
-    0001111111111000
-    0001000000001000
-    0001001111001000
-    0001001001001000
-    0001001001001000
-    0001001001001000
-    0001001111001000
-    0001000000001000
-    0002111111111000
-    0000000000000000
-  `),
-  M('Grand Carré', `
-    00000000000000
-    00111111111100
-    00100000000100
-    00100000000100
-    00100000000100
-    00100000000100
-    00100000000100
-    00100000000100
-    00100000000100
-    00211111111100
-    00000000000000
-  `),
+  // ──── 1. Circuit Ovale Large ────
+  M('Grand Ovale', `
+    00000000000000000000
+    00001111111111110000
+    00011111111111111000
+    00111000000000111100
+    00110000000000011100
+    01110000000000011100
+    01100000000000001110
+    01100000000000001110
+    01100000000000001110
+    01110000000000011100
+    00110000000000011100
+    00111000000000111100
+    00011111122111111000
+    00001111111111110000
+    00000000000000000000
+  `, [
+    {x:10,z:13}, {x:15,z:12}, {x:17,z:10}, {x:18,z:7},
+    {x:17,z:4}, {x:15,z:2}, {x:10,z:1}, {x:5,z:2},
+    {x:3,z:4}, {x:2,z:7}, {x:3,z:10}, {x:5,z:12}
+  ]),
+
+  // ──── 2. Circuit en 8 (Double Boucle) ────
   M('Double Boucle', `
-    0000000000000000
-    0011110000111100
-    0110011001100110
-    0100001111000010
-    0110000110000110
-    0011000110001100
-    0001101111011000
-    0000111001110000
-    0000020000100000
-    0000000000000000
-  `),
-  M('Circuit de la Plage', `
-    00000000000000
-    01111111111110
-    01000000000010
-    01011111111010
-    01010000001010
-    01010000001010
-    01011111111010
-    01000000000010
-    02111111111110
-    00000000000000
-  `),
-  M('Serpentin', `
-    0000000000000
-    0111100111100
-    0100111100100
-    0100000000100
-    0100111100100
-    0100100100100
-    0111100111100
-    0000000000200
-    0000000000100
-    0000000000000
-  `),
-  M('Ligne Droite de Vitesse', `
-    000000000000
-    000011110000
-    000010010000
-    000010010000
-    000010010000
-    000010010000
-    000010010000
-    000010010000
-    000010010000
-    000020010000
-    000011110000
-    000000000000
-  `),
-  M('Route Stellaire (Arc-en-Ciel)', `
-    0000000000000000000
-    0001111111111111000
-    0001000000000001000
-    0001001111111001000
-    0001001000001001000
-    0001001000001001000
-    0001001111111001000
-    0001000000000001000
-    0002111111111111000
-    0000000000000000000
-  `)
+    00000000000000000000
+    00111111001111111000
+    01111111011111111100
+    01100011111100001100
+    01100001111000001100
+    01111111001111111100
+    00111111001111111000
+    01111111001111111100
+    01100001111000001100
+    01100011111100001100
+    01111111011111111100
+    00111122001111111000
+    00000000000000000000
+  `, [
+    {x:5,z:11}, {x:3,z:10}, {x:2,z:8}, {x:3,z:6},
+    {x:5,z:5}, {x:7,z:4}, {x:9,z:3}, {x:12,z:4},
+    {x:15,z:3}, {x:17,z:2}, {x:18,z:4}, {x:17,z:6},
+    {x:15,z:7}, {x:12,z:7}, {x:9,z:8}, {x:7,z:9},
+    {x:5,z:10}, {x:3,z:11}
+  ]),
+
+  // ──── 3. Circuit Technique (Chicanes) ────
+  M('Chicane Royale', `
+    00000000000000000000
+    00111111111111111100
+    00111111111111111100
+    00110000000000001100
+    00110000000000001100
+    00110011111100001100
+    00110011111100001100
+    00110000000000001100
+    00110000000000001100
+    00110000111111001100
+    00110000111111001100
+    00110000000000001100
+    00110000000000001100
+    00112211111111111100
+    00111111111111111100
+    00000000000000000000
+  `, [
+    {x:4,z:14}, {x:16,z:14}, {x:17,z:10}, {x:14,z:10},
+    {x:9,z:10}, {x:5,z:9}, {x:5,z:6}, {x:6,z:5},
+    {x:11,z:5}, {x:16,z:5}, {x:17,z:3}, {x:10,z:2},
+    {x:3,z:3}, {x:3,z:12}
+  ]),
+
+  // ──── 4. Circuit de la Montagne ────
+  M('Col de Montagne', `
+    0000000000000000000000
+    0011111100000111111100
+    0011111100001111111100
+    0011000000001100001100
+    0011000000001100001100
+    0011000000001100001100
+    0011000001111100001100
+    0011000001111100001100
+    0011000001100000001100
+    0011111101100000001100
+    0011111101100000001100
+    0000001101111111111100
+    0000001101111111111100
+    0000001100000000001100
+    0011111100000000001100
+    0011111122000111111100
+    0011000000001111111100
+    0011000000001100000000
+    0011111111111100000000
+    0011111111111100000000
+    0000000000000000000000
+  `, [
+    {x:6,z:15}, {x:3,z:15}, {x:2,z:17}, {x:6,z:19},
+    {x:10,z:19}, {x:12,z:17}, {x:12,z:15}, {x:12,z:12},
+    {x:16,z:11}, {x:19,z:10}, {x:19,z:6}, {x:19,z:3},
+    {x:15,z:2}, {x:12,z:4}, {x:12,z:7}, {x:8,z:7},
+    {x:5,z:7}, {x:3,z:5}, {x:3,z:2}, {x:6,z:1},
+    {x:10,z:1}, {x:14,z:1}
+  ]),
+
+  // ──── 5. Grand Prix Final ────
+  M('Grand Prix', `
+    000000000000000000000000
+    001111111111111111111100
+    001111111111111111111100
+    001100000000000000001100
+    001100000000000000001100
+    001100001111111100001100
+    001100001111111100001100
+    001100001100001100001100
+    001100001100001100001100
+    001100001100001100001100
+    001100001111111100001100
+    001100001111111100001100
+    001100000000000000001100
+    001100000000000000001100
+    001111111111222111111100
+    001111111111111111111100
+    000000000000000000000000
+  `, [
+    {x:12,z:15}, {x:20,z:14}, {x:21,z:10}, {x:21,z:5},
+    {x:20,z:3}, {x:12,z:2}, {x:4,z:3}, {x:3,z:5},
+    {x:3,z:10}, {x:3,z:13}, {x:4,z:14}, {x:8,z:14},
+    {x:8,z:11}, {x:9,z:6}, {x:12,z:5}, {x:15,z:6},
+    {x:16,z:11}, {x:15,z:14}
+  ]),
+
+  // ──── 6. Serpent Express ────
+  M('Serpent Express', `
+    00000000000000000000
+    01111100001111100000
+    01111110011111110000
+    00000111111000011100
+    00000111111000011100
+    01111110011111110000
+    01111100001111100000
+    00000111111000011100
+    00000111111000011100
+    01111110011111110000
+    01111100001111100000
+    00002111111000011100
+    00000111111000011100
+    01111110011111110000
+    01111100001111100000
+    00000000000000000000
+  `, [
+    {x:3,z:11}, {x:1,z:10}, {x:1,z:6}, {x:3,z:5},
+    {x:6,z:4}, {x:8,z:3}, {x:11,z:2}, {x:14,z:1},
+    {x:16,z:2}, {x:17,z:4}, {x:16,z:6}, {x:13,z:6},
+    {x:10,z:7}, {x:7,z:8}, {x:5,z:9}, {x:3,z:10},
+    {x:3,z:12}, {x:6,z:13}, {x:8,z:14}, {x:13,z:14},
+    {x:16,z:13}, {x:17,z:11}, {x:16,z:9}, {x:13,z:9},
+    {x:10,z:10}, {x:7,z:11}
+  ]),
+
+  // ──── 7. Route Arc-en-Ciel ────
+  M('Route Arc-en-Ciel', `
+    000000000000000000000000
+    000111111111111111111000
+    001111111111111111111100
+    001100000000000000001100
+    001100000000000000001100
+    001100001111111100001100
+    001100001111111100001100
+    001100001100001100001100
+    001100001100001100001100
+    001100001111111100001100
+    001100001111111100001100
+    001100000000000000001100
+    001100000000000000001100
+    001122111111111111111100
+    001111111111111111111100
+    000000000000000000000000
+  `, [
+    {x:4,z:14}, {x:10,z:14}, {x:18,z:14}, {x:21,z:12},
+    {x:21,z:7}, {x:21,z:4}, {x:18,z:2}, {x:10,z:2},
+    {x:4,z:2}, {x:2,z:4}, {x:2,z:7}, {x:2,z:12},
+    // Boucle intérieure
+    {x:5,z:11}, {x:9,z:10}, {x:14,z:10}, {x:16,z:8},
+    {x:14,z:6}, {x:9,z:6}, {x:5,z:7}
+  ]),
 ];
 
-const TILE_SIZE = 12; // Echelle du monde
-// Formats de couleur en Little Endian (ABGR)
-const C_GRASS1 = 0xFF2a7a2a, C_GRASS2 = 0xFF226622;
-const C_ROAD1  = 0xFF777777, C_ROAD2  = 0xFF666666;
-const C_LINE   = 0xFFdddddd;
-const C_START1 = 0xFF2020d0, C_START2 = 0xFFaaaaaa; // Rouge et gris
-const C_BORDER1= 0xFF4444ff, C_BORDER2= 0xFFeeeeee; // Vibreurs Rouge et Blanc
+// =====================================================================
+//  WAYPOINT PATHFINDER — IA par suivi de checkpoints
+// =====================================================================
+class WaypointAI {
+  constructor(kart, waypoints, personality) {
+    this.kart = kart;
+    this.waypoints = waypoints;
+    this.currentWP = 0;
+    this.wpThresholdSq = 10 * 10; // Distance en unités monde au carré pour valider un WP
 
+    // Personnalité unique
+    this.topSpeed     = personality.topSpeed;     // 28-35
+    this.aggression   = personality.aggression;   // 0.5-1.5 (multiplier de steer)
+    this.brakingSkill = personality.brakingSkill;  // 0.6-1.0 (anticipe les virages)
+    this.errorRate    = personality.errorRate;     // 0-0.3 (erreurs random)
+    this.laneOffset   = personality.laneOffset;   // -3 à +3 (décalage latéral)
+    this.reaction     = personality.reaction;     // 0-0.2s (délai de réaction)
+
+    // État interne
+    this.stuckTimer = 0;
+    this.lastX = 0;
+    this.lastZ = 0;
+    this.draftBonus = 0;
+    this.rubberBonus = 0;
+    this.errorAccum = 0;
+  }
+
+  getTarget() {
+    const wp = this.waypoints[this.currentWP];
+    return {
+      x: wp.x * TILE_SIZE + TILE_SIZE / 2 + this.laneOffset,
+      z: wp.z * TILE_SIZE + TILE_SIZE / 2
+    };
+  }
+
+  advanceWP() {
+    this.currentWP = (this.currentWP + 1) % this.waypoints.length;
+  }
+
+  update(dt, karts, playerKart, getTile) {
+    const k = this.kart;
+
+    // ── Avancer le waypoint si on est proche ──
+    const tgt = this.getTarget();
+    const dxWP = tgt.x - k.x;
+    const dzWP = tgt.z - k.z;
+    const distWPSq = dxWP * dxWP + dzWP * dzWP;
+    if (distWPSq < this.wpThresholdSq) {
+      this.advanceWP();
+    }
+
+    // ── Direction vers le waypoint courant ──
+    const freshTgt = this.getTarget();
+    const dx = freshTgt.x - k.x;
+    const dz = freshTgt.z - k.z;
+    const targetAngle = Math.atan2(dx, dz);
+
+    // ── Différence angulaire ──
+    let angleDiff = targetAngle - k.angle;
+    while (angleDiff > PI) angleDiff -= PI2;
+    while (angleDiff < -PI) angleDiff += PI2;
+
+    // ── Steering vers le waypoint ──
+    let steer = angleDiff * 3.0 * this.aggression;
+    steer = Math.max(-3.0, Math.min(3.0, steer)); // Clamp
+
+    // ── Erreurs humaines (petit wobble) ──
+    this.errorAccum += dt;
+    if (this.errorRate > 0) {
+      steer += Math.sin(this.errorAccum * 4 + k.id * 7) * this.errorRate * 1.5;
+    }
+
+    // ── Accélération intelligente ──
+    let acc = 1.0;
+    const absAngleDiff = Math.abs(angleDiff);
+
+    // Freiner dans les virages serrés
+    if (absAngleDiff > 0.6 && k.speed > 20) {
+      acc = 0.3 * this.brakingSkill;
+    } else if (absAngleDiff > 0.3 && k.speed > 25) {
+      acc = 0.6;
+    }
+
+    // ── Aspiration (Drafting) ──
+    this.draftBonus = 0;
+    for (let j = 0; j < karts.length; j++) {
+      if (karts[j] === k) continue;
+      const odx = karts[j].x - k.x;
+      const odz = karts[j].z - k.z;
+      const odist = odx * odx + odz * odz;
+      if (odist > 100 && odist < 1600) {
+        const aToOther = Math.atan2(odx, odz);
+        let adiff = aToOther - k.angle;
+        while (adiff > PI) adiff -= PI2;
+        while (adiff < -PI) adiff += PI2;
+        if (Math.abs(adiff) < 0.25) {
+          this.draftBonus = Math.max(this.draftBonus, 4.0);
+        }
+      }
+    }
+
+    // ── Évitement d'urgence des autres karts ──
+    let avoidSteer = 0;
+    for (let j = 0; j < karts.length; j++) {
+      if (karts[j] === k) continue;
+      const odx = karts[j].x - k.x;
+      const odz = karts[j].z - k.z;
+      const odist = odx * odx + odz * odz;
+      if (odist < 400 && odist > 1) {
+        const aToOther = Math.atan2(odx, odz);
+        let adiff = aToOther - k.angle;
+        while (adiff > PI) adiff -= PI2;
+        while (adiff < -PI) adiff += PI2;
+        if (Math.abs(adiff) < PI / 2) {
+          const strength = (400 - odist) / 400;
+          avoidSteer += (adiff > 0 ? -2.0 : 2.0) * strength;
+        }
+      }
+    }
+    steer += avoidSteer;
+
+    // ── Rubberbanding ──
+    this.rubberBonus = 0;
+    if (playerKart) {
+      const pdx = playerKart.x - k.x;
+      const pdz = playerKart.z - k.z;
+      const pdist = pdx * pdx + pdz * pdz;
+      // Mesurer si on est devant ou derrière
+      const pDir = Math.atan2(pdx, pdz);
+      let pDiff = pDir - k.angle;
+      while (pDiff > PI) pDiff -= PI2;
+      while (pDiff < -PI) pDiff += PI2;
+      const isBehind = Math.abs(pDiff) < PI / 2;
+
+      if (isBehind && pdist > 30000) {
+        this.rubberBonus = 5.0; // Rattrapez-le !
+      } else if (!isBehind && pdist > 50000) {
+        this.rubberBonus = -4.0; // Ralentir, trop d'avance
+      }
+    }
+
+    // ── Drift automatique dans les gros virages ──
+    const drift = (absAngleDiff > 0.8 && k.speed > 22);
+
+    // ── Détection de blocage (stuck) ──
+    const moved = Math.abs(k.x - this.lastX) + Math.abs(k.z - this.lastZ);
+    this.lastX = k.x;
+    this.lastZ = k.z;
+
+    if (moved < 0.2 * dt * 60) {
+      this.stuckTimer += dt;
+    } else {
+      this.stuckTimer = Math.max(0, this.stuckTimer - dt * 2);
+    }
+
+    // Si bloqué > 1.5s, marche arrière et braquage inverse
+    if (this.stuckTimer > 1.5) {
+      acc = -1.0;
+      steer = -steer * 2;
+      if (this.stuckTimer > 3.0) {
+        // Reset au dernier waypoint
+        const wp = this.waypoints[this.currentWP];
+        k.x = wp.x * TILE_SIZE + TILE_SIZE / 2;
+        k.z = wp.z * TILE_SIZE + TILE_SIZE / 2;
+        k.speed = 5;
+        this.stuckTimer = 0;
+      }
+    }
+
+    // ── Vitesse max composite ──
+    k.maxAiSpeed = this.topSpeed + this.draftBonus + this.rubberBonus;
+
+    return { acc, steer, drift };
+  }
+}
+
+// =====================================================================
+//  PERSONNALITÉS DES IAs
+// =====================================================================
+function makePersonality(id) {
+  // Chaque IA a un profil unique et déterministe
+  const profiles = [
+    null, // index 0 = joueur
+    { topSpeed: 30, aggression: 1.0, brakingSkill: 0.9, errorRate: 0.05, laneOffset: -1.5, reaction: 0.05 }, // Prudent
+    { topSpeed: 33, aggression: 1.3, brakingSkill: 0.7, errorRate: 0.15, laneOffset:  2.0, reaction: 0.10 }, // Agressif
+    { topSpeed: 31, aggression: 1.1, brakingSkill: 0.85, errorRate: 0.08, laneOffset: -0.5, reaction: 0.07 }, // Équilibré
+    { topSpeed: 34, aggression: 1.4, brakingSkill: 0.6, errorRate: 0.20, laneOffset:  1.0, reaction: 0.15 }, // Téméraire
+    { topSpeed: 29, aggression: 0.9, brakingSkill: 1.0, errorRate: 0.02, laneOffset:  0.0, reaction: 0.03 }, // Pro
+    { topSpeed: 32, aggression: 1.2, brakingSkill: 0.75, errorRate: 0.12, laneOffset: -2.5, reaction: 0.08 }, // Kamikaze
+    { topSpeed: 31, aggression: 1.0, brakingSkill: 0.80, errorRate: 0.10, laneOffset:  3.0, reaction: 0.12 }, // Large
+  ];
+  return profiles[id] || profiles[1];
+}
+
+// =====================================================================
+//  COULEURS ABGR (Little Endian)
+// =====================================================================
+const COL_GRASS1   = 0xFF28AA28;
+const COL_GRASS2   = 0xFF229222;
+const COL_ASPHALT1 = 0xFF555555;
+const COL_ASPHALT2 = 0xFF4A4A4A;
+const COL_START    = 0xFFEEEEEE;
+const COL_CURB_R   = 0xFF0000FF;
+const COL_CURB_W   = 0xFFFFFFFF;
+const COL_CENTER   = 0xFF88BBFF; // Ligne centrale bleue
+
+// =====================================================================
+//  SCÈNE MARIO KART
+// =====================================================================
 export class MarioKartScene {
   constructor(game) {
     this.game = game;
     this.state = 'menu';
     this.selectedTrack = 0;
     this.selectedSkin = 0;
-    // Rendu en 320x240 pour look rétro 100% propre
-    this.renderW = 320;
-    this.renderH = 240;
+    this.renderW = 384;
+    this.renderH = 216;
     this.initMenu();
   }
 
+  // ── Menu de sélection ──
   initMenu() {
     let html = `<div class="title" style="margin-bottom:10px;"><span class="big" style="color:#d02020; font-size:40px; text-shadow: 2px 2px #fff;">KARTING 2D</span></div>`;
     html += `<div style="display:flex; justify-content:space-around; width:100%;">
@@ -198,385 +468,314 @@ export class MarioKartScene {
     p.querySelector('#mk-back').onclick = () => this.game.returnToMenu();
   }
 
+  // ── Initialisation de la course ──
   initRace() {
     this.track = TRACKS[this.selectedTrack];
     this.karts = [];
-    
-    // 1. Génération de la carte complète HD en mémoire (64x64 pixels par case)
-    this.texW = this.track.w * 64;
-    this.texH = this.track.h * 64;
-    this.texData = new Uint32Array(this.texW * this.texH);
-    for (let y = 0; y < this.track.h; y++) {
-      for (let x = 0; x < this.track.w; x++) {
-        const t = this.track.data[y * this.track.w + x];
-        for (let py = 0; py < 64; py++) {
-          for (let px = 0; px < 64; px++) {
-            let col = C_GRASS1;
-            const checker = ((px >> 3) + (py >> 3)) % 2 === 0; // Damier de 8 pixels
-            
-            if (t === 0) { // Herbe
-              col = checker ? C_GRASS1 : C_GRASS2;
-            } else if (t === 1) { // Route
-              col = checker ? C_ROAD1 : C_ROAD2;
-              // Bordure de piste
-              if (px < 4 || px > 60 || py < 4 || py > 60) {
-                 const borderCheck = ((px >> 2) + (py >> 2)) % 2 === 0;
-                 col = borderCheck ? C_BORDER1 : C_BORDER2;
-              }
-              // Ligne médiane pointillée
-              if (px > 30 && px < 34 && py > 16 && py < 48) col = C_LINE;
-            } else if (t === 2) { // Ligne de départ
-              col = checker ? C_START1 : C_START2;
-            }
-            this.texData[(y*64 + py) * this.texW + (x*64 + px)] = col;
-          }
-        }
-      }
-    }
+    this.aiControllers = [];
 
-    // 2. Trouver la position de départ (tuile '2')
+    // Trouver la position de départ (tuile '2')
     let startX = 2, startZ = 2;
     for (let i = 0; i < this.track.data.length; i++) {
       if (this.track.data[i] === 2) {
-        startX = (i % this.track.w) * TILE_SIZE + TILE_SIZE/2;
-        startZ = Math.floor(i / this.track.w) * TILE_SIZE + TILE_SIZE/2;
+        startX = (i % this.track.w) * TILE_SIZE + TILE_SIZE / 2;
+        startZ = Math.floor(i / this.track.w) * TILE_SIZE + TILE_SIZE / 2;
         break;
       }
     }
 
-    // 3. Créer les coureurs
+    // Déterminer l'angle de départ (direction de la route adjacente)
+    const startTX = Math.floor(startX / TILE_SIZE);
+    const startTZ = Math.floor(startZ / TILE_SIZE);
+    let startAngle = 0;
+    // Regarder quelle direction a de la route
+    if (this._tileAt(startTX, startTZ - 1) > 0) startAngle = 0;        // Nord
+    else if (this._tileAt(startTX, startTZ + 1) > 0) startAngle = PI;   // Sud
+    else if (this._tileAt(startTX + 1, startTZ) > 0) startAngle = PI/2; // Est
+    else if (this._tileAt(startTX - 1, startTZ) > 0) startAngle = -PI/2;// Ouest
+
+    // Créer les 8 coureurs
     for (let i = 0; i < 8; i++) {
       const isPlayer = i === 0;
       const skinIndex = isPlayer ? this.selectedSkin : (i % SKIN_LIST.length);
-      const xOff = (i%2 === 0 ? -1.5 : 1.5);
-      const zOff = Math.floor(i/2) * 2; // Placement sur la grille de départ
-      
-      this.karts.push({
+
+      // Grille de départ : 2 colonnes, 4 rangées
+      const col = (i % 2 === 0) ? -1 : 1;
+      const row = Math.floor(i / 2);
+      // Décalage perpendiculaire à la direction de départ
+      const perpX = Math.sin(startAngle + PI / 2) * col * 3;
+      const perpZ = Math.cos(startAngle + PI / 2) * col * 3;
+      // Décalage dans la direction opposée (derrière la ligne)
+      const backX = -Math.sin(startAngle) * row * 4;
+      const backZ = -Math.cos(startAngle) * row * 4;
+
+      const kart = {
         isPlayer,
         id: i,
-        x: startX + xOff,
-        z: startZ + zOff,
-        angle: 0, // Regarde vers le sud (bas de la grille)
+        x: startX + perpX + backX,
+        z: startZ + perpZ + backZ,
+        angle: startAngle,
         speed: 0,
-        skin: SKIN_LIST[skinIndex]
-      });
+        maxAiSpeed: 30,
+        skin: SKIN_LIST[skinIndex],
+        stuckTime: 0,
+      };
+      this.karts.push(kart);
+
+      // Créer le contrôleur IA
+      if (!isPlayer && this.track.waypoints) {
+        this.aiControllers.push(
+          new WaypointAI(kart, this.track.waypoints, makePersonality(i))
+        );
+      }
     }
 
-    // 4. Préparer le Framebuffer (Rendu logiciel)
+    // Préparer le Framebuffer
     this.bufferCanvas = document.createElement('canvas');
-    this.bufferCanvas.width = this.renderW = 384; 
-    this.bufferCanvas.height = this.renderH = 216;
+    this.bufferCanvas.width = this.renderW;
+    this.bufferCanvas.height = this.renderH;
     this.bufferCtx = this.bufferCanvas.getContext('2d');
     this.horizon = 108;
-    
-    // On ne crée l'ImageData que pour la moitié basse de l'écran (le sol) pour optimiser et permettre le ciel en Canvas
     this.imgData = this.bufferCtx.createImageData(this.renderW, this.renderH - this.horizon);
     this.pixels = new Uint32Array(this.imgData.data.buffer);
 
     this.state = 'play';
+    this.raceTime = 0;
+    this.countdown = 3.0;
   }
 
-  getTile(worldX, worldZ) {
-    const tx = Math.floor(worldX / TILE_SIZE);
-    const tz = Math.floor(worldZ / TILE_SIZE);
-    if (tx>=0 && tx<this.track.w && tz>=0 && tz<this.track.h) {
-      return this.track.data[tz*this.track.w + tx];
+  // ── Accès tuile par index ──
+  _tileAt(tx, tz) {
+    if (tx >= 0 && tx < this.track.w && tz >= 0 && tz < this.track.h) {
+      return this.track.data[tz * this.track.w + tx];
     }
     return 0;
   }
 
+  getTile(worldX, worldZ) {
+    return this._tileAt(Math.floor(worldX / TILE_SIZE), Math.floor(worldZ / TILE_SIZE));
+  }
+
+  // ── Boucle de mise à jour ──
   update(dt) {
     if (this.state !== 'play') return;
+
+    // Countdown au départ
+    if (this.countdown > 0) {
+      this.countdown -= dt;
+      return;
+    }
+
+    this.raceTime += dt;
     const I = this.game.input;
-    
+
     for (let i = 0; i < this.karts.length; i++) {
       const k = this.karts[i];
       let acc = 0, steer = 0, drift = false;
-      
+
       if (k.isPlayer) {
-        // ACCELERATION = SAUT. FREIN/DERAPAGE = TIR
-        acc = I.isDown('jump', 0) ? 1 : 0;
+        // ── Contrôles Joueur ──
+        acc = I.isDown('jump', 0) ? 1.0 : 0;
         steer = (I.isDown('left', 0) ? 1 : 0) + (I.isDown('right', 0) ? -1 : 0);
         drift = I.isDown('fire', 0);
+        k.maxAiSpeed = drift ? 38 : 32;
       } else {
-        // IA ULTIME : Personnalités, Aspiration, Evitement, Rubberbanding, Drifting et Recovery
-        acc = 0.9;
-        
-        // 1. Personnalités de base
-        const baseSpeed = 29 + ((k.id * 17) % 6); // 29 à 34
-        k.handling = k.handling || (1.0 + ((k.id * 13) % 5) * 0.1); 
-        k.laneOffset = k.laneOffset || (((k.id * 37) % 11) / 10 - 0.5); 
-        
-        const lookDist = 16 + (k.speed * 0.2); // Le regard s'allonge avec la vitesse
-        
-        // 2. Senseurs de route (Gradient Descent)
-        const L2_X = k.x + Math.sin(k.angle + 0.8) * lookDist;
-        const L2_Z = k.z + Math.cos(k.angle + 0.8) * lookDist;
-        const L1_X = k.x + Math.sin(k.angle + 0.4) * lookDist;
-        const L1_Z = k.z + Math.cos(k.angle + 0.4) * lookDist;
-        const C_X  = k.x + Math.sin(k.angle) * lookDist;
-        const C_Z  = k.z + Math.cos(k.angle) * lookDist;
-        const R1_X = k.x + Math.sin(k.angle - 0.4) * lookDist;
-        const R1_Z = k.z + Math.cos(k.angle - 0.4) * lookDist;
-        const R2_X = k.x + Math.sin(k.angle - 0.8) * lookDist;
-        const R2_Z = k.z + Math.cos(k.angle - 0.8) * lookDist;
-
-        let roadPull = 0;
-        if (this.getTile(L2_X, L2_Z) > 0) roadPull += 1.0;
-        if (this.getTile(L1_X, L1_Z) > 0) roadPull += 0.5;
-        if (this.getTile(R1_X, R1_Z) > 0) roadPull -= 0.5;
-        if (this.getTile(R2_X, R2_Z) > 0) roadPull -= 1.0;
-
-        steer = (roadPull + k.laneOffset) * k.handling;
-
-        // 3. Interactions Sociales Humaines (Jouer avec des "amis")
-        let avoidSteer = 0;
-        let draftBoost = 0;
-        
-        for (let j = 0; j < this.karts.length; j++) {
-           if (i === j) continue;
-           const other = this.karts[j];
-           const dx = other.x - k.x;
-           const dz = other.z - k.z;
-           const distSq = dx*dx + dz*dz;
-           
-           if (distSq < 10000) { // Moins de 100 unités
-              const angleToOther = Math.atan2(dx, dz); // dx/dz car Z est l'axe principal
-              let diff = (angleToOther - k.angle) % (Math.PI*2);
-              if (diff > Math.PI) diff -= Math.PI*2;
-              if (diff < -Math.PI) diff += Math.PI*2;
-              
-              // Evitement d'Urgence (Si on risque de rentrer dans quelqu'un)
-              if (distSq < 150 && Math.abs(diff) < Math.PI/2) {
-                 avoidSteer += (diff > 0 ? -1.5 : 1.5) * (150 - distSq)/150;
-              }
-              
-              // Aspiration (Drafting - Couloir de vitesse)
-              if (distSq > 150 && distSq < 900 && Math.abs(diff) < 0.2) {
-                 draftBoost += 3.0; // Vroum !
-                 avoidSteer += diff * 0.8; // On s'aligne derrière lui
-              }
-           }
-        }
-        
-        // 4. Rubberbanding (Garder la partie compétitive)
-        const player = this.karts[0];
-        const pdx = player.x - k.x;
-        const pdz = player.z - k.z;
-        const distToPlayerSq = pdx*pdx + pdz*pdz;
-        let rubberBand = 0;
-        
-        // Le joueur va vers où ?
-        const pVelX = Math.sin(player.angle);
-        const pVelZ = Math.cos(player.angle);
-        const dot = pdx * pVelX + pdz * pVelZ; 
-        
-        if (dot > 0 && distToPlayerSq > 40000) {
-           rubberBand = 4.5; // L'IA est loin derrière, elle s'énerve !
-        } else if (dot < 0 && distToPlayerSq > 60000) {
-           rubberBand = -3.0; // L'IA est trop loin devant, elle fait des erreurs
-        }
-        
-        // 5. Synthèse du Volant et Drifting
-        steer += avoidSteer;
-        drift = (Math.abs(steer) > 1.5 && k.speed > 25); // Dérapage contrôlé
-        
-        k.maxAiSpeed = baseSpeed + draftBoost + rubberBand;
-
-        // 6. Urgence et Recovery (Si bloqué)
-        const C_tile = this.getTile(C_X, C_Z);
-        if (C_tile === 0) {
-           steer = (roadPull >= 0 ? 3.0 : -3.0) * k.handling;
-           acc = 0.5;
-        }
-        
-        if (k.speed < 5 && C_tile === 0 && this.getTile(k.x, k.z) === 0) {
-           k.stuckTime = (k.stuckTime || 0) + dt;
-           if (k.stuckTime > 1.0) {
-              acc = -1.0; // Marche arrière toute !
-              steer = -steer; // Braquage inversé pour se dégager
-           }
-        } else {
-           k.stuckTime = 0;
+        // ── IA par Waypoints ──
+        const ai = this.aiControllers.find(c => c.kart === k);
+        if (ai) {
+          const result = ai.update(dt, this.karts, this.karts[0], (x, z) => this.getTile(x, z));
+          acc = result.acc;
+          steer = result.steer;
+          drift = result.drift;
         }
       }
-      
-      // Physique Accélération
-      if (acc > 0) k.speed += 25 * dt;
-      else k.speed -= 15 * dt;
-      
-      // Physique Frottement Sol
-      const tx = Math.floor(k.x / TILE_SIZE);
-      const tz = Math.floor(k.z / TILE_SIZE);
-      const tile = (tx>=0 && tx<this.track.w && tz>=0 && tz<this.track.h) ? this.track.data[tz*this.track.w + tx] : 0;
-      if (tile === 0) k.speed *= 0.85; // Fort ralentissement sur l'herbe
-      
-      // Limite de vitesse (Permettre la marche arrière)
-      const limit = k.isPlayer ? (drift ? 38 : 32) : k.maxAiSpeed;
-      k.speed = Math.max(-15, Math.min(k.speed, limit));
-      
-      // Rotation
-      const steerMod = drift ? 3.5 : 2.0;
-      k.angle += steer * steerMod * dt * Math.max(0.3, Math.abs(k.speed)/32);
-      
-      // Déplacement (Vecteur avant)
+
+      // ── Physique ──
+      // Accélération
+      if (acc > 0) {
+        k.speed += acc * 30 * dt;
+      } else if (acc < 0) {
+        k.speed += acc * 20 * dt; // Marche arrière
+      } else {
+        k.speed -= 12 * dt; // Décélération naturelle
+      }
+
+      // Frottement sol
+      const tile = this.getTile(k.x, k.z);
+      if (tile === 0) k.speed *= (1.0 - 2.0 * dt); // Fort ralentissement herbe
+
+      // Limite de vitesse
+      const limit = k.maxAiSpeed;
+      k.speed = Math.max(-12, Math.min(k.speed, limit));
+
+      // Rotation (proportionnelle à la vitesse, mais toujours un minimum)
+      const steerMod = drift ? 3.5 : 2.2;
+      const speedFactor = Math.max(0.25, Math.abs(k.speed) / 30);
+      k.angle += steer * steerMod * dt * speedFactor;
+
+      // Déplacement
       k.x += Math.sin(k.angle) * k.speed * dt;
       k.z += Math.cos(k.angle) * k.speed * dt;
     }
-    
-    // 7. Collisions Physiques entre les Karts (Auto-tamponneuses)
+
+    // ── Collisions physiques entre karts ──
     for (let i = 0; i < this.karts.length; i++) {
-       for (let j = i + 1; j < this.karts.length; j++) {
-          const k1 = this.karts[i];
-          const k2 = this.karts[j];
-          const dx = k2.x - k1.x;
-          const dz = k2.z - k1.z;
-          const distSq = dx*dx + dz*dz;
-          const radius = 6.0; 
-          const minDist = radius * 2;
-          
-          if (distSq > 0 && distSq < minDist*minDist) {
-             const dist = Math.sqrt(distSq);
-             const push = (minDist - dist) / 2;
-             const nx = dx / dist;
-             const nz = dz / dist;
-             
-             // Repulsion physique
-             k1.x -= nx * push;
-             k1.z -= nz * push;
-             k2.x += nx * push;
-             k2.z += nz * push;
-             
-             // Perte de vitesse (frottement)
-             k1.speed *= 0.98;
-             k2.speed *= 0.98;
-          }
-       }
+      for (let j = i + 1; j < this.karts.length; j++) {
+        const k1 = this.karts[i];
+        const k2 = this.karts[j];
+        const dx = k2.x - k1.x;
+        const dz = k2.z - k1.z;
+        const distSq = dx * dx + dz * dz;
+        const minDist = 5.0;
+
+        if (distSq > 0.01 && distSq < minDist * minDist) {
+          const dist = Math.sqrt(distSq);
+          const overlap = (minDist - dist) / 2;
+          const nx = dx / dist;
+          const nz = dz / dist;
+
+          k1.x -= nx * overlap;
+          k1.z -= nz * overlap;
+          k2.x += nx * overlap;
+          k2.z += nz * overlap;
+
+          // Transfert d'énergie cinétique
+          const relSpeed = (k1.speed - k2.speed) * 0.3;
+          k1.speed -= relSpeed;
+          k2.speed += relSpeed;
+
+          k1.speed *= 0.95;
+          k2.speed *= 0.95;
+        }
+      }
     }
   }
 
-  // Ciel dynamique avec dégradé
-  getSkyColor(y, h) {
-    const ratio = y / h;
-    const r = Math.floor(0x40 + ratio * (0x80 - 0x40));
-    const g = Math.floor(0xb0 + ratio * (0xdb - 0xb0));
-    const b = Math.floor(0xe0 + ratio * (0xff - 0xe0));
-    return 0xFF000000 | (b << 16) | (g << 8) | r;
-  }
-
+  // ── Rendu Mode 7 (sol projeté) ──
   drawMode7() {
     const player = this.karts[0];
     const camX = player.x;
     const camZ = player.z;
     const camA = player.angle;
     const camHeight = 6.0;
-    const fov = 1.0; 
-    
+    const fov = 1.0;
+
     const W = this.renderW;
     const H = this.renderH;
     const hHalf = H - this.horizon;
-    
+
     const trackW = this.track.w;
     const trackH = this.track.h;
     const data = this.track.data;
     const T = TILE_SIZE;
 
-    // Cache des couleurs ABGR
-    const COL_GRASS1 = 0xFF28AA28, COL_GRASS2 = 0xFF229222;
-    const COL_ASPHALT = 0xFF555555, COL_START = 0xFFEEEEEE;
-    const COL_CURB_R = 0xFF0000FF, COL_CURB_W = 0xFFFFFFFF; // Vibreurs Rouge et Blanc
+    const sinA = Math.sin(camA);
+    const cosA = Math.cos(camA);
 
     let offset = 0;
-    
-    // On ne boucle que sur la moitié basse
+
     for (let y = 0; y < hHalf; y++) {
-        // Distance de la ligne actuelle
-        const rowDist = camHeight / (y + 1) * (H/2);
-        
-        // Rayon gauche de l'écran
-        const rayX0 = Math.sin(camA) + Math.cos(camA) * fov;
-        const rayZ0 = Math.cos(camA) - Math.sin(camA) * fov;
-        // Rayon droit de l'écran
-        const rayX1 = Math.sin(camA) - Math.cos(camA) * fov;
-        const rayZ1 = Math.cos(camA) + Math.sin(camA) * fov;
+      const rowDist = camHeight / (y + 1) * (H / 2);
 
-        const floorX0 = camX + rowDist * rayX0;
-        const floorZ0 = camZ + rowDist * rayZ0;
-        const floorX1 = camX + rowDist * rayX1;
-        const floorZ1 = camZ + rowDist * rayZ1;
+      const rayX0 = sinA + cosA * fov;
+      const rayZ0 = cosA - sinA * fov;
+      const rayX1 = sinA - cosA * fov;
+      const rayZ1 = cosA + sinA * fov;
 
-        const stepX = (floorX1 - floorX0) / W;
-        const stepZ = (floorZ1 - floorZ0) / W;
+      const floorX0 = camX + rowDist * rayX0;
+      const floorZ0 = camZ + rowDist * rayZ0;
+      const floorX1 = camX + rowDist * rayX1;
+      const floorZ1 = camZ + rowDist * rayZ1;
 
-        let floorX = floorX0;
-        let floorZ = floorZ0;
+      const stepX = (floorX1 - floorX0) / W;
+      const stepZ = (floorZ1 - floorZ0) / W;
 
-        for (let x = 0; x < W; x++) {
-          const tx = Math.floor(floorX / T);
-          const tz = Math.floor(floorZ / T);
-          const tile = (tx>=0 && tx<trackW && tz>=0 && tz<trackH) ? data[tz*trackW + tx] : 0;
-          
-          let col = 0xFF000000;
-          
-          if (tile > 0) {
-             // Graphismes de la route (Asphalte + Vibreurs)
-             const lx = floorX - tx*T;
-             const lz = floorZ - tz*T;
-             const bw = 1.5; // Épaisseur du vibreur
-             
-             // Détecter si on est sur un bord adjacent à l'herbe
-             let isBorder = false;
-             if (lx < bw && (tx-1 < 0 || data[tz*trackW + tx-1] === 0)) isBorder = true;
-             else if (lx > T-bw && (tx+1 >= trackW || data[tz*trackW + tx+1] === 0)) isBorder = true;
-             else if (lz < bw && (tz-1 < 0 || data[(tz-1)*trackW + tx] === 0)) isBorder = true;
-             else if (lz > T-bw && (tz+1 >= trackH || data[(tz+1)*trackW + tx] === 0)) isBorder = true;
-             
-             if (isBorder) {
-                 const checker = Math.floor((floorX + floorZ) / 3) % 2;
-                 col = checker === 0 ? COL_CURB_R : COL_CURB_W;
-             } else if (tile === 2) {
-                 const checker = Math.floor(floorX / 2) % 2;
-                 col = checker === 0 ? COL_START : COL_ASPHALT;
-             } else {
-                 col = COL_ASPHALT;
-             }
+      let floorX = floorX0;
+      let floorZ = floorZ0;
+
+      for (let x = 0; x < W; x++) {
+        const tx = Math.floor(floorX / T);
+        const tz = Math.floor(floorZ / T);
+        const tileVal = (tx >= 0 && tx < trackW && tz >= 0 && tz < trackH)
+          ? data[tz * trackW + tx] : 0;
+
+        let col;
+
+        if (tileVal > 0) {
+          // ── Route ──
+          const lx = floorX - tx * T;
+          const lz = floorZ - tz * T;
+          const bw = 1.8;
+
+          // Vibreurs sur les bords adjacents à l'herbe
+          let isBorder = false;
+          if (lx < bw  && this._tileAt(tx - 1, tz) === 0) isBorder = true;
+          else if (lx > T - bw && this._tileAt(tx + 1, tz) === 0) isBorder = true;
+          else if (lz < bw  && this._tileAt(tx, tz - 1) === 0) isBorder = true;
+          else if (lz > T - bw && this._tileAt(tx, tz + 1) === 0) isBorder = true;
+
+          if (isBorder) {
+            const checker = Math.floor((floorX + floorZ) / 3) & 1;
+            col = checker ? COL_CURB_R : COL_CURB_W;
+          } else if (tileVal === 2) {
+            // Damier départ
+            const checker = (Math.floor(floorX / 2) ^ Math.floor(floorZ / 2)) & 1;
+            col = checker ? COL_START : COL_ASPHALT1;
           } else {
-             // Graphismes de l'herbe (Damier)
-             const checker = (Math.floor(floorX/T) % 2) === (Math.floor(floorZ/T) % 2);
-             col = checker ? COL_GRASS1 : COL_GRASS2;
-          }
-          
-          // Ombrage au loin
-          if (y < 20) {
-              const fade = Math.max(0.3, y / 20);
-              const r = ((col & 0xFF) * fade) & 0xFF;
-              const g = (((col >> 8) & 0xFF) * fade) & 0xFF;
-              const b = (((col >> 16) & 0xFF) * fade) & 0xFF;
-              col = 0xFF000000 | (b << 16) | (g << 8) | r;
-          }
+            // Ligne centrale (au milieu de la tuile)
+            const halfT = T / 2;
+            const atCenter = (Math.abs(lx - halfT) < 0.4 || Math.abs(lz - halfT) < 0.4);
+            // Seulement si c'est un segment droit (route des deux côtés)
+            const isHStripe = (this._tileAt(tx - 1, tz) > 0 && this._tileAt(tx + 1, tz) > 0);
+            const isVStripe = (this._tileAt(tx, tz - 1) > 0 && this._tileAt(tx, tz + 1) > 0);
 
-          this.pixels[offset++] = col;
-          
-          floorX += stepX;
-          floorZ += stepZ;
+            if (atCenter && (isHStripe || isVStripe)) {
+              // Pointillés : un tronçon sur deux
+              const tileSum = (isHStripe ? tz : tx);
+              col = (tileSum & 1) ? COL_CENTER : COL_ASPHALT1;
+            } else {
+              // Asphalte légèrement texturé
+              const checker = ((Math.floor(floorX * 2) ^ Math.floor(floorZ * 2)) & 1);
+              col = checker ? COL_ASPHALT1 : COL_ASPHALT2;
+            }
+          }
+        } else {
+          // ── Herbe (damier) ──
+          const checker = (Math.floor(floorX / T) ^ Math.floor(floorZ / T)) & 1;
+          col = checker ? COL_GRASS1 : COL_GRASS2;
         }
+
+        // Fog à l'horizon
+        if (y < 25) {
+          const fade = Math.max(0.25, y / 25);
+          const r = ((col & 0xFF) * fade) & 0xFF;
+          const g = (((col >> 8) & 0xFF) * fade) & 0xFF;
+          const b = (((col >> 16) & 0xFF) * fade) & 0xFF;
+          col = 0xFF000000 | (b << 16) | (g << 8) | r;
+        }
+
+        this.pixels[offset++] = col;
+
+        floorX += stepX;
+        floorZ += stepZ;
+      }
     }
   }
 
-  // Rendu d'un sprite de Kart directionnel (4 vues : Face, Dos, Gauche, Droite)
+  // ── Sprite de kart directionnel ──
   drawKartSprite(ctx, cx, cy, width, skinHex, steer, diffAngle = 0) {
     const w = width;
     const h = width * 0.8;
-    const px = cx - w/2;
+    const px = cx - w / 2;
     const py = cy - h;
-    
-    let diff = diffAngle % (Math.PI * 2);
-    if (diff > Math.PI) diff -= Math.PI * 2;
-    if (diff < -Math.PI) diff += Math.PI * 2;
-    
-    const pi4 = Math.PI / 4;
+
+    let diff = diffAngle % PI2;
+    if (diff > PI) diff -= PI2;
+    if (diff < -PI) diff += PI2;
+
+    const pi4 = PI / 4;
     let view = 'back';
-    if (diff > 3*pi4 || diff < -3*pi4) view = 'front';
+    if (diff > 3 * pi4 || diff < -3 * pi4) view = 'front';
     else if (diff > pi4) view = 'left';
     else if (diff < -pi4) view = 'right';
 
@@ -585,143 +784,166 @@ export class MarioKartScene {
     switch (view) {
       case 'back':
         ctx.fillStyle = '#111';
-        ctx.fillRect(px - w*0.1, py + h*0.2, w*0.3, h*0.3); // Av gauche
-        ctx.fillRect(px + w*0.8, py + h*0.2, w*0.3, h*0.3); // Av droite
-        ctx.fillRect(px - w*0.15, py + h*0.7, w*0.3, h*0.4); // Arr gauche
-        ctx.fillRect(px + w*0.85, py + h*0.7, w*0.3, h*0.4); // Arr droite
-        ctx.fillStyle = '#999'; ctx.fillRect(px + w*0.1, py + h*0.3, w*0.8, h*0.6);
+        ctx.fillRect(px - w * 0.1, py + h * 0.2, w * 0.3, h * 0.3);
+        ctx.fillRect(px + w * 0.8, py + h * 0.2, w * 0.3, h * 0.3);
+        ctx.fillRect(px - w * 0.15, py + h * 0.7, w * 0.3, h * 0.4);
+        ctx.fillRect(px + w * 0.85, py + h * 0.7, w * 0.3, h * 0.4);
+        ctx.fillStyle = '#999';
+        ctx.fillRect(px + w * 0.1, py + h * 0.3, w * 0.8, h * 0.6);
         ctx.fillStyle = skinHex;
-        ctx.fillRect(px + w*0.2, py + h*0.4, w*0.6, h*0.5);
-        ctx.fillRect(px + w*0.3, py + h*0.2, w*0.4, h*0.2); // Capot
-        ctx.fillStyle = skinHex;
-        ctx.beginPath(); ctx.arc(cx + headOff, py + h*0.2, w*0.3, 0, Math.PI*2); ctx.fill();
+        ctx.fillRect(px + w * 0.2, py + h * 0.4, w * 0.6, h * 0.5);
+        ctx.fillRect(px + w * 0.3, py + h * 0.2, w * 0.4, h * 0.2);
+        ctx.beginPath(); ctx.arc(cx + headOff, py + h * 0.2, w * 0.3, 0, PI2); ctx.fill();
         ctx.fillStyle = '#ffccaa';
-        ctx.fillRect(cx - w*0.15 + headOff, py + h*0.1, w*0.3, w*0.15);
+        ctx.fillRect(cx - w * 0.15 + headOff, py + h * 0.1, w * 0.3, w * 0.15);
         break;
 
       case 'front':
         ctx.fillStyle = '#111';
-        ctx.fillRect(px - w*0.15, py + h*0.7, w*0.3, h*0.4); // Arr gauche
-        ctx.fillRect(px + w*0.85, py + h*0.7, w*0.3, h*0.4); // Arr droite
-        ctx.fillRect(px - w*0.1, py + h*0.2, w*0.3, h*0.3); // Av gauche
-        ctx.fillRect(px + w*0.8, py + h*0.2, w*0.3, h*0.3); // Av droite
-        ctx.fillStyle = '#999'; ctx.fillRect(px + w*0.1, py + h*0.3, w*0.8, h*0.6);
+        ctx.fillRect(px - w * 0.15, py + h * 0.7, w * 0.3, h * 0.4);
+        ctx.fillRect(px + w * 0.85, py + h * 0.7, w * 0.3, h * 0.4);
+        ctx.fillRect(px - w * 0.1, py + h * 0.2, w * 0.3, h * 0.3);
+        ctx.fillRect(px + w * 0.8, py + h * 0.2, w * 0.3, h * 0.3);
+        ctx.fillStyle = '#999';
+        ctx.fillRect(px + w * 0.1, py + h * 0.3, w * 0.8, h * 0.6);
         ctx.fillStyle = skinHex;
-        ctx.fillRect(px + w*0.2, py + h*0.1, w*0.6, h*0.6);
-        ctx.fillRect(px + w*0.3, py + h*0.6, w*0.4, h*0.3); // Pare-choc
-        ctx.fillStyle = skinHex;
-        ctx.beginPath(); ctx.arc(cx - headOff, py + h*0.2, w*0.3, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#ffccaa'; 
-        ctx.fillRect(cx - w*0.2 - headOff, py + h*0.05, w*0.4, w*0.25);
+        ctx.fillRect(px + w * 0.2, py + h * 0.1, w * 0.6, h * 0.6);
+        ctx.fillRect(px + w * 0.3, py + h * 0.6, w * 0.4, h * 0.3);
+        ctx.beginPath(); ctx.arc(cx - headOff, py + h * 0.2, w * 0.3, 0, PI2); ctx.fill();
+        ctx.fillStyle = '#ffccaa';
+        ctx.fillRect(cx - w * 0.2 - headOff, py + h * 0.05, w * 0.4, w * 0.25);
         ctx.fillStyle = 'black';
-        ctx.fillRect(cx - w*0.1 - headOff, py + h*0.1, w*0.05, w*0.05); // Oeil G
-        ctx.fillRect(cx + w*0.05 - headOff, py + h*0.1, w*0.05, w*0.05); // Oeil D
+        ctx.fillRect(cx - w * 0.1 - headOff, py + h * 0.1, w * 0.05, w * 0.05);
+        ctx.fillRect(cx + w * 0.05 - headOff, py + h * 0.1, w * 0.05, w * 0.05);
         break;
 
-      case 'right': // Nez à droite
+      case 'right':
         ctx.fillStyle = '#111';
-        ctx.fillRect(px + w*0.1, py + h*0.6, w*0.3, h*0.4); // Arr
-        ctx.fillRect(px + w*0.6, py + h*0.6, w*0.3, h*0.4); // Av
-        ctx.fillStyle = '#999'; ctx.fillRect(px + w*0.1, py + h*0.4, w*0.8, h*0.4);
+        ctx.fillRect(px + w * 0.1, py + h * 0.6, w * 0.3, h * 0.4);
+        ctx.fillRect(px + w * 0.6, py + h * 0.6, w * 0.3, h * 0.4);
+        ctx.fillStyle = '#999';
+        ctx.fillRect(px + w * 0.1, py + h * 0.4, w * 0.8, h * 0.4);
         ctx.fillStyle = skinHex;
-        ctx.fillRect(px + w*0.1, py + h*0.3, w*0.5, h*0.3); // Cockpit
-        ctx.fillRect(px + w*0.6, py + h*0.45, w*0.3, h*0.15); // Nez
-        ctx.fillStyle = skinHex;
-        ctx.beginPath(); ctx.arc(cx - w*0.1, py + h*0.15, w*0.25, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#ffccaa'; 
-        ctx.fillRect(cx - w*0.1, py + h*0.05, w*0.25, w*0.15);
+        ctx.fillRect(px + w * 0.1, py + h * 0.3, w * 0.5, h * 0.3);
+        ctx.fillRect(px + w * 0.6, py + h * 0.45, w * 0.3, h * 0.15);
+        ctx.beginPath(); ctx.arc(cx - w * 0.1, py + h * 0.15, w * 0.25, 0, PI2); ctx.fill();
+        ctx.fillStyle = '#ffccaa';
+        ctx.fillRect(cx - w * 0.1, py + h * 0.05, w * 0.25, w * 0.15);
         break;
 
-      case 'left': // Nez à gauche
+      case 'left':
         ctx.fillStyle = '#111';
-        ctx.fillRect(px + w*0.6, py + h*0.6, w*0.3, h*0.4); // Arr
-        ctx.fillRect(px + w*0.1, py + h*0.6, w*0.3, h*0.4); // Av
-        ctx.fillStyle = '#999'; ctx.fillRect(px + w*0.1, py + h*0.4, w*0.8, h*0.4);
+        ctx.fillRect(px + w * 0.6, py + h * 0.6, w * 0.3, h * 0.4);
+        ctx.fillRect(px + w * 0.1, py + h * 0.6, w * 0.3, h * 0.4);
+        ctx.fillStyle = '#999';
+        ctx.fillRect(px + w * 0.1, py + h * 0.4, w * 0.8, h * 0.4);
         ctx.fillStyle = skinHex;
-        ctx.fillRect(px + w*0.4, py + h*0.3, w*0.5, h*0.3); // Cockpit
-        ctx.fillRect(px + w*0.1, py + h*0.45, w*0.3, h*0.15); // Nez
-        ctx.fillStyle = skinHex;
-        ctx.beginPath(); ctx.arc(cx + w*0.1, py + h*0.15, w*0.25, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = '#ffccaa'; 
-        ctx.fillRect(cx - w*0.15, py + h*0.05, w*0.25, w*0.15);
+        ctx.fillRect(px + w * 0.4, py + h * 0.3, w * 0.5, h * 0.3);
+        ctx.fillRect(px + w * 0.1, py + h * 0.45, w * 0.3, h * 0.15);
+        ctx.beginPath(); ctx.arc(cx + w * 0.1, py + h * 0.15, w * 0.25, 0, PI2); ctx.fill();
+        ctx.fillStyle = '#ffccaa';
+        ctx.fillRect(cx - w * 0.15, py + h * 0.05, w * 0.25, w * 0.15);
         break;
     }
   }
 
+  // ── Rendu principal ──
   draw(ctx) {
     if (this.state === 'menu') return;
-    
-    const horizon = this.horizon;
 
-    // 1. Ciel avec dégradé et lueur
-    const grad = this.bufferCtx.createLinearGradient(0, 0, 0, horizon);
-    grad.addColorStop(0, '#369bff'); // Bleu intense en haut
-    grad.addColorStop(1, '#a6d9ff'); // Bleu clair vers l'horizon
-    this.bufferCtx.fillStyle = grad;
-    this.bufferCtx.fillRect(0, 0, this.renderW, horizon);
-    
-    // 2. Dessiner le sol projeté dans le ImageData (moitié basse)
+    const horizon = this.horizon;
+    const bc = this.bufferCtx;
+
+    // 1. Ciel dégradé
+    const grad = bc.createLinearGradient(0, 0, 0, horizon);
+    grad.addColorStop(0, '#1a5aff');
+    grad.addColorStop(0.6, '#5599ff');
+    grad.addColorStop(1, '#aaddff');
+    bc.fillStyle = grad;
+    bc.fillRect(0, 0, this.renderW, horizon);
+
+    // 2. Sol Mode 7
     this.drawMode7();
-    this.bufferCtx.putImageData(this.imgData, 0, horizon);
-    
-    // 3. Dessin des IAs et du Joueur par-dessus
+    bc.putImageData(this.imgData, 0, horizon);
+
+    // 3. Sprites des karts (Z-sort)
     const player = this.karts[0];
     const camA = player.angle;
     const camX = player.x;
     const camZ = player.z;
-    
-    // Tri des entités : du plus loin au plus proche (Z-Sort)
-    const sorted = [...this.karts].sort((a,b) => {
-      const d1 = Math.pow(a.x-camX,2) + Math.pow(a.z-camZ,2);
-      const d2 = Math.pow(b.x-camX,2) + Math.pow(b.z-camZ,2);
-      return d2 - d1; 
+
+    const sorted = [...this.karts].sort((a, b) => {
+      const d1 = (a.x - camX) ** 2 + (a.z - camZ) ** 2;
+      const d2 = (b.x - camX) ** 2 + (b.z - camZ) ** 2;
+      return d2 - d1;
     });
+
+    const sinCam = Math.sin(camA);
+    const cosCam = Math.cos(camA);
 
     for (const k of sorted) {
       if (k.isPlayer) {
-        // Le joueur est fixé en bas de l'écran (vu de dos)
         const I = this.game.input;
         const steer = (I.isDown('left', 0) ? -1 : 0) + (I.isDown('right', 0) ? 1 : 0);
-        this.drawKartSprite(this.bufferCtx, this.renderW / 2, this.renderH - 10, 48, k.skin.color, steer);
+        this.drawKartSprite(bc, this.renderW / 2, this.renderH - 10, 48, k.skin.color, steer);
       } else {
-        // Projection mathématique parfaite des adversaires
         const dx = k.x - camX;
         const dz = k.z - camZ;
-        
-        // Rotation mathématique correcte par rapport à la caméra
-        const rx = -dx * Math.cos(camA) + dz * Math.sin(camA);
-        const rz = dz * Math.cos(camA) + dx * Math.sin(camA);
-        
-        if (rz > 0.5) { // Devant la caméra uniquement
-          const focalLength = 160; 
-          const scale = focalLength / rz; // Plus c'est loin, plus l'échelle diminue
+
+        // Rotation dans le repère caméra
+        const rx = dx * cosCam - dz * sinCam;
+        const rz = dx * sinCam + dz * cosCam;
+
+        if (rz > 1.0) {
+          const focalLength = 160;
+          const scale = focalLength / rz;
           const screenX = (this.renderW / 2) + (rx * scale);
-          const screenY = horizon + (6.0 * scale); // 6.0 = camHeight
-          
-          // Vérifier si à l'écran
-          if (screenX > -100 && screenX < this.renderW+100 && screenY > horizon) {
-             const kartSize = Math.max(4, Math.min(60, 20 * scale));
-             const diffAngle = k.angle - camA;
-             // SteerIA ne s'applique qu'en vue arrière/avant pour faire tourner la tête
-             const steerIA = (Math.sin(k.id*10 + Date.now()/200) > 0) ? 0.5 : -0.5;
-             this.drawKartSprite(this.bufferCtx, screenX, screenY, kartSize, k.skin.color, steerIA, diffAngle);
+          const screenY = horizon + (6.0 * scale);
+
+          if (screenX > -100 && screenX < this.renderW + 100 && screenY > horizon && screenY < this.renderH + 50) {
+            const kartSize = Math.max(4, Math.min(60, 20 * scale));
+            const diffAngle = k.angle - camA;
+            const steerIA = Math.sin(k.id * 10 + Date.now() / 200) * 0.5;
+            this.drawKartSprite(bc, screenX, screenY, kartSize, k.skin.color, steerIA, diffAngle);
           }
         }
       }
     }
 
-    // 3. Dessiner le Buffer sur l'écran final
+    // 4. Copie sur l'écran final
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(this.bufferCanvas, 0, 0, VIEW_W, VIEW_H);
 
-    // 4. HUD Superposé
+    // 5. HUD
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 24px sans-serif';
-    ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
-    ctx.fillText('🏎️ PIXEL KART 2D', 15, 35);
-    const speed = Math.round(player.speed * 4); // km/h affichés
-    ctx.fillText(speed + ' km/h', VIEW_W - 120, VIEW_H - 25);
-    ctx.shadowColor = 'transparent'; 
+    ctx.shadowColor = '#000';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetX = 2;
+    ctx.shadowOffsetY = 2;
+    ctx.fillText('🏎️ PIXEL KART', 15, 35);
+
+    const speed = Math.round(Math.abs(player.speed) * 4);
+    ctx.fillText(speed + ' km/h', VIEW_W - 140, VIEW_H - 25);
+
+    // Countdown
+    if (this.countdown > 0) {
+      ctx.font = 'bold 80px sans-serif';
+      ctx.fillStyle = '#ff3333';
+      ctx.textAlign = 'center';
+      ctx.fillText(Math.ceil(this.countdown), VIEW_W / 2, VIEW_H / 2);
+      ctx.textAlign = 'left';
+    }
+
+    // Temps de course
+    const mins = Math.floor(this.raceTime / 60);
+    const secs = Math.floor(this.raceTime % 60);
+    const ms = Math.floor((this.raceTime * 100) % 100);
+    ctx.font = 'bold 20px monospace';
+    ctx.fillStyle = '#ffdd44';
+    ctx.fillText(`${mins}:${String(secs).padStart(2, '0')}.${String(ms).padStart(2, '0')}`, VIEW_W / 2 - 50, 30);
+
+    ctx.shadowColor = 'transparent';
   }
 
   dispose() {}
