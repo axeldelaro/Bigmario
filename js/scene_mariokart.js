@@ -293,12 +293,17 @@ export class MarioKartScene {
       if (k.isPlayer) {
         // ACCELERATION = SAUT. FREIN/DERAPAGE = TIR
         acc = I.isDown('jump', 0) ? 1 : 0;
-        steer = (I.isDown('left', 0) ? -1 : 0) + (I.isDown('right', 0) ? 1 : 0);
+        steer = (I.isDown('left', 0) ? 1 : 0) + (I.isDown('right', 0) ? -1 : 0);
         drift = I.isDown('fire', 0);
       } else {
         // IA : Intelligence par antennes (feelers)
-        acc = 0.85 + Math.random()*0.15;
+        acc = 0.85;
         const lookDist = 14;
+        
+        // Dispersion du peloton (lane et vitesse uniques par IA)
+        const laneOffset = ((k.id * 37) % 11) / 10 - 0.5; // -0.5 à +0.5
+        k.maxAiSpeed = k.maxAiSpeed || (29 + ((k.id * 17) % 6)); // 29 à 34
+        
         const L_X = k.x + Math.sin(k.angle - 0.6) * lookDist;
         const L_Z = k.z + Math.cos(k.angle - 0.6) * lookDist;
         const R_X = k.x + Math.sin(k.angle + 0.6) * lookDist;
@@ -311,14 +316,14 @@ export class MarioKartScene {
         const tileF = this.getTile(F_X, F_Z);
         
         if (tileF === 0) { // Mur d'herbe en face
-          if (tileL > 0) steer = -1.5; // Tourne gauche toute !
-          else if (tileR > 0) steer = 1.5; // Tourne droite toute !
-          else steer = 1.8; // Demi-tour d'urgence
+          if (tileL > 0) steer = 1.5; // Tourne gauche toute !
+          else if (tileR > 0) steer = -1.5; // Tourne droite toute !
+          else steer = -1.8; // Demi-tour d'urgence
         } else {
-          // Sur la route, on se centre
-          if (tileL === 0 && tileR > 0) steer = 1.0;
-          else if (tileR === 0 && tileL > 0) steer = -1.0;
-          else steer = Math.sin(Date.now()/250 + i * 45) * 0.15; // Léger wobble naturel
+          // Sur la route, on évite les bords
+          if (tileL === 0 && tileR > 0) steer = -1.0; // Herbe à gauche -> droite
+          else if (tileR === 0 && tileL > 0) steer = 1.0; // Herbe à droite -> gauche
+          else steer = Math.sin(Date.now()/250 + i * 45) * 0.15 + laneOffset; // Wobble naturel
         }
       }
       
@@ -333,7 +338,8 @@ export class MarioKartScene {
       if (tile === 0) k.speed *= 0.85; // Fort ralentissement sur l'herbe
       
       // Limite de vitesse
-      k.speed = Math.max(0, Math.min(k.speed, drift ? 38 : 32));
+      const limit = k.isPlayer ? (drift ? 38 : 32) : k.maxAiSpeed;
+      k.speed = Math.max(0, Math.min(k.speed, limit));
       
       // Rotation (permettre de tourner même à très basse vitesse)
       const steerMod = drift ? 3.5 : 2.0;
@@ -442,8 +448,8 @@ export class MarioKartScene {
     const pi4 = Math.PI / 4;
     let view = 'back';
     if (diff > 3*pi4 || diff < -3*pi4) view = 'front';
-    else if (diff > pi4) view = 'right';
-    else if (diff < -pi4) view = 'left';
+    else if (diff > pi4) view = 'left';
+    else if (diff < -pi4) view = 'right';
 
     const headOff = steer * (w * 0.1);
 
