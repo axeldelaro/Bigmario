@@ -60,11 +60,25 @@ export class BotBrain {
       };
     }
 
-    // --- cible ---
-    let tx, ty;
-    if (ctx.target) { tx = ctx.target.x; ty = ctx.target.y; }
-    else if (ctx.opponent) { tx = ctx.opponent.x + ctx.opponent.w / 2; ty = ctx.opponent.y; }
-    else { tx = me.x + me.w / 2; ty = me.y; }
+    // --- cible prioritaire (items puis target) ---
+    let tx, ty, tItem = false;
+    
+    // Si pas en versus direct, on cherche un item proche
+    if (!ctx.opponent && ctx.items && ctx.items.length > 0 && this.skill > 0.6) {
+      let bestIt = null, bestDist = 9999;
+      for (const it of ctx.items) {
+        if (it.dead) continue;
+        const d = Math.hypot((it.x - cx), (it.y - me.y));
+        if (d < bestDist && d < TILE * 15) { bestDist = d; bestIt = it; }
+      }
+      if (bestIt) { tx = bestIt.x + bestIt.w/2; ty = bestIt.y; tItem = true; }
+    }
+
+    if (tx === undefined) {
+      if (ctx.target) { tx = ctx.target.x; ty = ctx.target.y; }
+      else if (ctx.opponent) { tx = ctx.opponent.x + ctx.opponent.w / 2; ty = ctx.opponent.y; }
+      else { tx = me.x + me.w / 2; ty = me.y; }
+    }
     const cx = me.x + me.w / 2;
     let dx = tx - cx;
     if (this.panicT > 0) dx = this.panicDir * 100; // débloquage : on force une direction
@@ -80,10 +94,15 @@ export class BotBrain {
     const want = wantRight ? 1 : wantLeft ? -1 : (me.dir || 1);
 
     // --- capteurs ---
-    const sx = want > 0 ? me.x + me.w + 3 : me.x - 3;
-    const groundAt = (px, reach = 3) => { for (let d = 0; d <= reach; d++) if (level.solidAt(px, me.y + me.h + 3 + d * TILE)) return true; return false; };
+    const dirFactor = want || me.dir || 1;
+    const sx = dirFactor > 0 ? me.x + me.w + 3 : me.x - 3;
+    const groundAt = (px, reach = 5) => { for (let d = 0; d <= reach; d++) if (level.solidAt(px, me.y + me.h + 3 + d * TILE)) return true; return false; };
     const wallAhead = level.solidAt(sx, me.y + me.h - 5) || level.solidAt(sx, me.y + 6);
-    const gapAhead = me.onGround && !groundAt(sx) && !groundAt(sx + want * 8);
+    
+    // Lookahead plus intelligent (gap ahead)
+    const speedX = Math.abs(me.vx) / 100; // plus on va vite, plus on regarde loin
+    const lookDist = 8 + speedX * 8;
+    const gapAhead = me.onGround && !groundAt(sx) && !groundAt(sx + dirFactor * lookDist);
     const targetAbove = (me.y - ty) > TILE * 0.8;
 
     // --- anti-blocage ---
@@ -144,8 +163,9 @@ export class BotBrain {
     if (me.onGround) this.slamLatch = false;
 
     // courir (sprint) quand la cible est loin et le chemin dégagé — réduit selon skill
-    const runThreshold = TILE * (3 + (1 - this.skill) * 4);
-    const run = adx > runThreshold && !gapAhead;
+    // En extrême, le bot sprinte beaucoup plus.
+    const runThreshold = TILE * (2 + (1 - this.skill) * 5);
+    const run = adx > runThreshold && !gapAhead && !wallAhead && (this.skill > 0.4);
 
     // Ralentir le bot aux niveaux faibles : ignorer les directives de droite/gauche par moments
     const moveBlocked = Math.random() < this.errorRate * 0.15;

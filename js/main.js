@@ -1,7 +1,7 @@
 // main.js — bootstrap: canvas adaptatif, boucle, gestionnaire de scènes, menus.
 import { VIEW_W, VIEW_H, Save } from './core.js';
 import { Input } from './input.js';
-import { buildArt } from './art.js';
+import { buildArt, SKIN_LIST } from './art.js';
 import { setArt } from './entities.js';
 import { resumeAudio, toggleMute, isMuted, playMusic, stopMusic, SFX } from './audio.js';
 import { GameScene } from './scene_game.js';
@@ -35,6 +35,10 @@ class Game {
   constructor() {
     this.input = new Input();
     this.art = buildArt(); setArt(this.art);
+    // --- Skin system ---
+    this._currentSkinId = Save.get('bigmario_skin', 'bolt');
+    // Vérifier que le skin sauvegardé existe, sinon fallback
+    if (!this.art.skins[this._currentSkinId]) this._currentSkinId = 'bolt';
     this.canvas = canvas;
     this.scene = null;
     this.paused = false;
@@ -193,7 +197,8 @@ class Game {
     for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(i * 90 + 60, VIEW_H + 12, 30, Math.PI, 0); ctx.fill(); }
     // héros qui salue (petit sprite qui sautille)
     const hop = Math.max(0, Math.sin(t * 2.5)) * 6;
-    const img = this.art.hero.smallIdle;
+    const skinSet = this.art.skins[this._currentSkinId] || this.art.hero;
+    const img = skinSet.smallIdle;
     if (img) ctx.drawImage(img, 24, VIEW_H - 30 - hop);
   }
 
@@ -230,6 +235,17 @@ class Game {
   }
 
   // ---------- Transitions ----------
+  startLevel(worldIdx, levelIdx, ghostMode = false, startPlaying = true) {
+    const lDef = WORLDS[worldIdx].levels[levelIdx];
+    const lid = `${worldIdx}-${levelIdx}`;
+    
+    // Générer un fantôme STAFF si aucun n'existe pour ce niveau
+    if (!GhostStore.has(lid) && GhostStore._topRaw(lid).length === 0) {
+      this.generateStaffGhost(lDef, lid);
+    }
+    
+    this.startMiniGame(lDef);
+  }
   startSolo(worldIdx = 0, levelIdx = 0) {
     this.clearUI(); this.mode = 'game'; this.paused = false;
     this._restart = () => this.startSolo(worldIdx, levelIdx);
@@ -556,6 +572,42 @@ class Game {
   // Réaffiche l'écran de fin après un replay (sans recompter le record)
   onSpeedrunFinishReopen(worldIdx, levelIdx, ms, ghostData) { this.onSpeedrunFinish(worldIdx, levelIdx, ms, ghostData); }
 
+  generateStaffGhost(levelDef, levelId) {
+    // Importation dynamique de BotBrain, Player, Level pour la simulation
+    import('./ai.js').then(AI => {
+      import('./entities.js').then(ENT => {
+        import('./level.js').then(LVL => {
+          import('./ghost.js').then(GH => {
+            const level = new LVL.Level(levelDef);
+            const player = new ENT.Player(level.start.x, level.start.y, { skin: 'bolt', id: 0 });
+            const bot = new AI.BotBrain({ skill: 1.0 }); // EXTREME skill
+            const ghostRec = new GH.GhostRecorder();
+            let ms = 0;
+            // Boucle de simulation rapide (max 120 sec de jeu)
+            const sceneMock = { addFloat:()=>{}, burst:()=>{}, spawnHazard:()=>{}, level: level, player: player, addShake:()=>{} };
+            while (ms < 120000 && !player.win && !player.dead && player.y < level.pixelH + 100) {
+              const inputs = bot.think(1/60, { me: player, level: level });
+              player.update(1/60, level, inputs, sceneMock);
+              ghostRec.update(1/60, player, ms);
+              // Vérifier si la cible est atteinte
+              const gx = level.goal.x, gy = level.goal.y;
+              if (player.x + player.w >= gx - 16 && player.x <= gx + 24 && player.y + player.h >= gy && player.y <= gy + 64) {
+                 player.win = true;
+              }
+              // Si boss, il faudrait le simuler aussi, mais on saute cette partie (les boss prennent trop de temps à simuler sans boucle complète)
+              if (levelDef.name.includes("boss") || levelDef.name.includes("Boss")) return; // skip staff ghost for boss
+              ms += 1000/60;
+            }
+            if (player.win) {
+               GH.GhostStore.addLocalTop(levelId, "BOT STAFF", ms, ghostRec.data());
+               GH.GhostStore.save(levelId, ghostRec.data()); // default ghost
+            }
+          });
+        });
+      });
+    });
+  }
+
   // ---------- UI helpers ----------
   clearUI() { this.scene?.dispose?.(); ui.classList.add('hidden'); ui.innerHTML = ''; this.fadeIn(); }
   panel(html) {
@@ -572,6 +624,7 @@ class Game {
         <button class="btn" id="b-speed">⏱ Contre-la-montre</button>
         <button class="btn secondary" id="b-vs">⚔ Versus</button>
         <button class="btn secondary" id="b-mini">🎮 Mini-jeux</button>
+        <button class="btn secondary" id="b-mk" style="background:linear-gradient(to bottom, #d02020, #a01010); border-color:#fff;">🏎 Mario Kart</button>
         <button class="btn secondary" id="b-edit">🛠 Créer un niveau</button>
         <button class="btn ghost" id="b-options">⚙ Options & Aide</button>
       </div>
@@ -581,6 +634,7 @@ class Game {
     p.querySelector('#b-speed').onclick = () => { resumeAudio(); this.showSpeedMenu(); };
     p.querySelector('#b-vs').onclick = () => { resumeAudio(); this.showVersusMenu(); };
     p.querySelector('#b-mini').onclick = () => { resumeAudio(); this.showMiniMenu(); };
+    p.querySelector('#b-mk').onclick = () => { resumeAudio(); this.startMarioKart(); };
     p.querySelector('#b-edit').onclick = () => { resumeAudio(); this.startEditor(); };
     p.querySelector('#b-options').onclick = () => this.showOptions();
   }
@@ -1348,8 +1402,6 @@ class Game {
     };
   }
 
-
-
   // ---- Hors-ligne : installation PWA + état du cache + mode local ----
   showOffline() {
     const ready = typeof navigator !== 'undefined' && navigator.serviceWorker && navigator.serviceWorker.controller;
@@ -1401,10 +1453,34 @@ class Game {
     p.querySelector('#back').onclick = () => this.showOptions();
   }
 
-  showOptions() {
+  showSkinMenu() {
+    let html = '<div class="title"><span class="big" style="font-size:30px">COSTUMES</span></div><div class="menu-list" style="display:flex; flex-wrap:wrap; justify-content:center; gap:10px; margin-bottom:20px;">';
+    for (const skin of SKIN_LIST) {
+      const active = this._currentSkinId === skin.id;
+      html += `<div class="skin-card" data-id="${skin.id}" style="width:100px; padding:10px; border:3px solid ${active ? '#ffd23b' : '#333'}; border-radius:8px; background:#111; cursor:pointer; text-align:center;">
+        <div style="width:40px; height:40px; margin:0 auto 10px; background-color:${skin.color}; border-radius:50%; border:2px solid #fff;"></div>
+        <div style="font-size:14px; color:${active ? '#ffd23b' : '#fff'}">${escapeHtml(skin.name)}</div>
+      </div>`;
+    }
+    html += '</div><div class="menu-list"><button class="btn ghost" id="back">← Retour</button></div>';
+    
+    const p = this.panel(html);
+    const cards = p.querySelectorAll('.skin-card');
+    cards.forEach(c => {
+      c.onclick = () => {
+        this._currentSkinId = c.dataset.id;
+        Save.set('bigmario_skin', this._currentSkinId);
+        this.showOptionsMenu();
+      };
+    });
+    p.querySelector('#back').onclick = () => this.showOptionsMenu();
+  }
+
+  showOptionsMenu() {
     const p = this.panel(`
       <div class="title"><span class="big" style="font-size:30px">OPTIONS</span></div>
       <div class="menu-list">
+        <button class="btn" id="skins">🎨 Costumes</button>
         <button class="btn secondary" id="ach">🏆 Succès (${unlockedCount()}/${ACHIEVEMENTS.length})</button>
         <button class="btn" id="offline">📥 Jouer hors-ligne</button>
         <button class="btn secondary" id="friend">👥 Fantôme d'ami / Replay</button>
@@ -1422,6 +1498,7 @@ class Game {
       </div>
       <p class="hint"><b>Aide</b><br>• Saut variable : reste appuyé pour sauter plus haut.<br>• 🍄 grandir · 🔥 tir · ⭐ invincible · 🟢 1 vie · 🪶 <b>plume</b> = maintiens Saut en l'air pour <b>planer</b>.<br>• Enchaîne les écrasements en l'air pour des combos.<br>• <b>Bas en l'air = écrasement piqué</b> (broie tout, même les pics).<br>• Manette : A saut, X tir, Start pause.</p>
     `);
+    p.querySelector('#skins').onclick = () => this.showSkinMenu();
     p.querySelector('#ach').onclick = () => this.showAchievements();
     p.querySelector('#offline').onclick = () => this.showOffline();
     p.querySelector('#fps').onclick = (e) => { this._showFps = !this._showFps; Save.set('showFps', this._showFps); e.target.textContent = this._showFps ? '📊 Compteur FPS: ON' : '📊 Compteur FPS: OFF'; };
