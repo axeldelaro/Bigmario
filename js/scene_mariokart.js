@@ -428,38 +428,89 @@ export class MarioKartScene {
     }
   }
 
-  // Rendu d'un sprite de Kart très net
-  drawKartSprite(ctx, cx, cy, width, skinHex, steer) {
+  // Rendu d'un sprite de Kart directionnel (4 vues : Face, Dos, Gauche, Droite)
+  drawKartSprite(ctx, cx, cy, width, skinHex, steer, diffAngle = 0) {
     const w = width;
     const h = width * 0.8;
     const px = cx - w/2;
     const py = cy - h;
     
-    // Roues (Noir)
-    ctx.fillStyle = '#111';
-    ctx.fillRect(px - w*0.1, py + h*0.2, w*0.3, h*0.3); // Avant gauche
-    ctx.fillRect(px + w*0.8, py + h*0.2, w*0.3, h*0.3); // Avant droite
-    ctx.fillRect(px - w*0.15, py + h*0.7, w*0.3, h*0.4); // Arrière gauche
-    ctx.fillRect(px + w*0.85, py + h*0.7, w*0.3, h*0.4); // Arrière droite
-
-    // Châssis (Gris)
-    ctx.fillStyle = '#999';
-    ctx.fillRect(px + w*0.1, py + h*0.3, w*0.8, h*0.6);
-
-    // Carrosserie (Couleur du joueur)
-    ctx.fillStyle = skinHex;
-    ctx.fillRect(px + w*0.2, py + h*0.4, w*0.6, h*0.5);
-    ctx.fillRect(px + w*0.3, py + h*0.2, w*0.4, h*0.2); // Capot avant
-
-    // Personnage (Tête)
-    const headOff = steer * (w * 0.1);
-    ctx.beginPath();
-    ctx.arc(cx + headOff, py + h*0.2, w*0.3, 0, Math.PI*2);
-    ctx.fill();
+    let diff = diffAngle % (Math.PI * 2);
+    if (diff > Math.PI) diff -= Math.PI * 2;
+    if (diff < -Math.PI) diff += Math.PI * 2;
     
-    // Visière / Peau
-    ctx.fillStyle = '#ffccaa'; 
-    ctx.fillRect(cx - w*0.15 + headOff, py + h*0.1, w*0.3, w*0.15);
+    const pi4 = Math.PI / 4;
+    let view = 'back';
+    if (diff > 3*pi4 || diff < -3*pi4) view = 'front';
+    else if (diff > pi4) view = 'right';
+    else if (diff < -pi4) view = 'left';
+
+    const headOff = steer * (w * 0.1);
+
+    switch (view) {
+      case 'back':
+        ctx.fillStyle = '#111';
+        ctx.fillRect(px - w*0.1, py + h*0.2, w*0.3, h*0.3); // Av gauche
+        ctx.fillRect(px + w*0.8, py + h*0.2, w*0.3, h*0.3); // Av droite
+        ctx.fillRect(px - w*0.15, py + h*0.7, w*0.3, h*0.4); // Arr gauche
+        ctx.fillRect(px + w*0.85, py + h*0.7, w*0.3, h*0.4); // Arr droite
+        ctx.fillStyle = '#999'; ctx.fillRect(px + w*0.1, py + h*0.3, w*0.8, h*0.6);
+        ctx.fillStyle = skinHex;
+        ctx.fillRect(px + w*0.2, py + h*0.4, w*0.6, h*0.5);
+        ctx.fillRect(px + w*0.3, py + h*0.2, w*0.4, h*0.2); // Capot
+        ctx.fillStyle = skinHex;
+        ctx.beginPath(); ctx.arc(cx + headOff, py + h*0.2, w*0.3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ffccaa';
+        ctx.fillRect(cx - w*0.15 + headOff, py + h*0.1, w*0.3, w*0.15);
+        break;
+
+      case 'front':
+        ctx.fillStyle = '#111';
+        ctx.fillRect(px - w*0.15, py + h*0.7, w*0.3, h*0.4); // Arr gauche
+        ctx.fillRect(px + w*0.85, py + h*0.7, w*0.3, h*0.4); // Arr droite
+        ctx.fillRect(px - w*0.1, py + h*0.2, w*0.3, h*0.3); // Av gauche
+        ctx.fillRect(px + w*0.8, py + h*0.2, w*0.3, h*0.3); // Av droite
+        ctx.fillStyle = '#999'; ctx.fillRect(px + w*0.1, py + h*0.3, w*0.8, h*0.6);
+        ctx.fillStyle = skinHex;
+        ctx.fillRect(px + w*0.2, py + h*0.1, w*0.6, h*0.6);
+        ctx.fillRect(px + w*0.3, py + h*0.6, w*0.4, h*0.3); // Pare-choc
+        ctx.fillStyle = skinHex;
+        ctx.beginPath(); ctx.arc(cx - headOff, py + h*0.2, w*0.3, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ffccaa'; 
+        ctx.fillRect(cx - w*0.2 - headOff, py + h*0.05, w*0.4, w*0.25);
+        ctx.fillStyle = 'black';
+        ctx.fillRect(cx - w*0.1 - headOff, py + h*0.1, w*0.05, w*0.05); // Oeil G
+        ctx.fillRect(cx + w*0.05 - headOff, py + h*0.1, w*0.05, w*0.05); // Oeil D
+        break;
+
+      case 'right': // Nez à droite
+        ctx.fillStyle = '#111';
+        ctx.fillRect(px + w*0.1, py + h*0.6, w*0.3, h*0.4); // Arr
+        ctx.fillRect(px + w*0.6, py + h*0.6, w*0.3, h*0.4); // Av
+        ctx.fillStyle = '#999'; ctx.fillRect(px + w*0.1, py + h*0.4, w*0.8, h*0.4);
+        ctx.fillStyle = skinHex;
+        ctx.fillRect(px + w*0.1, py + h*0.3, w*0.5, h*0.3); // Cockpit
+        ctx.fillRect(px + w*0.6, py + h*0.45, w*0.3, h*0.15); // Nez
+        ctx.fillStyle = skinHex;
+        ctx.beginPath(); ctx.arc(cx - w*0.1, py + h*0.15, w*0.25, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ffccaa'; 
+        ctx.fillRect(cx - w*0.1, py + h*0.05, w*0.25, w*0.15);
+        break;
+
+      case 'left': // Nez à gauche
+        ctx.fillStyle = '#111';
+        ctx.fillRect(px + w*0.6, py + h*0.6, w*0.3, h*0.4); // Arr
+        ctx.fillRect(px + w*0.1, py + h*0.6, w*0.3, h*0.4); // Av
+        ctx.fillStyle = '#999'; ctx.fillRect(px + w*0.1, py + h*0.4, w*0.8, h*0.4);
+        ctx.fillStyle = skinHex;
+        ctx.fillRect(px + w*0.4, py + h*0.3, w*0.5, h*0.3); // Cockpit
+        ctx.fillRect(px + w*0.1, py + h*0.45, w*0.3, h*0.15); // Nez
+        ctx.fillStyle = skinHex;
+        ctx.beginPath(); ctx.arc(cx + w*0.1, py + h*0.15, w*0.25, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = '#ffccaa'; 
+        ctx.fillRect(cx - w*0.15, py + h*0.05, w*0.25, w*0.15);
+        break;
+    }
   }
 
   draw(ctx) {
@@ -508,8 +559,9 @@ export class MarioKartScene {
           if (screenX > -100 && screenX < this.renderW+100 && screenY > horizon) {
              const kartSize = Math.max(4, Math.min(60, 20 * scale));
              const diffAngle = k.angle - camA;
-             const steerIA = Math.sin(diffAngle) * 1.5; // La tête se tourne fortement dans la direction du mouvement
-             this.drawKartSprite(this.bufferCtx, screenX, screenY, kartSize, k.skin.color, steerIA);
+             // SteerIA ne s'applique qu'en vue arrière/avant pour faire tourner la tête
+             const steerIA = (Math.sin(k.id*10 + Date.now()/200) > 0) ? 0.5 : -0.5;
+             this.drawKartSprite(this.bufferCtx, screenX, screenY, kartSize, k.skin.color, steerIA, diffAngle);
           }
         }
       }
