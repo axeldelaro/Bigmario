@@ -4,7 +4,7 @@ import { SKIN_LIST } from './art.js';
 
 // --- Analyseur de Circuits ---
 function M(name, str) {
-  const lines = str.trim().split('\\n').map(l => l.trim().replace(/ /g, ''));
+  const lines = str.trim().split('\n').map(l => l.trim().replace(/ /g, ''));
   const h = lines.length, w = lines[0].length;
   const data = new Uint8Array(w * h);
   for(let y=0; y<h; y++) for(let x=0; x<w; x++) data[y*w+x] = parseInt(lines[y][x]);
