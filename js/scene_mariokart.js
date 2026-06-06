@@ -514,7 +514,7 @@ export class MarioKartScene {
         k.x = newX;
         k.z = newZ;
       } else {
-        // Barrière ! Essayer de glisser le long du mur
+        // Barrière ! Glisser le long du mur SANS PÉNALITÉ
         let slid = false;
         if (this.getTile(k.x + vx, k.z) > 0) {
           k.x += vx;
@@ -524,11 +524,9 @@ export class MarioKartScene {
           k.z += vz;
           slid = true;
         }
-        // Pénalité de vitesse
-        k.speed *= slid ? 0.75 : 0.4;
-        // Si complètement bloqué, léger rebond
-        if (!slid && Math.abs(k.speed) > 2) {
-          k.speed *= -0.2;
+        // Rebond uniquement si complètement bloqué
+        if (!slid) {
+          k.speed = Math.abs(k.speed) > 5 ? k.speed * -0.15 : 0;
         }
       }
 
@@ -780,8 +778,8 @@ export class MarioKartScene {
           const screenY = horizon + (6.0 * scale);
 
           if (screenX > -80 && screenX < this.renderW + 80 && screenY > horizon && screenY < this.renderH + 50) {
-            // Taille IA = même base que le joueur, adapté à la distance
-            const kartSize = Math.max(4, Math.min(PLAYER_SIZE, (PLAYER_SIZE * 0.5) * scale));
+            // Taille IA proportionnelle à la distance (perspective correcte)
+            const kartSize = Math.max(8, Math.min(PLAYER_SIZE, PLAYER_SIZE * scale));
             const diffAngle = k.angle - camA;
             const steerIA = Math.sin(k.id * 10 + Date.now() / 200) * 0.5;
             this.drawKartSprite(bc, screenX, screenY, kartSize, k.skin.color, steerIA, diffAngle);
