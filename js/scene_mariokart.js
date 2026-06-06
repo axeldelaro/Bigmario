@@ -273,6 +273,15 @@ export class MarioKartScene {
     this.state = 'play';
   }
 
+  getTile(worldX, worldZ) {
+    const tx = Math.floor(worldX / TILE_SIZE);
+    const tz = Math.floor(worldZ / TILE_SIZE);
+    if (tx>=0 && tx<this.track.w && tz>=0 && tz<this.track.h) {
+      return this.track.data[tz*this.track.w + tx];
+    }
+    return 0;
+  }
+
   update(dt) {
     if (this.state !== 'play') return;
     const I = this.game.input;
@@ -287,21 +296,29 @@ export class MarioKartScene {
         steer = (I.isDown('left', 0) ? -1 : 0) + (I.isDown('right', 0) ? 1 : 0);
         drift = I.isDown('fire', 0);
       } else {
-        // IA : Reste sur la route (tuiles 1 ou 2)
+        // IA : Intelligence par antennes (feelers)
         acc = 0.85 + Math.random()*0.15;
-        // Projection du regard de l'IA (lookahead)
-        const lookX = k.x + Math.sin(k.angle) * 4;
-        const lookZ = k.z + Math.cos(k.angle) * 4;
-        const tx = Math.floor(lookX / TILE_SIZE);
-        const tz = Math.floor(lookZ / TILE_SIZE);
-        const tile = (tx>=0 && tx<this.track.w && tz>=0 && tz<this.track.h) ? this.track.data[tz*this.track.w + tx] : 0;
+        const lookDist = 14;
+        const L_X = k.x + Math.sin(k.angle - 0.6) * lookDist;
+        const L_Z = k.z + Math.cos(k.angle - 0.6) * lookDist;
+        const R_X = k.x + Math.sin(k.angle + 0.6) * lookDist;
+        const R_Z = k.z + Math.cos(k.angle + 0.6) * lookDist;
+        const F_X = k.x + Math.sin(k.angle) * lookDist;
+        const F_Z = k.z + Math.cos(k.angle) * lookDist;
         
-        if (tile === 0) {
-          // Si on sort de la piste, l'IA braque fort
-          steer = Math.sin(Date.now()/400 + i) > 0 ? 1 : -1; 
+        const tileL = this.getTile(L_X, L_Z);
+        const tileR = this.getTile(R_X, R_Z);
+        const tileF = this.getTile(F_X, F_Z);
+        
+        if (tileF === 0) { // Mur d'herbe en face
+          if (tileL > 0) steer = -1.5; // Tourne gauche toute !
+          else if (tileR > 0) steer = 1.5; // Tourne droite toute !
+          else steer = 1.8; // Demi-tour d'urgence
         } else {
-          // Trajectoire naturelle
-          steer = Math.sin(Date.now()/250 + i * 45) * 0.25;
+          // Sur la route, on se centre
+          if (tileL === 0 && tileR > 0) steer = 1.0;
+          else if (tileR === 0 && tileL > 0) steer = -1.0;
+          else steer = Math.sin(Date.now()/250 + i * 45) * 0.15; // Léger wobble naturel
         }
       }
       
@@ -318,9 +335,9 @@ export class MarioKartScene {
       // Limite de vitesse
       k.speed = Math.max(0, Math.min(k.speed, drift ? 38 : 32));
       
-      // Rotation
+      // Rotation (permettre de tourner même à très basse vitesse)
       const steerMod = drift ? 3.5 : 2.0;
-      k.angle += steer * steerMod * dt * (k.speed/32);
+      k.angle += steer * steerMod * dt * Math.max(0.3, k.speed/32);
       
       // Déplacement (Vecteur avant)
       k.x += Math.sin(k.angle) * k.speed * dt;
@@ -489,8 +506,9 @@ export class MarioKartScene {
           
           // Vérifier si à l'écran
           if (screenX > -100 && screenX < this.renderW+100 && screenY > horizon) {
-             const kartSize = Math.max(4, Math.min(60, 20 * scale)); 
-             const steerIA = Math.sin(k.id * 10 + Date.now()/200); 
+             const kartSize = Math.max(4, Math.min(60, 20 * scale));
+             const diffAngle = k.angle - camA;
+             const steerIA = Math.sin(diffAngle) * 1.5; // La tête se tourne fortement dans la direction du mouvement
              this.drawKartSprite(this.bufferCtx, screenX, screenY, kartSize, k.skin.color, steerIA);
           }
         }
