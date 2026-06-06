@@ -1,423 +1,280 @@
-// scene_mariokart.js — Mode Karting Rétro 2D (Mode 7) - Refonte V3
+// scene_mariokart.js — Mode Karting V4 — IA par capteurs de route, Barrières, 3 Tours
 import { VIEW_W, VIEW_H } from './core.js';
 import { SKIN_LIST } from './art.js';
 
-// =====================================================================
-//  CONSTANTES
-// =====================================================================
 const TILE_SIZE = 12;
 const PI  = Math.PI;
 const PI2 = PI * 2;
+const TOTAL_LAPS = 3;
 
 // =====================================================================
-//  CIRCUITS — Routes larges (3-4 tuiles), techniques, sans passages étroits
-//  0 = Herbe, 1 = Route, 2 = Ligne de départ
+//  CIRCUITS — Routes larges (3-4 tuiles), barrières physiques
+//  0 = Herbe (mur invisible), 1 = Route, 2 = Ligne de départ/arrivée
 // =====================================================================
-function M(name, str, waypoints) {
+function M(name, str) {
   const lines = str.trim().split('\n').map(l => l.trim().replace(/ /g, ''));
-  const h = lines.length, w = lines[0].length;
+  const h = lines.length, w = Math.max(...lines.map(l => l.length));
   const data = new Uint8Array(w * h);
   for (let y = 0; y < h; y++)
     for (let x = 0; x < w; x++)
-      data[y * w + x] = parseInt(lines[y][x]) || 0;
-  return { name, w, h, data, waypoints };
+      data[y * w + x] = parseInt(lines[y]?.[x]) || 0;
+  return { name, w, h, data };
 }
 
-// Waypoints = liste de {x, z} en coordonnées TILES, l'IA suit ces points dans l'ordre en boucle
 const TRACKS = [
-  // ──── 1. Circuit Ovale Large ────
+  // ──── 1. Grand Ovale (Débutant) ────
   M('Grand Ovale', `
-    00000000000000000000
-    00001111111111110000
-    00011111111111111000
-    00111000000000111100
-    00110000000000011100
-    01110000000000011100
-    01100000000000001110
-    01100000000000001110
-    01100000000000001110
-    01110000000000011100
-    00110000000000011100
-    00111000000000111100
-    00011111122111111000
-    00001111111111110000
-    00000000000000000000
-  `, [
-    {x:10,z:13}, {x:15,z:12}, {x:17,z:10}, {x:18,z:7},
-    {x:17,z:4}, {x:15,z:2}, {x:10,z:1}, {x:5,z:2},
-    {x:3,z:4}, {x:2,z:7}, {x:3,z:10}, {x:5,z:12}
-  ]),
+    00000000000000000000000
+    00011111111111111111000
+    00111111111111111111100
+    01111000000000000111110
+    01110000000000000011110
+    01110000000000000011110
+    01110000000000000011110
+    01110000000000000011110
+    01110000000000000011110
+    01111000000000000111110
+    00111111111111111111100
+    00011111112211111111000
+    00000000000000000000000
+  `),
 
-  // ──── 2. Circuit en 8 (Double Boucle) ────
-  M('Double Boucle', `
-    00000000000000000000
-    00111111001111111000
-    01111111011111111100
-    01100011111100001100
-    01100001111000001100
-    01111111001111111100
-    00111111001111111000
-    01111111001111111100
-    01100001111000001100
-    01100011111100001100
-    01111111011111111100
-    00111122001111111000
-    00000000000000000000
-  `, [
-    {x:5,z:11}, {x:2,z:10}, {x:1,z:7}, {x:2,z:5},
-    {x:5,z:4}, {x:8,z:3}, {x:10,z:2}, {x:13,z:2},
-    {x:16,z:1}, {x:18,z:3}, {x:17,z:5}, {x:14,z:6},
-    {x:10,z:6}, {x:8,z:7}, {x:5,z:8}, {x:2,z:10}
-  ]),
+  // ──── 2. Circuit en D ────
+  M('Circuit en D', `
+    00000000000000000000000
+    00011111111111111100000
+    00111111111111111110000
+    01111000000000011111000
+    01110000000000001111100
+    01110000000000000111110
+    01110000000000000011110
+    01110000000000000111110
+    01110000000000001111100
+    01111000000000011111000
+    00111111111111111110000
+    00011111112211111100000
+    00000000000000000000000
+  `),
 
-  // ──── 3. Circuit Technique (Chicanes) ────
-  M('Chicane Royale', `
-    00000000000000000000
-    00111111111111111100
-    00111111111111111100
-    00110000000000001100
-    00110000000000001100
-    00110011111100001100
-    00110011111100001100
-    00110000000000001100
-    00110000000000001100
-    00110000111111001100
-    00110000111111001100
-    00110000000000001100
-    00110000000000001100
-    00112211111111111100
-    00111111111111111100
-    00000000000000000000
-  `, [
-    {x:4,z:14}, {x:10,z:14}, {x:17,z:14}, {x:17,z:11},
-    {x:17,z:9}, {x:14,z:9}, {x:10,z:9}, {x:8,z:10},
-    {x:3,z:10}, {x:3,z:7}, {x:3,z:5}, {x:7,z:5},
-    {x:12,z:5}, {x:17,z:5}, {x:17,z:3}, {x:10,z:2},
-    {x:3,z:2}, {x:3,z:12}
-  ]),
+  // ──── 3. Fer à Cheval ────
+  M('Fer à Cheval', `
+    0000000000000000000000000
+    0011111111000001111111100
+    0011111111100011111111100
+    0011100001111111000011100
+    0011100001111111000011100
+    0011100000000000000011100
+    0011100000000000000011100
+    0011100000000000000011100
+    0011100000000000000011100
+    0011100001111111000011100
+    0011100001111111000011100
+    0011111111100011111111100
+    0011111122000001111111100
+    0000000000000000000000000
+  `),
 
-  // ──── 4. Circuit de la Montagne ────
-  M('Col de Montagne', `
-    0000000000000000000000
-    0011111100000111111100
-    0011111100001111111100
-    0011000000001100001100
-    0011000000001100001100
-    0011000000001100001100
-    0011000001111100001100
-    0011000001111100001100
-    0011000001100000001100
-    0011111101100000001100
-    0011111101100000001100
-    0000001101111111111100
-    0000001101111111111100
-    0000001100000000001100
-    0011111100000000001100
-    0011111122000111111100
-    0011000000001111111100
-    0011000000001100000000
-    0011111111111100000000
-    0011111111111100000000
-    0000000000000000000000
-  `, [
-    {x:6,z:15}, {x:3,z:15}, {x:2,z:17}, {x:6,z:19},
-    {x:10,z:19}, {x:12,z:17}, {x:12,z:15}, {x:12,z:12},
-    {x:16,z:11}, {x:19,z:10}, {x:19,z:6}, {x:19,z:3},
-    {x:15,z:2}, {x:12,z:4}, {x:12,z:7}, {x:8,z:7},
-    {x:5,z:7}, {x:3,z:5}, {x:3,z:2}, {x:6,z:1},
-    {x:10,z:1}, {x:14,z:1}
-  ]),
+  // ──── 4. Zigzag Express ────
+  M('Zigzag Express', `
+    00000000000000000000000
+    01111111000000011111110
+    01111111100000111111110
+    00000011111111111000000
+    00000011111111111000000
+    01111111100000111111110
+    01111111000000011111110
+    00000011111111111000000
+    00000011111111111000000
+    01111111100000111111110
+    01111111000000011111110
+    00000011111111111000000
+    00000011111122111000000
+    00000011111111111000000
+    00000000000000000000000
+  `),
 
-  // ──── 5. Grand Prix Final ────
+  // ──── 5. Boucle Intérieure ────
+  M('Boucle Intérieure', `
+    000000000000000000000000
+    001111111111111111111100
+    001111111111111111111100
+    001110000000000000011100
+    001110000000000000011100
+    001110001111111100011100
+    001110001111111100011100
+    001110001110001100011100
+    001110001110001100011100
+    001110001111111100011100
+    001110001111111100011100
+    001110000000000000011100
+    001111111111111111111100
+    001111111122111111111100
+    000000000000000000000000
+  `),
+
+  // ──── 6. Serpentin Long ────
+  M('Serpentin Long', `
+    000000000000000000000000
+    011111111111111111111110
+    011111111111111111111110
+    000000000000000000011110
+    000000000000000000011110
+    011111111111111111111110
+    011111111111111111111110
+    011110000000000000000000
+    011110000000000000000000
+    011111111111111111111110
+    011111111111111111111110
+    000000000000000000011110
+    000000000000000000011110
+    011111111111111111111110
+    011111111122111111111110
+    000000000000000000000000
+  `),
+
+  // ──── 7. Grand Prix ────
   M('Grand Prix', `
-    000000000000000000000000
-    001111111111111111111100
-    001111111111111111111100
-    001100000000000000001100
-    001100000000000000001100
-    001100001111111100001100
-    001100001111111100001100
-    001100001100001100001100
-    001100001100001100001100
-    001100001100001100001100
-    001100001111111100001100
-    001100001111111100001100
-    001100000000000000001100
-    001100000000000000001100
-    001111111111222111111100
-    001111111111111111111100
-    000000000000000000000000
-  `, [
-    {x:12,z:15}, {x:20,z:15}, {x:21,z:12}, {x:21,z:7},
-    {x:21,z:4}, {x:20,z:2}, {x:12,z:2}, {x:4,z:2},
-    {x:3,z:4}, {x:3,z:7}, {x:3,z:12}, {x:4,z:14},
-    {x:9,z:14}, {x:9,z:11}, {x:9,z:6}, {x:12,z:6},
-    {x:15,z:6}, {x:15,z:9}, {x:15,z:11}, {x:15,z:14}
-  ]),
-
-  // ──── 6. Serpent Express ────
-  M('Serpent Express', `
-    00000000000000000000
-    01111100001111100000
-    01111110011111110000
-    00000111111000011100
-    00000111111000011100
-    01111110011111110000
-    01111100001111100000
-    00000111111000011100
-    00000111111000011100
-    01111110011111110000
-    01111100001111100000
-    00002111111000011100
-    00000111111000011100
-    01111110011111110000
-    01111100001111100000
-    00000000000000000000
-  `, [
-    {x:3,z:11}, {x:1,z:10}, {x:1,z:6}, {x:3,z:5},
-    {x:6,z:4}, {x:8,z:3}, {x:11,z:2}, {x:14,z:1},
-    {x:16,z:2}, {x:17,z:4}, {x:16,z:6}, {x:13,z:6},
-    {x:10,z:7}, {x:7,z:8}, {x:5,z:9}, {x:3,z:10},
-    {x:3,z:12}, {x:6,z:13}, {x:8,z:14}, {x:13,z:14},
-    {x:16,z:13}, {x:17,z:11}, {x:16,z:9}, {x:13,z:9},
-    {x:10,z:10}, {x:7,z:11}
-  ]),
-
-  // ──── 7. Route Arc-en-Ciel ────
-  M('Route Arc-en-Ciel', `
-    000000000000000000000000
-    000111111111111111111000
-    001111111111111111111100
-    001100000000000000001100
-    001100000000000000001100
-    001100001111111100001100
-    001100001111111100001100
-    001100001100001100001100
-    001100001100001100001100
-    001100001111111100001100
-    001100001111111100001100
-    001100000000000000001100
-    001100000000000000001100
-    001122111111111111111100
-    001111111111111111111100
-    000000000000000000000000
-  `, [
-    {x:4,z:14}, {x:10,z:14}, {x:18,z:14}, {x:21,z:12},
-    {x:21,z:7}, {x:21,z:4}, {x:18,z:2}, {x:10,z:2},
-    {x:4,z:2}, {x:2,z:4}, {x:2,z:7}, {x:2,z:12},
-    // Boucle intérieure
-    {x:5,z:11}, {x:9,z:10}, {x:14,z:10}, {x:16,z:8},
-    {x:14,z:6}, {x:9,z:6}, {x:5,z:7}
-  ]),
+    00000000000000000000000000
+    00111111111111111111111100
+    00111111111111111111111100
+    00111000000000000000111100
+    00111000000000000000011100
+    00111000011111110000011100
+    00111000011111110000011100
+    00111000011000000000011100
+    00111000011000000000011100
+    00111000011111110000011100
+    00111000011111110000011100
+    00111000000000000000111100
+    00111111111111111111111100
+    00111111111122111111111100
+    00000000000000000000000000
+  `),
 ];
 
 // =====================================================================
-//  WAYPOINT PATHFINDER — IA par suivi de checkpoints
+//  IA PAR CAPTEURS DE ROUTE — Universelle, suit automatiquement la route
 // =====================================================================
-class WaypointAI {
-  constructor(kart, waypoints, personality) {
-    this.kart = kart;
-    this.waypoints = waypoints;
-    this.currentWP = 0;
-    this.wpThresholdSq = 14 * 14; // Distance pour valider un WP (plus grand = moins de zigzag)
+const PERSONALITIES = [
+  null, // 0 = joueur
+  { topSpeed: 30, steerGain: 1.0, brakeSkill: 0.90, wobble: 0.08 }, // Prudent
+  { topSpeed: 33, steerGain: 1.3, brakeSkill: 0.70, wobble: 0.15 }, // Agressif
+  { topSpeed: 31, steerGain: 1.1, brakeSkill: 0.85, wobble: 0.10 }, // Équilibré
+  { topSpeed: 34, steerGain: 1.4, brakeSkill: 0.65, wobble: 0.18 }, // Téméraire
+  { topSpeed: 29, steerGain: 0.9, brakeSkill: 1.00, wobble: 0.04 }, // Pro
+  { topSpeed: 32, steerGain: 1.2, brakeSkill: 0.75, wobble: 0.13 }, // Kamikaze
+  { topSpeed: 31, steerGain: 1.0, brakeSkill: 0.80, wobble: 0.10 }, // Régulier
+];
 
-    // Personnalité unique
-    this.topSpeed     = personality.topSpeed;     // 28-35
-    this.aggression   = personality.aggression;   // 0.5-1.5 (multiplier de steer)
-    this.brakingSkill = personality.brakingSkill;  // 0.6-1.0 (anticipe les virages)
-    this.errorRate    = personality.errorRate;     // 0-0.3 (erreurs random)
-    this.laneOffset   = personality.laneOffset;   // -3 à +3 (décalage latéral)
-    this.reaction     = personality.reaction;     // 0-0.2s (délai de réaction)
-
-    // État interne
-    this.stuckTimer = 0;
-    this.lastX = 0;
-    this.lastZ = 0;
-    this.draftBonus = 0;
-    this.rubberBonus = 0;
-    this.errorAccum = 0;
+class RoadAI {
+  constructor(id) {
+    this.id = id;
+    const p = PERSONALITIES[id] || PERSONALITIES[1];
+    this.topSpeed   = p.topSpeed;
+    this.steerGain  = p.steerGain;
+    this.brakeSkill = p.brakeSkill;
+    this.wobble     = p.wobble;
+    this.smoothSteer = 0;
+    this.wobbleT = Math.random() * 100;
   }
 
-  getTarget() {
-    const wp = this.waypoints[this.currentWP];
-    return {
-      x: wp.x * TILE_SIZE + TILE_SIZE / 2 + this.laneOffset,
-      z: wp.z * TILE_SIZE + TILE_SIZE / 2
-    };
-  }
+  update(dt, kart, karts, getTile) {
+    const k = kart;
+    this.wobbleT += dt;
 
-  advanceWP() {
-    this.currentWP = (this.currentWP + 1) % this.waypoints.length;
-  }
+    // ── Capteurs de route : 9 rayons de -70° à +70° ──
+    const rayAngles  = [-1.2, -0.8, -0.5, -0.25, 0, 0.25, 0.5, 0.8, 1.2];
+    const rayWeights = [-1.5, -1.0, -0.6, -0.3,  0, 0.3,  0.6, 1.0, 1.5];
 
-  update(dt, karts, playerKart, getTile) {
-    const k = this.kart;
+    let weightedSum = 0;
+    let totalDist = 0;
+    let centerDist = 0;
 
-    // ── Avancer le waypoint si on est proche ──
-    const tgt = this.getTarget();
-    const dxWP = tgt.x - k.x;
-    const dzWP = tgt.z - k.z;
-    const distWPSq = dxWP * dxWP + dzWP * dzWP;
-    if (distWPSq < this.wpThresholdSq) {
-      this.advanceWP();
-    }
-
-    // ── Direction vers le waypoint courant ──
-    const freshTgt = this.getTarget();
-    const dx = freshTgt.x - k.x;
-    const dz = freshTgt.z - k.z;
-    const targetAngle = Math.atan2(dx, dz);
-
-    // ── Différence angulaire ──
-    let angleDiff = targetAngle - k.angle;
-    while (angleDiff > PI) angleDiff -= PI2;
-    while (angleDiff < -PI) angleDiff += PI2;
-
-    // ── Steering vers le waypoint ──
-    let steer = angleDiff * 3.5 * this.aggression;
-    steer = Math.max(-3.0, Math.min(3.0, steer)); // Clamp
-
-    // ── Correction d'urgence si on est sur l'herbe ──
-    let grassPenalty = false;
-    const onRoad = getTile(k.x, k.z);
-    if (onRoad === 0) {
-      // On est sur l'herbe ! Amplifier le steer vers le waypoint et freiner
-      steer = angleDiff * 5.0 * this.aggression;
-      steer = Math.max(-4.0, Math.min(4.0, steer));
-      grassPenalty = true;
-    }
-
-    // ── Erreurs humaines (petit wobble) ──
-    this.errorAccum += dt;
-    if (this.errorRate > 0) {
-      steer += Math.sin(this.errorAccum * 4 + k.id * 7) * this.errorRate * 1.5;
-    }
-
-    // ── Accélération intelligente ──
-    let acc = grassPenalty ? 0.4 : 1.0;
-    const absAngleDiff = Math.abs(angleDiff);
-
-    // Freiner dans les virages serrés
-    if (absAngleDiff > 0.6 && k.speed > 20) {
-      acc = 0.3 * this.brakingSkill;
-    } else if (absAngleDiff > 0.3 && k.speed > 25) {
-      acc = 0.6;
-    }
-
-    // ── Aspiration (Drafting) ──
-    this.draftBonus = 0;
-    for (let j = 0; j < karts.length; j++) {
-      if (karts[j] === k) continue;
-      const odx = karts[j].x - k.x;
-      const odz = karts[j].z - k.z;
-      const odist = odx * odx + odz * odz;
-      if (odist > 100 && odist < 1600) {
-        const aToOther = Math.atan2(odx, odz);
-        let adiff = aToOther - k.angle;
-        while (adiff > PI) adiff -= PI2;
-        while (adiff < -PI) adiff += PI2;
-        if (Math.abs(adiff) < 0.25) {
-          this.draftBonus = Math.max(this.draftBonus, 4.0);
-        }
+    for (let i = 0; i < rayAngles.length; i++) {
+      const angle = k.angle + rayAngles[i];
+      let dist = 0;
+      for (let step = 1; step <= 10; step++) {
+        const cx = k.x + Math.sin(angle) * step * TILE_SIZE * 0.45;
+        const cz = k.z + Math.cos(angle) * step * TILE_SIZE * 0.45;
+        if (getTile(cx, cz) > 0) dist = step;
+        else break;
       }
+      weightedSum += dist * rayWeights[i];
+      totalDist += dist;
+      if (i === 4) centerDist = dist;
     }
 
-    // ── Évitement d'urgence des autres karts ──
+    // ── Direction ──
+    let targetSteer = 0;
+    if (totalDist > 0) {
+      targetSteer = (weightedSum / totalDist) * this.steerGain * 3.5;
+    } else {
+      // Complètement hors route ? Tourner fort dans la dernière direction connue
+      targetSteer = this.smoothSteer > 0 ? 4.0 : -4.0;
+    }
+
+    // Lissage humain du volant
+    const smoothFactor = Math.min(1, dt * 10);
+    this.smoothSteer += (targetSteer - this.smoothSteer) * smoothFactor;
+
+    // Wobble de personnalité
+    const wobbleVal = Math.sin(this.wobbleT * 3 + this.id * 7) * this.wobble;
+    const steer = this.smoothSteer + wobbleVal;
+
+    // ── Accélération ──
+    let acc = 1.0;
+
+    // Freinage prédictif (route courte devant = virage)
+    if (centerDist < 3 && k.speed > 18) {
+      acc = 0.15 * this.brakeSkill;
+    } else if (centerDist < 5 && k.speed > 24) {
+      acc = 0.4;
+    }
+
+    // Si sur l'herbe, ralentir
+    if (getTile(k.x, k.z) === 0) acc = 0.2;
+
+    // Drift automatique
+    const drift = Math.abs(steer) > 2.2 && k.speed > 20;
+
+    // Vitesse max
+    k.maxAiSpeed = this.topSpeed + (drift ? 3 : 0);
+
+    // ── Évitement des autres karts ──
     let avoidSteer = 0;
     for (let j = 0; j < karts.length; j++) {
       if (karts[j] === k) continue;
-      const odx = karts[j].x - k.x;
-      const odz = karts[j].z - k.z;
-      const odist = odx * odx + odz * odz;
-      if (odist < 400 && odist > 1) {
-        const aToOther = Math.atan2(odx, odz);
-        let adiff = aToOther - k.angle;
-        while (adiff > PI) adiff -= PI2;
-        while (adiff < -PI) adiff += PI2;
-        if (Math.abs(adiff) < PI / 2) {
-          const strength = (400 - odist) / 400;
-          avoidSteer += (adiff > 0 ? -2.0 : 2.0) * strength;
+      const dx = karts[j].x - k.x;
+      const dz = karts[j].z - k.z;
+      const distSq = dx * dx + dz * dz;
+      if (distSq < 350 && distSq > 1) {
+        const a = Math.atan2(dx, dz);
+        let diff = a - k.angle;
+        while (diff > PI) diff -= PI2;
+        while (diff < -PI) diff += PI2;
+        if (Math.abs(diff) < PI / 2) {
+          avoidSteer += (diff > 0 ? -1.5 : 1.5) * (350 - distSq) / 350;
         }
       }
     }
-    steer += avoidSteer;
 
-    // ── Rubberbanding ──
-    this.rubberBonus = 0;
-    if (playerKart) {
-      const pdx = playerKart.x - k.x;
-      const pdz = playerKart.z - k.z;
+    // ── Rubberbanding (garder la course serrée) ──
+    const player = karts[0];
+    if (player && player !== k) {
+      const pdx = player.x - k.x;
+      const pdz = player.z - k.z;
       const pdist = pdx * pdx + pdz * pdz;
-      // Mesurer si on est devant ou derrière
-      const pDir = Math.atan2(pdx, pdz);
-      let pDiff = pDir - k.angle;
-      while (pDiff > PI) pDiff -= PI2;
-      while (pDiff < -PI) pDiff += PI2;
-      const isBehind = Math.abs(pDiff) < PI / 2;
-
-      if (isBehind && pdist > 30000) {
-        this.rubberBonus = 5.0; // Rattrapez-le !
-      } else if (!isBehind && pdist > 50000) {
-        this.rubberBonus = -4.0; // Ralentir, trop d'avance
+      if (pdist > 40000) {
+        // Loin du joueur → boost
+        k.maxAiSpeed += 4;
+      } else if (pdist > 80000) {
+        // Très loin → gros boost
+        k.maxAiSpeed += 7;
       }
     }
 
-    // ── Drift automatique dans les gros virages ──
-    const drift = (absAngleDiff > 0.8 && k.speed > 22);
-
-    // ── Détection de blocage (stuck) ──
-    const moved = Math.abs(k.x - this.lastX) + Math.abs(k.z - this.lastZ);
-    this.lastX = k.x;
-    this.lastZ = k.z;
-
-    // Détection agressive : bloqué si peu de mouvement OU vitesse négative
-    if (moved < 0.3 * dt * 60 || k.speed < -2) {
-      this.stuckTimer += dt;
-    } else {
-      this.stuckTimer = Math.max(0, this.stuckTimer - dt * 3);
-    }
-
-    // Recovery rapide : téléportation au waypoint après 1.5s
-    if (this.stuckTimer > 0.8) {
-      acc = -1.0;
-      steer = -steer * 2;
-      if (this.stuckTimer > 1.5) {
-        // Téléportation au waypoint courant
-        const wp = this.waypoints[this.currentWP];
-        k.x = wp.x * TILE_SIZE + TILE_SIZE / 2;
-        k.z = wp.z * TILE_SIZE + TILE_SIZE / 2;
-        k.speed = 8;
-        k.angle = Math.atan2(
-          this.waypoints[(this.currentWP + 1) % this.waypoints.length].x * TILE_SIZE - k.x,
-          this.waypoints[(this.currentWP + 1) % this.waypoints.length].z * TILE_SIZE - k.z
-        );
-        this.stuckTimer = 0;
-      }
-    }
-
-    // ── Vitesse max composite ──
-    k.maxAiSpeed = this.topSpeed + this.draftBonus + this.rubberBonus;
-
-    return { acc, steer, drift };
+    return { acc, steer: steer + avoidSteer, drift };
   }
-}
-
-// =====================================================================
-//  PERSONNALITÉS DES IAs
-// =====================================================================
-function makePersonality(id) {
-  // Chaque IA a un profil unique et déterministe
-  const profiles = [
-    null, // index 0 = joueur
-    { topSpeed: 30, aggression: 1.0, brakingSkill: 0.9, errorRate: 0.05, laneOffset: -1.0, reaction: 0.05 }, // Prudent
-    { topSpeed: 33, aggression: 1.3, brakingSkill: 0.7, errorRate: 0.12, laneOffset:  1.0, reaction: 0.10 }, // Agressif
-    { topSpeed: 31, aggression: 1.1, brakingSkill: 0.85, errorRate: 0.06, laneOffset: -0.5, reaction: 0.07 }, // Équilibré
-    { topSpeed: 34, aggression: 1.4, brakingSkill: 0.6, errorRate: 0.15, laneOffset:  0.5, reaction: 0.15 }, // Téméraire
-    { topSpeed: 29, aggression: 0.9, brakingSkill: 1.0, errorRate: 0.02, laneOffset:  0.0, reaction: 0.03 }, // Pro
-    { topSpeed: 32, aggression: 1.2, brakingSkill: 0.75, errorRate: 0.10, laneOffset: -1.5, reaction: 0.08 }, // Kamikaze
-    { topSpeed: 31, aggression: 1.0, brakingSkill: 0.80, errorRate: 0.08, laneOffset:  1.5, reaction: 0.12 }, // Large
-  ];
-  return profiles[id] || profiles[1];
 }
 
 // =====================================================================
@@ -430,7 +287,7 @@ const COL_ASPHALT2 = 0xFF4A4A4A;
 const COL_START    = 0xFFEEEEEE;
 const COL_CURB_R   = 0xFF0000FF;
 const COL_CURB_W   = 0xFFFFFFFF;
-const COL_CENTER   = 0xFF88BBFF; // Ligne centrale bleue
+const COL_CENTER   = 0xFF88BBFF;
 
 // =====================================================================
 //  SCÈNE MARIO KART
@@ -443,12 +300,19 @@ export class MarioKartScene {
     this.selectedSkin = 0;
     this.renderW = 384;
     this.renderH = 216;
+
+    // Escape → retour menu (fonctionne partout)
+    this._escHandler = (e) => {
+      if (e.key === 'Escape') this.game.returnToMenu();
+    };
+    document.addEventListener('keydown', this._escHandler);
+
     this.initMenu();
   }
 
   // ── Menu de sélection ──
   initMenu() {
-    let html = `<div class="title" style="margin-bottom:10px;"><span class="big" style="color:#d02020; font-size:40px; text-shadow: 2px 2px #fff;">KARTING 2D</span></div>`;
+    let html = `<div class="title" style="margin-bottom:10px;"><span class="big" style="color:#d02020; font-size:40px; text-shadow: 2px 2px #fff;">PIXEL KART</span></div>`;
     html += `<div style="display:flex; justify-content:space-around; width:100%;">
       <div style="flex:1;">
         <h3>Pilote</h3>
@@ -464,14 +328,14 @@ export class MarioKartScene {
       </div>
     </div>
     <div style="margin-top:30px;">
-      <button class="btn" id="mk-start" style="font-size:24px; background:#d02020;">🏁 DÉMARRER LA COURSE</button>
+      <button class="btn" id="mk-start" style="font-size:24px; background:#d02020;">🏁 COURSE (${TOTAL_LAPS} tours)</button>
       <button class="btn secondary" id="mk-back">Retour</button>
     </div>
     <p class="hint" style="margin-top:20px;">
       <b>Contrôles</b>: <br>
-      Saut (Clavier: Espace/Haut / Tactile: Droite) = <b>ACCÉLÉRER</b><br>
-      Tir (Clavier: Shift/J / Tactile: HautGauche) = <b>FREINER / DÉRAPER</b><br>
-      Gauche/Droite = <b>TOURNER</b>
+      Saut (Espace/Haut) = <b>ACCÉLÉRER</b><br>
+      Tir (Shift/J) = <b>FREINER / DÉRAPER</b><br>
+      ←/→ = <b>TOURNER</b> · Échap = <b>MENU</b>
     </p>`;
     const p = this.game.panel(html);
     p.querySelector('#mk-start').onclick = () => {
@@ -488,8 +352,9 @@ export class MarioKartScene {
     this.track = TRACKS[this.selectedTrack];
     this.karts = [];
     this.aiControllers = [];
+    this.raceState = 'countdown'; // countdown → racing → finished
 
-    // Trouver la position de départ (tuile '2')
+    // Trouver la ligne de départ (tuile 2)
     let startX = 2, startZ = 2;
     for (let i = 0; i < this.track.data.length; i++) {
       if (this.track.data[i] === 2) {
@@ -499,13 +364,16 @@ export class MarioKartScene {
       }
     }
 
-    // Déterminer l'angle de départ en visant le 1er waypoint
+    // Angle de départ : scanner les 4 directions pour la route la plus longue
     let startAngle = 0;
-    if (this.track.waypoints && this.track.waypoints.length > 0) {
-      const wp = this.track.waypoints[0];
-      const wpX = wp.x * TILE_SIZE + TILE_SIZE / 2;
-      const wpZ = wp.z * TILE_SIZE + TILE_SIZE / 2;
-      startAngle = Math.atan2(wpX - startX, wpZ - startZ);
+    let bestLen = 0;
+    for (const [a, dx, dz] of [[0,0,1],[PI,0,-1],[PI/2,1,0],[-PI/2,-1,0]]) {
+      let len = 0;
+      for (let step = 1; step < 8; step++) {
+        if (this.getTile(startX + dx * step * TILE_SIZE, startZ + dz * step * TILE_SIZE) > 0) len++;
+        else break;
+      }
+      if (len > bestLen) { bestLen = len; startAngle = a; }
     }
 
     // Créer les 8 coureurs
@@ -513,38 +381,34 @@ export class MarioKartScene {
       const isPlayer = i === 0;
       const skinIndex = isPlayer ? this.selectedSkin : (i % SKIN_LIST.length);
 
-      // Grille de départ : 2 colonnes, 4 rangées
+      // Grille 2×4
       const col = (i % 2 === 0) ? -1 : 1;
       const row = Math.floor(i / 2);
-      // Décalage perpendiculaire à la direction de départ
       const perpX = Math.sin(startAngle + PI / 2) * col * 3;
       const perpZ = Math.cos(startAngle + PI / 2) * col * 3;
-      // Décalage dans la direction opposée (derrière la ligne)
       const backX = -Math.sin(startAngle) * row * 4;
       const backZ = -Math.cos(startAngle) * row * 4;
 
       const kart = {
-        isPlayer,
-        id: i,
+        isPlayer, id: i,
         x: startX + perpX + backX,
         z: startZ + perpZ + backZ,
         angle: startAngle,
         speed: 0,
         maxAiSpeed: 30,
         skin: SKIN_LIST[skinIndex],
-        stuckTime: 0,
+        lap: 0,
+        onStartLine: true, // Commence sur la ligne
+        lapCooldown: 2.0,
       };
       this.karts.push(kart);
 
-      // Créer le contrôleur IA
-      if (!isPlayer && this.track.waypoints) {
-        this.aiControllers.push(
-          new WaypointAI(kart, this.track.waypoints, makePersonality(i))
-        );
+      if (!isPlayer) {
+        this.aiControllers.push(new RoadAI(i));
       }
     }
 
-    // Préparer le Framebuffer
+    // Framebuffer
     this.bufferCanvas = document.createElement('canvas');
     this.bufferCanvas.width = this.renderW;
     this.bufferCanvas.height = this.renderH;
@@ -556,13 +420,14 @@ export class MarioKartScene {
     this.state = 'play';
     this.raceTime = 0;
     this.countdown = 3.0;
+    this.finishTime = 0;
+    this.playerPosition = 1;
   }
 
-  // ── Accès tuile par index ──
+  // ── Accès tuile ──
   _tileAt(tx, tz) {
-    if (tx >= 0 && tx < this.track.w && tz >= 0 && tz < this.track.h) {
+    if (tx >= 0 && tx < this.track.w && tz >= 0 && tz < this.track.h)
       return this.track.data[tz * this.track.w + tx];
-    }
     return 0;
   }
 
@@ -570,161 +435,183 @@ export class MarioKartScene {
     return this._tileAt(Math.floor(worldX / TILE_SIZE), Math.floor(worldZ / TILE_SIZE));
   }
 
-  // ── Boucle de mise à jour ──
+  // ── Mise à jour ──
   update(dt) {
     if (this.state !== 'play') return;
 
-    // Countdown au départ
+    // Pause / retour menu
+    const I = this.game.input;
+    if (I.justPressed && I.justPressed('pause', 0)) {
+      this.game.returnToMenu();
+      return;
+    }
+
+    // Countdown
     if (this.countdown > 0) {
       this.countdown -= dt;
       return;
     }
 
+    if (this.raceState === 'countdown') this.raceState = 'racing';
+
+    // Course terminée → attendre 3s puis menu
+    if (this.raceState === 'finished') {
+      this.finishTime += dt;
+      if (this.finishTime > 5.0) {
+        this.game.clearUI();
+        this.initMenu();
+        this.state = 'menu';
+      }
+      return;
+    }
+
     this.raceTime += dt;
-    const I = this.game.input;
 
     for (let i = 0; i < this.karts.length; i++) {
       const k = this.karts[i];
       let acc = 0, steer = 0, drift = false;
 
       if (k.isPlayer) {
-        // ── Contrôles Joueur ──
         acc = I.isDown('jump', 0) ? 1.0 : 0;
         steer = (I.isDown('left', 0) ? 1 : 0) + (I.isDown('right', 0) ? -1 : 0);
         drift = I.isDown('fire', 0);
         k.maxAiSpeed = drift ? 38 : 32;
       } else {
-        // ── IA par Waypoints ──
-        const ai = this.aiControllers.find(c => c.kart === k);
+        const ai = this.aiControllers.find(c => c.id === k.id);
         if (ai) {
-          const result = ai.update(dt, this.karts, this.karts[0], (x, z) => this.getTile(x, z));
-          acc = result.acc;
-          steer = result.steer;
-          drift = result.drift;
+          const r = ai.update(dt, k, this.karts, (x, z) => this.getTile(x, z));
+          acc = r.acc; steer = r.steer; drift = r.drift;
         }
       }
 
       // ── Physique ──
-      // Accélération
-      if (acc > 0) {
-        k.speed += acc * 30 * dt;
-      } else if (acc < 0) {
-        k.speed += acc * 20 * dt; // Marche arrière (IA bloquée)
-      } else {
-        // Décélération naturelle : freine vers 0, ne passe JAMAIS en négatif
+      if (acc > 0) k.speed += acc * 30 * dt;
+      else if (acc < 0) k.speed += acc * 20 * dt;
+      else {
         if (k.speed > 0) k.speed = Math.max(0, k.speed - 12 * dt);
         else if (k.speed < 0) k.speed = Math.min(0, k.speed + 12 * dt);
       }
 
-      // Frottement sol
-      const tile = this.getTile(k.x, k.z);
-      if (tile === 0) k.speed *= (1.0 - 2.0 * dt); // Fort ralentissement herbe
-
-      // Limite de vitesse (le joueur ne recule qu'en freinant)
+      // Limite de vitesse
       const limit = k.maxAiSpeed;
-      const minSpeed = k.isPlayer ? (drift ? -8 : 0) : -12;
-      k.speed = Math.max(minSpeed, Math.min(k.speed, limit));
+      const minSpd = k.isPlayer ? (drift ? -8 : 0) : -10;
+      k.speed = Math.max(minSpd, Math.min(k.speed, limit));
 
-      // Rotation (proportionnelle à la vitesse, mais toujours un minimum)
+      // Rotation
       const steerMod = drift ? 3.5 : 2.2;
       const speedFactor = Math.max(0.25, Math.abs(k.speed) / 30);
       k.angle += steer * steerMod * dt * speedFactor;
 
-      // Déplacement
-      k.x += Math.sin(k.angle) * k.speed * dt;
-      k.z += Math.cos(k.angle) * k.speed * dt;
+      // ── MOUVEMENT AVEC BARRIÈRES ──
+      const vx = Math.sin(k.angle) * k.speed * dt;
+      const vz = Math.cos(k.angle) * k.speed * dt;
+
+      const newX = k.x + vx;
+      const newZ = k.z + vz;
+
+      if (this.getTile(newX, newZ) > 0) {
+        // Chemin libre
+        k.x = newX;
+        k.z = newZ;
+      } else {
+        // Barrière ! Essayer de glisser le long du mur
+        let slid = false;
+        if (this.getTile(k.x + vx, k.z) > 0) {
+          k.x += vx;
+          slid = true;
+        }
+        if (this.getTile(k.x, k.z + vz) > 0) {
+          k.z += vz;
+          slid = true;
+        }
+        // Pénalité de vitesse
+        k.speed *= slid ? 0.75 : 0.4;
+        // Si complètement bloqué, léger rebond
+        if (!slid && Math.abs(k.speed) > 2) {
+          k.speed *= -0.2;
+        }
+      }
+
+      // ── DÉTECTION DES TOURS ──
+      const tile = this.getTile(k.x, k.z);
+      k.lapCooldown -= dt;
+      if (tile === 2) {
+        if (!k.onStartLine && k.lapCooldown <= 0) {
+          k.lap++;
+          k.lapCooldown = 4.0; // Cooldown anti-triche
+          // Le joueur a fini ?
+          if (k.isPlayer && k.lap >= TOTAL_LAPS) {
+            this.raceState = 'finished';
+            this.finishTime = 0;
+            // Calculer la position
+            const sorted = [...this.karts].sort((a, b) => b.lap - a.lap);
+            this.playerPosition = sorted.findIndex(kk => kk.isPlayer) + 1;
+          }
+        }
+        k.onStartLine = true;
+      } else {
+        k.onStartLine = false;
+      }
     }
 
-    // ── Collisions physiques entre karts ──
+    // ── Collisions entre karts ──
     for (let i = 0; i < this.karts.length; i++) {
       for (let j = i + 1; j < this.karts.length; j++) {
-        const k1 = this.karts[i];
-        const k2 = this.karts[j];
-        const dx = k2.x - k1.x;
-        const dz = k2.z - k1.z;
+        const k1 = this.karts[i], k2 = this.karts[j];
+        const dx = k2.x - k1.x, dz = k2.z - k1.z;
         const distSq = dx * dx + dz * dz;
         const minDist = 5.0;
-
         if (distSq > 0.01 && distSq < minDist * minDist) {
           const dist = Math.sqrt(distSq);
           const overlap = (minDist - dist) / 2;
-          const nx = dx / dist;
-          const nz = dz / dist;
+          const nx = dx / dist, nz = dz / dist;
 
-          k1.x -= nx * overlap;
-          k1.z -= nz * overlap;
-          k2.x += nx * overlap;
-          k2.z += nz * overlap;
+          // Pousser les karts mais vérifier qu'ils restent sur la route
+          const newK1x = k1.x - nx * overlap, newK1z = k1.z - nz * overlap;
+          const newK2x = k2.x + nx * overlap, newK2z = k2.z + nz * overlap;
 
-          // Transfert d'énergie cinétique
-          const relSpeed = (k1.speed - k2.speed) * 0.3;
-          k1.speed -= relSpeed;
-          k2.speed += relSpeed;
+          if (this.getTile(newK1x, newK1z) > 0) { k1.x = newK1x; k1.z = newK1z; }
+          if (this.getTile(newK2x, newK2z) > 0) { k2.x = newK2x; k2.z = newK2z; }
 
-          k1.speed *= 0.95;
-          k2.speed *= 0.95;
+          k1.speed *= 0.95; k2.speed *= 0.95;
         }
       }
     }
   }
 
-  // ── Rendu Mode 7 (sol projeté) ──
+  // ── Rendu Mode 7 ──
   drawMode7() {
     const player = this.karts[0];
-    const camX = player.x;
-    const camZ = player.z;
-    const camA = player.angle;
-    const camHeight = 6.0;
-    const fov = 1.0;
-
-    const W = this.renderW;
-    const H = this.renderH;
+    const camX = player.x, camZ = player.z, camA = player.angle;
+    const camHeight = 6.0, fov = 1.0;
+    const W = this.renderW, H = this.renderH;
     const hHalf = H - this.horizon;
-
-    const trackW = this.track.w;
-    const trackH = this.track.h;
-    const data = this.track.data;
-    const T = TILE_SIZE;
-
-    const sinA = Math.sin(camA);
-    const cosA = Math.cos(camA);
+    const trackW = this.track.w, trackH = this.track.h;
+    const data = this.track.data, T = TILE_SIZE;
+    const sinA = Math.sin(camA), cosA = Math.cos(camA);
 
     let offset = 0;
-
     for (let y = 0; y < hHalf; y++) {
       const rowDist = camHeight / (y + 1) * (H / 2);
 
-      const rayX0 = sinA + cosA * fov;
-      const rayZ0 = cosA - sinA * fov;
-      const rayX1 = sinA - cosA * fov;
-      const rayZ1 = cosA + sinA * fov;
+      const rayX0 = sinA + cosA * fov, rayZ0 = cosA - sinA * fov;
+      const rayX1 = sinA - cosA * fov, rayZ1 = cosA + sinA * fov;
 
-      const floorX0 = camX + rowDist * rayX0;
-      const floorZ0 = camZ + rowDist * rayZ0;
-      const floorX1 = camX + rowDist * rayX1;
-      const floorZ1 = camZ + rowDist * rayZ1;
+      const floorX0 = camX + rowDist * rayX0, floorZ0 = camZ + rowDist * rayZ0;
+      const floorX1 = camX + rowDist * rayX1, floorZ1 = camZ + rowDist * rayZ1;
 
-      const stepX = (floorX1 - floorX0) / W;
-      const stepZ = (floorZ1 - floorZ0) / W;
-
-      let floorX = floorX0;
-      let floorZ = floorZ0;
+      const stepX = (floorX1 - floorX0) / W, stepZ = (floorZ1 - floorZ0) / W;
+      let floorX = floorX0, floorZ = floorZ0;
 
       for (let x = 0; x < W; x++) {
-        const tx = Math.floor(floorX / T);
-        const tz = Math.floor(floorZ / T);
+        const tx = Math.floor(floorX / T), tz = Math.floor(floorZ / T);
         const tileVal = (tx >= 0 && tx < trackW && tz >= 0 && tz < trackH)
           ? data[tz * trackW + tx] : 0;
 
         let col;
-
         if (tileVal > 0) {
-          // ── Route ──
-          const lx = floorX - tx * T;
-          const lz = floorZ - tz * T;
+          const lx = floorX - tx * T, lz = floorZ - tz * T;
           const bw = 1.8;
-
-          // Vibreurs sur les bords adjacents à l'herbe
           let isBorder = false;
           if (lx < bw  && this._tileAt(tx - 1, tz) === 0) isBorder = true;
           else if (lx > T - bw && this._tileAt(tx + 1, tz) === 0) isBorder = true;
@@ -732,37 +619,26 @@ export class MarioKartScene {
           else if (lz > T - bw && this._tileAt(tx, tz + 1) === 0) isBorder = true;
 
           if (isBorder) {
-            const checker = Math.floor((floorX + floorZ) / 3) & 1;
-            col = checker ? COL_CURB_R : COL_CURB_W;
+            col = (Math.floor((floorX + floorZ) / 3) & 1) ? COL_CURB_R : COL_CURB_W;
           } else if (tileVal === 2) {
-            // Damier départ
-            const checker = (Math.floor(floorX / 2) ^ Math.floor(floorZ / 2)) & 1;
-            col = checker ? COL_START : COL_ASPHALT1;
+            col = ((Math.floor(floorX / 2) ^ Math.floor(floorZ / 2)) & 1) ? COL_START : COL_ASPHALT1;
           } else {
-            // Ligne centrale (au milieu de la tuile)
+            // Asphalte texturé + ligne centrale
             const halfT = T / 2;
             const atCenter = (Math.abs(lx - halfT) < 0.4 || Math.abs(lz - halfT) < 0.4);
-            // Seulement si c'est un segment droit (route des deux côtés)
-            const isHStripe = (this._tileAt(tx - 1, tz) > 0 && this._tileAt(tx + 1, tz) > 0);
-            const isVStripe = (this._tileAt(tx, tz - 1) > 0 && this._tileAt(tx, tz + 1) > 0);
-
-            if (atCenter && (isHStripe || isVStripe)) {
-              // Pointillés : un tronçon sur deux
-              const tileSum = (isHStripe ? tz : tx);
-              col = (tileSum & 1) ? COL_CENTER : COL_ASPHALT1;
+            const isH = (this._tileAt(tx-1,tz) > 0 && this._tileAt(tx+1,tz) > 0);
+            const isV = (this._tileAt(tx,tz-1) > 0 && this._tileAt(tx,tz+1) > 0);
+            if (atCenter && (isH || isV)) {
+              col = ((isH ? tz : tx) & 1) ? COL_CENTER : COL_ASPHALT1;
             } else {
-              // Asphalte légèrement texturé
-              const checker = ((Math.floor(floorX * 2) ^ Math.floor(floorZ * 2)) & 1);
-              col = checker ? COL_ASPHALT1 : COL_ASPHALT2;
+              col = ((Math.floor(floorX*2) ^ Math.floor(floorZ*2)) & 1) ? COL_ASPHALT1 : COL_ASPHALT2;
             }
           }
         } else {
-          // ── Herbe (damier) ──
-          const checker = (Math.floor(floorX / T) ^ Math.floor(floorZ / T)) & 1;
-          col = checker ? COL_GRASS1 : COL_GRASS2;
+          col = ((Math.floor(floorX/T) ^ Math.floor(floorZ/T)) & 1) ? COL_GRASS1 : COL_GRASS2;
         }
 
-        // Fog à l'horizon
+        // Brouillard
         if (y < 25) {
           const fade = Math.max(0.25, y / 25);
           const r = ((col & 0xFF) * fade) & 0xFF;
@@ -772,19 +648,15 @@ export class MarioKartScene {
         }
 
         this.pixels[offset++] = col;
-
-        floorX += stepX;
-        floorZ += stepZ;
+        floorX += stepX; floorZ += stepZ;
       }
     }
   }
 
-  // ── Sprite de kart directionnel ──
+  // ── Sprite kart ──
   drawKartSprite(ctx, cx, cy, width, skinHex, steer, diffAngle = 0) {
-    const w = width;
-    const h = width * 0.8;
-    const px = cx - w / 2;
-    const py = cy - h;
+    const w = width, h = width * 0.8;
+    const px = cx - w / 2, py = cy - h;
 
     let diff = diffAngle % PI2;
     if (diff > PI) diff -= PI2;
@@ -792,7 +664,7 @@ export class MarioKartScene {
 
     const pi4 = PI / 4;
     let view = 'back';
-    if (diff > 3 * pi4 || diff < -3 * pi4) view = 'front';
+    if (diff > 3*pi4 || diff < -3*pi4) view = 'front';
     else if (diff > pi4) view = 'left';
     else if (diff < -pi4) view = 'right';
 
@@ -801,65 +673,62 @@ export class MarioKartScene {
     switch (view) {
       case 'back':
         ctx.fillStyle = '#111';
-        ctx.fillRect(px - w * 0.1, py + h * 0.2, w * 0.3, h * 0.3);
-        ctx.fillRect(px + w * 0.8, py + h * 0.2, w * 0.3, h * 0.3);
-        ctx.fillRect(px - w * 0.15, py + h * 0.7, w * 0.3, h * 0.4);
-        ctx.fillRect(px + w * 0.85, py + h * 0.7, w * 0.3, h * 0.4);
+        ctx.fillRect(px - w*0.1, py + h*0.2, w*0.3, h*0.3);
+        ctx.fillRect(px + w*0.8, py + h*0.2, w*0.3, h*0.3);
+        ctx.fillRect(px - w*0.15, py + h*0.7, w*0.3, h*0.4);
+        ctx.fillRect(px + w*0.85, py + h*0.7, w*0.3, h*0.4);
         ctx.fillStyle = '#999';
-        ctx.fillRect(px + w * 0.1, py + h * 0.3, w * 0.8, h * 0.6);
+        ctx.fillRect(px + w*0.1, py + h*0.3, w*0.8, h*0.6);
         ctx.fillStyle = skinHex;
-        ctx.fillRect(px + w * 0.2, py + h * 0.4, w * 0.6, h * 0.5);
-        ctx.fillRect(px + w * 0.3, py + h * 0.2, w * 0.4, h * 0.2);
-        ctx.beginPath(); ctx.arc(cx + headOff, py + h * 0.2, w * 0.3, 0, PI2); ctx.fill();
+        ctx.fillRect(px + w*0.2, py + h*0.4, w*0.6, h*0.5);
+        ctx.fillRect(px + w*0.3, py + h*0.2, w*0.4, h*0.2);
+        ctx.beginPath(); ctx.arc(cx + headOff, py + h*0.2, w*0.3, 0, PI2); ctx.fill();
         ctx.fillStyle = '#ffccaa';
-        ctx.fillRect(cx - w * 0.15 + headOff, py + h * 0.1, w * 0.3, w * 0.15);
+        ctx.fillRect(cx - w*0.15 + headOff, py + h*0.1, w*0.3, w*0.15);
         break;
-
       case 'front':
         ctx.fillStyle = '#111';
-        ctx.fillRect(px - w * 0.15, py + h * 0.7, w * 0.3, h * 0.4);
-        ctx.fillRect(px + w * 0.85, py + h * 0.7, w * 0.3, h * 0.4);
-        ctx.fillRect(px - w * 0.1, py + h * 0.2, w * 0.3, h * 0.3);
-        ctx.fillRect(px + w * 0.8, py + h * 0.2, w * 0.3, h * 0.3);
+        ctx.fillRect(px - w*0.15, py + h*0.7, w*0.3, h*0.4);
+        ctx.fillRect(px + w*0.85, py + h*0.7, w*0.3, h*0.4);
+        ctx.fillRect(px - w*0.1, py + h*0.2, w*0.3, h*0.3);
+        ctx.fillRect(px + w*0.8, py + h*0.2, w*0.3, h*0.3);
         ctx.fillStyle = '#999';
-        ctx.fillRect(px + w * 0.1, py + h * 0.3, w * 0.8, h * 0.6);
+        ctx.fillRect(px + w*0.1, py + h*0.3, w*0.8, h*0.6);
         ctx.fillStyle = skinHex;
-        ctx.fillRect(px + w * 0.2, py + h * 0.1, w * 0.6, h * 0.6);
-        ctx.fillRect(px + w * 0.3, py + h * 0.6, w * 0.4, h * 0.3);
-        ctx.beginPath(); ctx.arc(cx - headOff, py + h * 0.2, w * 0.3, 0, PI2); ctx.fill();
+        ctx.fillRect(px + w*0.2, py + h*0.1, w*0.6, h*0.6);
+        ctx.fillRect(px + w*0.3, py + h*0.6, w*0.4, h*0.3);
+        ctx.beginPath(); ctx.arc(cx - headOff, py + h*0.2, w*0.3, 0, PI2); ctx.fill();
         ctx.fillStyle = '#ffccaa';
-        ctx.fillRect(cx - w * 0.2 - headOff, py + h * 0.05, w * 0.4, w * 0.25);
+        ctx.fillRect(cx - w*0.2 - headOff, py + h*0.05, w*0.4, w*0.25);
         ctx.fillStyle = 'black';
-        ctx.fillRect(cx - w * 0.1 - headOff, py + h * 0.1, w * 0.05, w * 0.05);
-        ctx.fillRect(cx + w * 0.05 - headOff, py + h * 0.1, w * 0.05, w * 0.05);
+        ctx.fillRect(cx - w*0.1 - headOff, py + h*0.1, w*0.05, w*0.05);
+        ctx.fillRect(cx + w*0.05 - headOff, py + h*0.1, w*0.05, w*0.05);
         break;
-
       case 'right':
         ctx.fillStyle = '#111';
-        ctx.fillRect(px + w * 0.1, py + h * 0.6, w * 0.3, h * 0.4);
-        ctx.fillRect(px + w * 0.6, py + h * 0.6, w * 0.3, h * 0.4);
+        ctx.fillRect(px + w*0.1, py + h*0.6, w*0.3, h*0.4);
+        ctx.fillRect(px + w*0.6, py + h*0.6, w*0.3, h*0.4);
         ctx.fillStyle = '#999';
-        ctx.fillRect(px + w * 0.1, py + h * 0.4, w * 0.8, h * 0.4);
+        ctx.fillRect(px + w*0.1, py + h*0.4, w*0.8, h*0.4);
         ctx.fillStyle = skinHex;
-        ctx.fillRect(px + w * 0.1, py + h * 0.3, w * 0.5, h * 0.3);
-        ctx.fillRect(px + w * 0.6, py + h * 0.45, w * 0.3, h * 0.15);
-        ctx.beginPath(); ctx.arc(cx - w * 0.1, py + h * 0.15, w * 0.25, 0, PI2); ctx.fill();
+        ctx.fillRect(px + w*0.1, py + h*0.3, w*0.5, h*0.3);
+        ctx.fillRect(px + w*0.6, py + h*0.45, w*0.3, h*0.15);
+        ctx.beginPath(); ctx.arc(cx - w*0.1, py + h*0.15, w*0.25, 0, PI2); ctx.fill();
         ctx.fillStyle = '#ffccaa';
-        ctx.fillRect(cx - w * 0.1, py + h * 0.05, w * 0.25, w * 0.15);
+        ctx.fillRect(cx - w*0.1, py + h*0.05, w*0.25, w*0.15);
         break;
-
       case 'left':
         ctx.fillStyle = '#111';
-        ctx.fillRect(px + w * 0.6, py + h * 0.6, w * 0.3, h * 0.4);
-        ctx.fillRect(px + w * 0.1, py + h * 0.6, w * 0.3, h * 0.4);
+        ctx.fillRect(px + w*0.6, py + h*0.6, w*0.3, h*0.4);
+        ctx.fillRect(px + w*0.1, py + h*0.6, w*0.3, h*0.4);
         ctx.fillStyle = '#999';
-        ctx.fillRect(px + w * 0.1, py + h * 0.4, w * 0.8, h * 0.4);
+        ctx.fillRect(px + w*0.1, py + h*0.4, w*0.8, h*0.4);
         ctx.fillStyle = skinHex;
-        ctx.fillRect(px + w * 0.4, py + h * 0.3, w * 0.5, h * 0.3);
-        ctx.fillRect(px + w * 0.1, py + h * 0.45, w * 0.3, h * 0.15);
-        ctx.beginPath(); ctx.arc(cx + w * 0.1, py + h * 0.15, w * 0.25, 0, PI2); ctx.fill();
+        ctx.fillRect(px + w*0.4, py + h*0.3, w*0.5, h*0.3);
+        ctx.fillRect(px + w*0.1, py + h*0.45, w*0.3, h*0.15);
+        ctx.beginPath(); ctx.arc(cx + w*0.1, py + h*0.15, w*0.25, 0, PI2); ctx.fill();
         ctx.fillStyle = '#ffccaa';
-        ctx.fillRect(cx - w * 0.15, py + h * 0.05, w * 0.25, w * 0.15);
+        ctx.fillRect(cx - w*0.15, py + h*0.05, w*0.25, w*0.15);
         break;
     }
   }
@@ -870,8 +739,9 @@ export class MarioKartScene {
 
     const horizon = this.horizon;
     const bc = this.bufferCtx;
+    const PLAYER_SIZE = 40;
 
-    // 1. Ciel dégradé
+    // 1. Ciel
     const grad = bc.createLinearGradient(0, 0, 0, horizon);
     grad.addColorStop(0, '#1a5aff');
     grad.addColorStop(0.6, '#5599ff');
@@ -883,31 +753,23 @@ export class MarioKartScene {
     this.drawMode7();
     bc.putImageData(this.imgData, 0, horizon);
 
-    // 3. Sprites des karts (Z-sort)
+    // 3. Sprites (Z-sort)
     const player = this.karts[0];
-    const camA = player.angle;
-    const camX = player.x;
-    const camZ = player.z;
+    const camA = player.angle, camX = player.x, camZ = player.z;
+    const sinCam = Math.sin(camA), cosCam = Math.cos(camA);
 
-    const sorted = [...this.karts].sort((a, b) => {
-      const d1 = (a.x - camX) ** 2 + (a.z - camZ) ** 2;
-      const d2 = (b.x - camX) ** 2 + (b.z - camZ) ** 2;
-      return d2 - d1;
-    });
+    const sorted = [...this.karts].sort((a, b) =>
+      ((b.x-camX)**2 + (b.z-camZ)**2) - ((a.x-camX)**2 + (a.z-camZ)**2)
+    );
 
-    const sinCam = Math.sin(camA);
-    const cosCam = Math.cos(camA);
+    const I = this.game.input;
 
     for (const k of sorted) {
       if (k.isPlayer) {
-        const I = this.game.input;
         const steer = (I.isDown('left', 0) ? -1 : 0) + (I.isDown('right', 0) ? 1 : 0);
-        this.drawKartSprite(bc, this.renderW / 2, this.renderH - 10, 48, k.skin.color, steer);
+        this.drawKartSprite(bc, this.renderW / 2, this.renderH - 10, PLAYER_SIZE, k.skin.color, steer);
       } else {
-        const dx = k.x - camX;
-        const dz = k.z - camZ;
-
-        // Rotation dans le repère caméra (rx inversé pour correspondre au sol Mode 7)
+        const dx = k.x - camX, dz = k.z - camZ;
         const rx = -(dx * cosCam - dz * sinCam);
         const rz = dx * sinCam + dz * cosCam;
 
@@ -917,8 +779,9 @@ export class MarioKartScene {
           const screenX = (this.renderW / 2) + (rx * scale);
           const screenY = horizon + (6.0 * scale);
 
-          if (screenX > -100 && screenX < this.renderW + 100 && screenY > horizon && screenY < this.renderH + 50) {
-            const kartSize = Math.max(4, Math.min(60, 20 * scale));
+          if (screenX > -80 && screenX < this.renderW + 80 && screenY > horizon && screenY < this.renderH + 50) {
+            // Taille IA = même base que le joueur, adapté à la distance
+            const kartSize = Math.max(4, Math.min(PLAYER_SIZE, (PLAYER_SIZE * 0.5) * scale));
             const diffAngle = k.angle - camA;
             const steerIA = Math.sin(k.id * 10 + Date.now() / 200) * 0.5;
             this.drawKartSprite(bc, screenX, screenY, kartSize, k.skin.color, steerIA, diffAngle);
@@ -932,36 +795,73 @@ export class MarioKartScene {
     ctx.drawImage(this.bufferCanvas, 0, 0, VIEW_W, VIEW_H);
 
     // 5. HUD
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 24px sans-serif';
-    ctx.shadowColor = '#000';
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
-    ctx.fillText('🏎️ PIXEL KART', 15, 35);
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 4; ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 2;
 
+    // Vitesse
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 22px sans-serif';
     const speed = Math.round(Math.abs(player.speed) * 4);
-    ctx.fillText(speed + ' km/h', VIEW_W - 140, VIEW_H - 25);
+    ctx.textAlign = 'right';
+    ctx.fillText(speed + ' km/h', VIEW_W - 15, VIEW_H - 20);
+
+    // Tours
+    const currentLap = Math.min((player.lap || 0) + 1, TOTAL_LAPS);
+    ctx.font = 'bold 26px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#ffdd44';
+    ctx.fillText(`Tour ${currentLap}/${TOTAL_LAPS}`, 15, 35);
+
+    // Chrono
+    const mins = Math.floor(this.raceTime / 60);
+    const secs = Math.floor(this.raceTime % 60);
+    const ms = Math.floor((this.raceTime * 100) % 100);
+    ctx.font = 'bold 18px monospace';
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${mins}:${String(secs).padStart(2,'0')}.${String(ms).padStart(2,'0')}`, VIEW_W / 2, 30);
+
+    // Hint menu
+    ctx.font = '12px sans-serif';
+    ctx.fillStyle = '#aaa';
+    ctx.textAlign = 'right';
+    ctx.fillText('ESC = Menu', VIEW_W - 10, 20);
 
     // Countdown
     if (this.countdown > 0) {
       ctx.font = 'bold 80px sans-serif';
       ctx.fillStyle = '#ff3333';
       ctx.textAlign = 'center';
-      ctx.fillText(Math.ceil(this.countdown), VIEW_W / 2, VIEW_H / 2);
-      ctx.textAlign = 'left';
+      const num = Math.ceil(this.countdown);
+      ctx.fillText(num > 0 ? String(num) : 'GO!', VIEW_W / 2, VIEW_H / 2);
     }
 
-    // Temps de course
-    const mins = Math.floor(this.raceTime / 60);
-    const secs = Math.floor(this.raceTime % 60);
-    const ms = Math.floor((this.raceTime * 100) % 100);
-    ctx.font = 'bold 20px monospace';
-    ctx.fillStyle = '#ffdd44';
-    ctx.fillText(`${mins}:${String(secs).padStart(2, '0')}.${String(ms).padStart(2, '0')}`, VIEW_W / 2 - 50, 30);
+    // Écran de fin de course
+    if (this.raceState === 'finished') {
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(0, VIEW_H / 4, VIEW_W, VIEW_H / 2);
+
+      ctx.font = 'bold 48px sans-serif';
+      ctx.fillStyle = this.playerPosition === 1 ? '#ffd700' : '#fff';
+      ctx.textAlign = 'center';
+      const posText = this.playerPosition === 1 ? '🏆 1ère PLACE !' :
+                      this.playerPosition <= 3 ? `${this.playerPosition}ème place !` :
+                      `${this.playerPosition}ème place`;
+      ctx.fillText(posText, VIEW_W / 2, VIEW_H / 2 - 10);
+
+      ctx.font = 'bold 20px monospace';
+      ctx.fillStyle = '#ffdd44';
+      ctx.fillText(`Temps : ${mins}:${String(secs).padStart(2,'0')}.${String(ms).padStart(2,'0')}`, VIEW_W / 2, VIEW_H / 2 + 30);
+
+      ctx.font = '16px sans-serif';
+      ctx.fillStyle = '#aaa';
+      ctx.fillText('Retour au menu dans quelques secondes...', VIEW_W / 2, VIEW_H / 2 + 60);
+    }
 
     ctx.shadowColor = 'transparent';
+    ctx.textAlign = 'left';
   }
 
-  dispose() {}
+  dispose() {
+    if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
+  }
 }
