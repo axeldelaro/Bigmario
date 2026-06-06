@@ -97,7 +97,7 @@ class Game {
 
   checkOrientation() {
     const portrait = innerHeight > innerWidth;
-    const playMode = this.mode === 'game' || this.mode === 'versus' || this.mode === 'replay';
+    const playMode = this.mode === 'game' || this.mode === 'versus' || this.mode === 'replay' || this.mode === 'mariokart';
     const showHint = isTouch && portrait && playMode;
     rotateHint.classList.toggle('hidden', !showHint);
     const showTouch = isTouch && playMode && !portrait;
@@ -1253,6 +1253,8 @@ class Game {
 
   startMarioKart() {
     this.clearUI();
+    this.mode = 'mariokart';
+    this.paused = false;
     // We will lazily load and create the MarioKartScene
     import('./scene_mariokart.js').then(module => {
       this.scene = new module.MarioKartScene(this);
