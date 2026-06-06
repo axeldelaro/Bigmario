@@ -1251,6 +1251,18 @@ class Game {
     this.checkOrientation();
   }
 
+  startMarioKart() {
+    this.clearUI();
+    // We will lazily load and create the MarioKartScene
+    import('./scene_mariokart.js').then(module => {
+      this.scene = new module.MarioKartScene(this);
+    }).catch(e => {
+      console.error("Mario Kart mode non disponible", e);
+      alert("Erreur de chargement du mode Mario Kart.");
+      this.returnToMenu();
+    });
+  }
+
   endMiniGame() {
     const sc = this.scene ? this.scene.scores : [0, 0];
     const kind = this.scene ? this.scene.kind : 'coin';
