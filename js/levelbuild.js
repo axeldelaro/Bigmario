@@ -239,8 +239,8 @@ function L43() { // 4-3 Gardien Suprême — boss en grande arène
   // Plateformes hautes (row 3) pour power-ups
   plat(g, 3, 18, 5); plat(g, 3, 36, 5);
   put(g, 3, 10, 'M'); put(g, 3, 48, 'W'); put(g, 2, 20, 'U'); // feu, plume, étoile
-  // Ressort central pour accès aux plateformes hautes
-  put(g, 9, 30, 'T');
+  // Ressort pour accès aux plateformes hautes (décalé du boss)
+  put(g, 9, 28, 'T');
   put(g, 5, 28, 'j'); put(g, 5, 31, 'j');
   coins(g, 8, 14, 3); coins(g, 8, 40, 3);
   put(g, 9, 30, 'O');
