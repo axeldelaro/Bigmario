@@ -195,7 +195,7 @@ export class MarioKartScene {
       this.game.clearUI();
       this.initRace();
     };
-    p.querySelector('#mk-back').onclick = () => this.game.showMainMenu();
+    p.querySelector('#mk-back').onclick = () => this.game.returnToMenu();
   }
 
   initRace() {
