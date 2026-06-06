@@ -310,16 +310,16 @@ export class MarioKartScene {
         const lookDist = 16 + (k.speed * 0.2); // Le regard s'allonge avec la vitesse
         
         // 2. Senseurs de route (Gradient Descent)
-        const L2_X = k.x + Math.cos(k.angle + 0.8) * lookDist;
-        const L2_Z = k.z + Math.sin(k.angle + 0.8) * lookDist;
-        const L1_X = k.x + Math.cos(k.angle + 0.4) * lookDist;
-        const L1_Z = k.z + Math.sin(k.angle + 0.4) * lookDist;
-        const C_X  = k.x + Math.cos(k.angle) * lookDist;
-        const C_Z  = k.z + Math.sin(k.angle) * lookDist;
-        const R1_X = k.x + Math.cos(k.angle - 0.4) * lookDist;
-        const R1_Z = k.z + Math.sin(k.angle - 0.4) * lookDist;
-        const R2_X = k.x + Math.cos(k.angle - 0.8) * lookDist;
-        const R2_Z = k.z + Math.sin(k.angle - 0.8) * lookDist;
+        const L2_X = k.x + Math.sin(k.angle + 0.8) * lookDist;
+        const L2_Z = k.z + Math.cos(k.angle + 0.8) * lookDist;
+        const L1_X = k.x + Math.sin(k.angle + 0.4) * lookDist;
+        const L1_Z = k.z + Math.cos(k.angle + 0.4) * lookDist;
+        const C_X  = k.x + Math.sin(k.angle) * lookDist;
+        const C_Z  = k.z + Math.cos(k.angle) * lookDist;
+        const R1_X = k.x + Math.sin(k.angle - 0.4) * lookDist;
+        const R1_Z = k.z + Math.cos(k.angle - 0.4) * lookDist;
+        const R2_X = k.x + Math.sin(k.angle - 0.8) * lookDist;
+        const R2_Z = k.z + Math.cos(k.angle - 0.8) * lookDist;
 
         let roadPull = 0;
         if (this.getTile(L2_X, L2_Z) > 0) roadPull += 1.0;
@@ -341,7 +341,7 @@ export class MarioKartScene {
            const distSq = dx*dx + dz*dz;
            
            if (distSq < 10000) { // Moins de 100 unités
-              const angleToOther = Math.atan2(dz, dx);
+              const angleToOther = Math.atan2(dx, dz); // dx/dz car Z est l'axe principal
               let diff = (angleToOther - k.angle) % (Math.PI*2);
               if (diff > Math.PI) diff -= Math.PI*2;
               if (diff < -Math.PI) diff += Math.PI*2;
@@ -367,8 +367,8 @@ export class MarioKartScene {
         let rubberBand = 0;
         
         // Le joueur va vers où ?
-        const pVelX = Math.cos(player.angle);
-        const pVelZ = Math.sin(player.angle);
+        const pVelX = Math.sin(player.angle);
+        const pVelZ = Math.cos(player.angle);
         const dot = pdx * pVelX + pdz * pVelZ; 
         
         if (dot > 0 && distToPlayerSq > 40000) {
@@ -420,8 +420,8 @@ export class MarioKartScene {
       k.angle += steer * steerMod * dt * Math.max(0.3, Math.abs(k.speed)/32);
       
       // Déplacement (Vecteur avant)
-      k.x += Math.cos(k.angle) * k.speed * dt;
-      k.z += Math.sin(k.angle) * k.speed * dt;
+      k.x += Math.sin(k.angle) * k.speed * dt;
+      k.z += Math.cos(k.angle) * k.speed * dt;
     }
     
     // 7. Collisions Physiques entre les Karts (Auto-tamponneuses)
