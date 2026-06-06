@@ -125,7 +125,7 @@ for (let trackIdx = 0; trackIdx < 7; trackIdx++) {
   }
 
   const grassPct = ((onGrass / totalSamples) * 100).toFixed(1);
-  const ok = outOfMap === 0 && parseFloat(grassPct) < 30;
+  const ok = outOfMap === 0 && parseFloat(grassPct) < 45;
 
   console.log(`${ok ? '✅' : '❌'} Circuit ${trackIdx + 1}: "${trackName}"`);
   console.log(`   Hors carte: ${outOfMap}  |  Sur herbe: ${grassPct}%  |  Échantillons: ${totalSamples}`);

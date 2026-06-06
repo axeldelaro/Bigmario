@@ -64,11 +64,10 @@ const TRACKS = [
     00111122001111111000
     00000000000000000000
   `, [
-    {x:5,z:11}, {x:3,z:10}, {x:2,z:8}, {x:3,z:6},
-    {x:5,z:5}, {x:7,z:4}, {x:9,z:3}, {x:12,z:4},
-    {x:15,z:3}, {x:17,z:2}, {x:18,z:4}, {x:17,z:6},
-    {x:15,z:7}, {x:12,z:7}, {x:9,z:8}, {x:7,z:9},
-    {x:5,z:10}, {x:3,z:11}
+    {x:5,z:11}, {x:2,z:10}, {x:1,z:7}, {x:2,z:5},
+    {x:5,z:4}, {x:8,z:3}, {x:10,z:2}, {x:13,z:2},
+    {x:16,z:1}, {x:18,z:3}, {x:17,z:5}, {x:14,z:6},
+    {x:10,z:6}, {x:8,z:7}, {x:5,z:8}, {x:2,z:10}
   ]),
 
   // ──── 3. Circuit Technique (Chicanes) ────
@@ -90,10 +89,11 @@ const TRACKS = [
     00111111111111111100
     00000000000000000000
   `, [
-    {x:4,z:14}, {x:16,z:14}, {x:17,z:10}, {x:14,z:10},
-    {x:9,z:10}, {x:5,z:9}, {x:5,z:6}, {x:6,z:5},
-    {x:11,z:5}, {x:16,z:5}, {x:17,z:3}, {x:10,z:2},
-    {x:3,z:3}, {x:3,z:12}
+    {x:4,z:14}, {x:10,z:14}, {x:17,z:14}, {x:17,z:11},
+    {x:17,z:9}, {x:14,z:9}, {x:10,z:9}, {x:8,z:10},
+    {x:3,z:10}, {x:3,z:7}, {x:3,z:5}, {x:7,z:5},
+    {x:12,z:5}, {x:17,z:5}, {x:17,z:3}, {x:10,z:2},
+    {x:3,z:2}, {x:3,z:12}
   ]),
 
   // ──── 4. Circuit de la Montagne ────
@@ -148,11 +148,11 @@ const TRACKS = [
     001111111111111111111100
     000000000000000000000000
   `, [
-    {x:12,z:15}, {x:20,z:14}, {x:21,z:10}, {x:21,z:5},
-    {x:20,z:3}, {x:12,z:2}, {x:4,z:3}, {x:3,z:5},
-    {x:3,z:10}, {x:3,z:13}, {x:4,z:14}, {x:8,z:14},
-    {x:8,z:11}, {x:9,z:6}, {x:12,z:5}, {x:15,z:6},
-    {x:16,z:11}, {x:15,z:14}
+    {x:12,z:15}, {x:20,z:15}, {x:21,z:12}, {x:21,z:7},
+    {x:21,z:4}, {x:20,z:2}, {x:12,z:2}, {x:4,z:2},
+    {x:3,z:4}, {x:3,z:7}, {x:3,z:12}, {x:4,z:14},
+    {x:9,z:14}, {x:9,z:11}, {x:9,z:6}, {x:12,z:6},
+    {x:15,z:6}, {x:15,z:9}, {x:15,z:11}, {x:15,z:14}
   ]),
 
   // ──── 6. Serpent Express ────
@@ -219,7 +219,7 @@ class WaypointAI {
     this.kart = kart;
     this.waypoints = waypoints;
     this.currentWP = 0;
-    this.wpThresholdSq = 10 * 10; // Distance en unités monde au carré pour valider un WP
+    this.wpThresholdSq = 14 * 14; // Distance pour valider un WP (plus grand = moins de zigzag)
 
     // Personnalité unique
     this.topSpeed     = personality.topSpeed;     // 28-35
@@ -274,8 +274,18 @@ class WaypointAI {
     while (angleDiff < -PI) angleDiff += PI2;
 
     // ── Steering vers le waypoint ──
-    let steer = angleDiff * 3.0 * this.aggression;
+    let steer = angleDiff * 3.5 * this.aggression;
     steer = Math.max(-3.0, Math.min(3.0, steer)); // Clamp
+
+    // ── Correction d'urgence si on est sur l'herbe ──
+    let grassPenalty = false;
+    const onRoad = getTile(k.x, k.z);
+    if (onRoad === 0) {
+      // On est sur l'herbe ! Amplifier le steer vers le waypoint et freiner
+      steer = angleDiff * 5.0 * this.aggression;
+      steer = Math.max(-4.0, Math.min(4.0, steer));
+      grassPenalty = true;
+    }
 
     // ── Erreurs humaines (petit wobble) ──
     this.errorAccum += dt;
@@ -284,7 +294,7 @@ class WaypointAI {
     }
 
     // ── Accélération intelligente ──
-    let acc = 1.0;
+    let acc = grassPenalty ? 0.4 : 1.0;
     const absAngleDiff = Math.abs(angleDiff);
 
     // Freiner dans les virages serrés
@@ -360,22 +370,27 @@ class WaypointAI {
     this.lastX = k.x;
     this.lastZ = k.z;
 
-    if (moved < 0.2 * dt * 60) {
+    // Détection agressive : bloqué si peu de mouvement OU vitesse négative
+    if (moved < 0.3 * dt * 60 || k.speed < -2) {
       this.stuckTimer += dt;
     } else {
-      this.stuckTimer = Math.max(0, this.stuckTimer - dt * 2);
+      this.stuckTimer = Math.max(0, this.stuckTimer - dt * 3);
     }
 
-    // Si bloqué > 1.5s, marche arrière et braquage inverse
-    if (this.stuckTimer > 1.5) {
+    // Recovery rapide : téléportation au waypoint après 1.5s
+    if (this.stuckTimer > 0.8) {
       acc = -1.0;
       steer = -steer * 2;
-      if (this.stuckTimer > 3.0) {
-        // Reset au dernier waypoint
+      if (this.stuckTimer > 1.5) {
+        // Téléportation au waypoint courant
         const wp = this.waypoints[this.currentWP];
         k.x = wp.x * TILE_SIZE + TILE_SIZE / 2;
         k.z = wp.z * TILE_SIZE + TILE_SIZE / 2;
-        k.speed = 5;
+        k.speed = 8;
+        k.angle = Math.atan2(
+          this.waypoints[(this.currentWP + 1) % this.waypoints.length].x * TILE_SIZE - k.x,
+          this.waypoints[(this.currentWP + 1) % this.waypoints.length].z * TILE_SIZE - k.z
+        );
         this.stuckTimer = 0;
       }
     }
@@ -394,13 +409,13 @@ function makePersonality(id) {
   // Chaque IA a un profil unique et déterministe
   const profiles = [
     null, // index 0 = joueur
-    { topSpeed: 30, aggression: 1.0, brakingSkill: 0.9, errorRate: 0.05, laneOffset: -1.5, reaction: 0.05 }, // Prudent
-    { topSpeed: 33, aggression: 1.3, brakingSkill: 0.7, errorRate: 0.15, laneOffset:  2.0, reaction: 0.10 }, // Agressif
-    { topSpeed: 31, aggression: 1.1, brakingSkill: 0.85, errorRate: 0.08, laneOffset: -0.5, reaction: 0.07 }, // Équilibré
-    { topSpeed: 34, aggression: 1.4, brakingSkill: 0.6, errorRate: 0.20, laneOffset:  1.0, reaction: 0.15 }, // Téméraire
+    { topSpeed: 30, aggression: 1.0, brakingSkill: 0.9, errorRate: 0.05, laneOffset: -1.0, reaction: 0.05 }, // Prudent
+    { topSpeed: 33, aggression: 1.3, brakingSkill: 0.7, errorRate: 0.12, laneOffset:  1.0, reaction: 0.10 }, // Agressif
+    { topSpeed: 31, aggression: 1.1, brakingSkill: 0.85, errorRate: 0.06, laneOffset: -0.5, reaction: 0.07 }, // Équilibré
+    { topSpeed: 34, aggression: 1.4, brakingSkill: 0.6, errorRate: 0.15, laneOffset:  0.5, reaction: 0.15 }, // Téméraire
     { topSpeed: 29, aggression: 0.9, brakingSkill: 1.0, errorRate: 0.02, laneOffset:  0.0, reaction: 0.03 }, // Pro
-    { topSpeed: 32, aggression: 1.2, brakingSkill: 0.75, errorRate: 0.12, laneOffset: -2.5, reaction: 0.08 }, // Kamikaze
-    { topSpeed: 31, aggression: 1.0, brakingSkill: 0.80, errorRate: 0.10, laneOffset:  3.0, reaction: 0.12 }, // Large
+    { topSpeed: 32, aggression: 1.2, brakingSkill: 0.75, errorRate: 0.10, laneOffset: -1.5, reaction: 0.08 }, // Kamikaze
+    { topSpeed: 31, aggression: 1.0, brakingSkill: 0.80, errorRate: 0.08, laneOffset:  1.5, reaction: 0.12 }, // Large
   ];
   return profiles[id] || profiles[1];
 }
@@ -484,15 +499,14 @@ export class MarioKartScene {
       }
     }
 
-    // Déterminer l'angle de départ (direction de la route adjacente)
-    const startTX = Math.floor(startX / TILE_SIZE);
-    const startTZ = Math.floor(startZ / TILE_SIZE);
+    // Déterminer l'angle de départ en visant le 1er waypoint
     let startAngle = 0;
-    // Regarder quelle direction a de la route
-    if (this._tileAt(startTX, startTZ - 1) > 0) startAngle = 0;        // Nord
-    else if (this._tileAt(startTX, startTZ + 1) > 0) startAngle = PI;   // Sud
-    else if (this._tileAt(startTX + 1, startTZ) > 0) startAngle = PI/2; // Est
-    else if (this._tileAt(startTX - 1, startTZ) > 0) startAngle = -PI/2;// Ouest
+    if (this.track.waypoints && this.track.waypoints.length > 0) {
+      const wp = this.track.waypoints[0];
+      const wpX = wp.x * TILE_SIZE + TILE_SIZE / 2;
+      const wpZ = wp.z * TILE_SIZE + TILE_SIZE / 2;
+      startAngle = Math.atan2(wpX - startX, wpZ - startZ);
+    }
 
     // Créer les 8 coureurs
     for (let i = 0; i < 8; i++) {
@@ -595,18 +609,21 @@ export class MarioKartScene {
       if (acc > 0) {
         k.speed += acc * 30 * dt;
       } else if (acc < 0) {
-        k.speed += acc * 20 * dt; // Marche arrière
+        k.speed += acc * 20 * dt; // Marche arrière (IA bloquée)
       } else {
-        k.speed -= 12 * dt; // Décélération naturelle
+        // Décélération naturelle : freine vers 0, ne passe JAMAIS en négatif
+        if (k.speed > 0) k.speed = Math.max(0, k.speed - 12 * dt);
+        else if (k.speed < 0) k.speed = Math.min(0, k.speed + 12 * dt);
       }
 
       // Frottement sol
       const tile = this.getTile(k.x, k.z);
       if (tile === 0) k.speed *= (1.0 - 2.0 * dt); // Fort ralentissement herbe
 
-      // Limite de vitesse
+      // Limite de vitesse (le joueur ne recule qu'en freinant)
       const limit = k.maxAiSpeed;
-      k.speed = Math.max(-12, Math.min(k.speed, limit));
+      const minSpeed = k.isPlayer ? (drift ? -8 : 0) : -12;
+      k.speed = Math.max(minSpeed, Math.min(k.speed, limit));
 
       // Rotation (proportionnelle à la vitesse, mais toujours un minimum)
       const steerMod = drift ? 3.5 : 2.2;
@@ -890,8 +907,8 @@ export class MarioKartScene {
         const dx = k.x - camX;
         const dz = k.z - camZ;
 
-        // Rotation dans le repère caméra
-        const rx = dx * cosCam - dz * sinCam;
+        // Rotation dans le repère caméra (rx inversé pour correspondre au sol Mode 7)
+        const rx = -(dx * cosCam - dz * sinCam);
         const rz = dx * sinCam + dz * cosCam;
 
         if (rz > 1.0) {
