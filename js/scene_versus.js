@@ -217,6 +217,9 @@ export class VersusScene {
   }
 
   update(dt) {
+    // Vérifier la pause EN PREMIER, avant tout early return
+    if (this.game.input.justPressed('pause', 0)) this.game.togglePause();
+
     this.stateT += dt;
     if (this.over) { if (this.stateT > 3.5) this.game.endVersus(); return; }
 

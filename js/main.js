@@ -255,7 +255,8 @@ class Game {
   startVersusLocal(arenaIdx = 0, playerCount = 2, ids = null) {
     this.clearUI(); this.mode = 'versus'; this.paused = false;
     this._restart = () => this.startVersusLocal(arenaIdx, playerCount, ids);
-    this.scene = new VersusScene(this, { mode: 'local', arenaIdx, playerCount, ids });
+    const botSkill = this._botSkill ?? AI_PRESETS.medium.skill;
+    this.scene = new VersusScene(this, { mode: 'local', arenaIdx, playerCount, ids, botSkill });
     this.checkOrientation();
   }
   startVersusBot(arenaIdx = 0) {
@@ -663,6 +664,9 @@ class Game {
 
   showLocalHelp() {
     resumeAudio();
+    const curDiff = Save.get('aiDifficulty', 'medium');
+    const diffLabels = { easy: '😊 Facile', medium: '⚔️ Normal', hard: '🔥 Difficile', extreme: '💀 Extrême' };
+    const diffKeys = ['easy', 'medium', 'hard', 'extreme'];
     const p = this.panel(`
       <div class="title"><span class="big" style="font-size:28px">🎮 MODE LOCAL FFA</span><span class="sub">SUR CE PC</span></div>
       <p class="hint">Jusqu'à 4 combattants dans l'arène.</p>
@@ -670,16 +674,31 @@ class Game {
         <label>Humains: <select id="h-count"><option>1</option><option selected>2</option><option>3</option><option>4</option></select></label>
         <label>Bots (IA): <select id="b-count"><option selected>0</option><option>1</option><option>2</option><option>3</option></select></label>
       </div>
+      <div style="display:flex; justify-content:center; align-items:center; gap: 8px; margin: 8px 0;">
+        <span style="color:#aaa">Niveau IA :</span>
+        <button class="btn ghost" id="diff-btn" style="font-size:14px; padding:2px 12px;">${diffLabels[curDiff]}</button>
+      </div>
       <div class="row" style="margin-top:16px">
         <button class="btn ghost" id="back">← Retour</button>
         <button class="btn" id="go">Choisir l'arène →</button>
       </div>
     `);
+    let diffIdx = diffKeys.indexOf(curDiff);
+    if (diffIdx < 0) diffIdx = 1;
+    const diffBtn = p.querySelector('#diff-btn');
+    diffBtn.onclick = () => {
+      diffIdx = (diffIdx + 1) % diffKeys.length;
+      const key = diffKeys[diffIdx];
+      Save.set('aiDifficulty', key);
+      this._botSkill = AI_PRESETS[key].skill;
+      diffBtn.textContent = diffLabels[key];
+    };
     p.querySelector('#go').onclick = () => {
       const h = +p.querySelector('#h-count').value;
       const b = +p.querySelector('#b-count').value;
       const total = h + b;
       if (total < 2 || total > 4) { alert("Le total doit être entre 2 et 4."); return; }
+      this._botSkill = AI_PRESETS[diffKeys[diffIdx]].skill;
       const ids = [];
       for (let i=0; i<h; i++) ids.push(i);
       for (let i=0; i<b; i++) ids.push('AI_' + i);
