@@ -1669,8 +1669,34 @@ Game.prototype.startVersusOnline = function (net, localId, arenaIdx) {
 
 window.addEventListener('load', () => {
   window.GAME = new Game();
-  // PWA: installation + jeu hors-ligne
+  // PWA: installation + jeu hors-ligne + rechargement auto
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+    // Écouter les messages du SW (mise à jour dispo → recharger)
+    navigator.serviceWorker.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'SW_UPDATED') {
+        console.log('[BigMario] Nouvelle version détectée:', e.data.version, '→ rechargement...');
+        window.location.reload();
+      }
+    });
+
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      // Vérifier les mises à jour régulièrement (toutes les 60s)
+      setInterval(() => reg.update().catch(() => {}), 60000);
+
+      // Quand un nouveau SW est prêt, il s'activera via skipWaiting
+      // et enverra un message SW_UPDATED → la page se recharge
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        if (newSW) {
+          newSW.addEventListener('statechange', () => {
+            if (newSW.state === 'activated') {
+              // Fallback si le postMessage n'arrive pas
+              console.log('[BigMario] Nouveau SW activé → rechargement...');
+              window.location.reload();
+            }
+          });
+        }
+      });
+    }).catch(() => {});
   }
 });
