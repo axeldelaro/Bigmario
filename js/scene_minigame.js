@@ -67,7 +67,6 @@ export class MiniGameScene {
 
   humanInput() {
     const I = this.game.input;
-    if (I.justPressed('pause', 0)) this.game.togglePause();
     return {
       left: I.isDown('left', 0), right: I.isDown('right', 0),
       down: I.isDown('down', 0), downPressed: I.justPressed('down', 0),
@@ -77,6 +76,9 @@ export class MiniGameScene {
   }
 
   update(dt) {
+    // Pause en premier, avant tout
+    if (this.game.input.justPressed('pause', 0)) { this.game.togglePause(); return; }
+
     this.stateT += dt;
     if (this.over) { if (this.stateT > 3.5) this.game.endMiniGame(); return; }
 

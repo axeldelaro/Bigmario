@@ -149,7 +149,6 @@ export class VersusScene {
     const I = this.game.input;
     // en ligne, le joueur local utilise le contrôleur 0; en local, p0=clavier1/manette1, p1=clavier2/manette2, etc.
     const player = (this.mode === 'online' || this.mode === 'ffa') ? 0 : idx;
-    if (idx === 0 && I.justPressed('pause', 0)) this.game.togglePause();
     return {
       left: I.isDown('left', player), right: I.isDown('right', player), down: I.isDown('down', player), downPressed: I.justPressed('down', player),
       jump: I.isDown('jump', player), jumpPressed: I.justPressed('jump', player),
@@ -218,7 +217,7 @@ export class VersusScene {
 
   update(dt) {
     // Vérifier la pause EN PREMIER, avant tout early return
-    if (this.game.input.justPressed('pause', 0)) this.game.togglePause();
+    if (this.game.input.justPressed('pause', 0)) { this.game.togglePause(); return; }
 
     this.stateT += dt;
     if (this.over) { if (this.stateT > 3.5) this.game.endVersus(); return; }

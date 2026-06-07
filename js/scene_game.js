@@ -202,7 +202,7 @@ export class GameScene {
   update(dt) {
     // Vérifier la pause EN PREMIER, avant tout early return
     // (fix: la pause était inaccessible pendant freeze/intro)
-    if (this.game.input.justPressed('pause', 0)) this.game.togglePause();
+    if (this.game.input.justPressed('pause', 0)) { this.game.togglePause(); return; }
 
     if (this.freeze > 0) { this.freeze -= dt; this.shake = Math.max(0, this.shake - dt * 30); return; }
     this.shake = Math.max(0, this.shake * 0.88 - 0.05);
