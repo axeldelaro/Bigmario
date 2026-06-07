@@ -495,6 +495,8 @@ class Game {
     if (this.net) { this.net.close(); this.net = null; }
     stopMusic(); this.checkOrientation(); this.fadeIn(); this.showTitle();
     if (this._pauseKeyHandler) { removeEventListener('keydown', this._pauseKeyHandler); this._pauseKeyHandler = null; }
+    // Si une mise à jour du SW attendait, recharger maintenant
+    if (window._swPendingUpdate) { window._swPendingUpdate = false; window.location.reload(); }
   }
 
   // Appelé par GameScene quand un contre-la-montre est terminé
@@ -1669,34 +1671,30 @@ Game.prototype.startVersusOnline = function (net, localId, arenaIdx) {
 
 window.addEventListener('load', () => {
   window.GAME = new Game();
-  // PWA: installation + jeu hors-ligne + rechargement auto
+  // PWA: installation + jeu hors-ligne + rechargement auto (uniquement sur le menu)
   if ('serviceWorker' in navigator) {
-    // Écouter les messages du SW (mise à jour dispo → recharger)
+    let swReady = false; // true après le premier contrôle du SW (évite le reload au chargement initial)
+
+    // Écouter les messages du SW (mise à jour dispo → recharger si on est au menu)
     navigator.serviceWorker.addEventListener('message', (e) => {
-      if (e.data && e.data.type === 'SW_UPDATED') {
-        console.log('[BigMario] Nouvelle version détectée:', e.data.version, '→ rechargement...');
-        window.location.reload();
+      if (e.data && e.data.type === 'SW_UPDATED' && swReady) {
+        console.log('[BigMario] Nouvelle version:', e.data.version);
+        // Recharger seulement si on est au menu, sinon attendre
+        if (!window.GAME || !window.GAME.mode || window.GAME.mode === 'menu') {
+          window.location.reload();
+        } else {
+          // Marquer qu'une mise à jour est dispo — on rechargera au retour menu
+          window._swPendingUpdate = true;
+        }
       }
     });
 
     navigator.serviceWorker.register('./sw.js').then((reg) => {
+      // Le SW actuel est prêt
+      setTimeout(() => { swReady = true; }, 3000); // ignorer les events des 3 premières secondes
+
       // Vérifier les mises à jour régulièrement (toutes les 60s)
       setInterval(() => reg.update().catch(() => {}), 60000);
-
-      // Quand un nouveau SW est prêt, il s'activera via skipWaiting
-      // et enverra un message SW_UPDATED → la page se recharge
-      reg.addEventListener('updatefound', () => {
-        const newSW = reg.installing;
-        if (newSW) {
-          newSW.addEventListener('statechange', () => {
-            if (newSW.state === 'activated') {
-              // Fallback si le postMessage n'arrive pas
-              console.log('[BigMario] Nouveau SW activé → rechargement...');
-              window.location.reload();
-            }
-          });
-        }
-      });
     }).catch(() => {});
   }
 });

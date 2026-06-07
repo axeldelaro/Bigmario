@@ -1,7 +1,7 @@
 // sw.js — service worker: met le jeu en cache pour une utilisation hors-ligne.
 // Stratégie : Network-first pour les assets JS/CSS/HTML, cache-first pour le reste.
 // Le cache est versionnné — à chaque push le numéro change et l'ancien cache est purgé.
-const CACHE = 'bigmario-v75';
+const CACHE = 'bigmario-v76';
 const ASSETS = [
   './',
   './index.html',
