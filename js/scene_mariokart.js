@@ -264,12 +264,12 @@ class RoadAI {
       const pdx = player.x - k.x;
       const pdz = player.z - k.z;
       const pdist = pdx * pdx + pdz * pdz;
-      if (pdist > 40000) {
-        // Loin du joueur → boost
-        k.maxAiSpeed += 4;
-      } else if (pdist > 80000) {
+      if (pdist > 80000) {
         // Très loin → gros boost
         k.maxAiSpeed += 7;
+      } else if (pdist > 40000) {
+        // Loin du joueur → boost
+        k.maxAiSpeed += 4;
       }
     }
 
@@ -301,12 +301,6 @@ export class MarioKartScene {
     this.renderW = 384;
     this.renderH = 216;
 
-    // Escape → retour menu (fonctionne partout)
-    this._escHandler = (e) => {
-      if (e.key === 'Escape') this.game.returnToMenu();
-    };
-    document.addEventListener('keydown', this._escHandler);
-
     this.initMenu();
   }
 
@@ -335,7 +329,7 @@ export class MarioKartScene {
       <b>Contrôles</b>: <br>
       Saut (Espace/Haut) = <b>ACCÉLÉRER</b><br>
       Tir (Shift/J) = <b>FREINER / DÉRAPER</b><br>
-      ←/→ = <b>TOURNER</b> · Échap = <b>MENU</b>
+      ←/→ = <b>TOURNER</b> · Échap = <b>PAUSE</b>
     </p>`;
     const p = this.game.panel(html);
     p.querySelector('#mk-start').onclick = () => {
@@ -439,10 +433,10 @@ export class MarioKartScene {
   update(dt) {
     if (this.state !== 'play') return;
 
-    // Pause / retour menu
+    // Pause standard (ESC / P / Start)
     const I = this.game.input;
     if (I.justPressed && I.justPressed('pause', 0)) {
-      this.game.returnToMenu();
+      this.game.togglePause();
       return;
     }
 
@@ -826,7 +820,7 @@ export class MarioKartScene {
     ctx.font = '12px sans-serif';
     ctx.fillStyle = '#aaa';
     ctx.textAlign = 'right';
-    ctx.fillText('ESC = Menu', VIEW_W - 10, 20);
+    ctx.fillText('ESC = Pause', VIEW_W - 10, 20);
 
     // Countdown
     if (this.countdown > 0) {
@@ -865,6 +859,5 @@ export class MarioKartScene {
 
   dispose() {
     this.state = 'menu';
-    if (this._escHandler) document.removeEventListener('keydown', this._escHandler);
   }
 }

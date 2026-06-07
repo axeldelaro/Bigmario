@@ -15,9 +15,8 @@ export class VersusScene {
   constructor(game, opts = {}) {
     this.game = game;
     this.mode = opts.mode || 'local'; // 'local' | 'bot' | 'rival' | 'online'
-    this.coop = !!opts.coop;          // co-op : pas de combat, collecte commune
+    this.coop = !!opts.coop || opts.mode === 'coop';
     this.coopCoins = 0;
-    this.coop = opts.mode === 'coop';
     this.localId = opts.localId || 0;
     this.playerCount = opts.playerCount || 2;
     this.ids = opts.ids || Array.from({length: Math.max(2, this.playerCount)}, (_, k) => k);
@@ -25,7 +24,6 @@ export class VersusScene {
     this.net = opts.net || null;
     this.arenaIdx = opts.arenaIdx ?? 0;
     this.botSkill = opts.botSkill ?? 0.92; // difficulté de l'IA (0..1)
-    this.playerCount = opts.playerCount || 2;
     this.cam = { x: 0, y: 0 };
     this.particles = []; this.floats = []; this.fireballs = [];
     this.timeLeft = 99; this.timeAcc = 0;
@@ -379,6 +377,7 @@ export class VersusScene {
       else this.finish(-1); // égalité
     }
   }
+  isAuthority() { return !this.net || this.localId === 0; }
   finish(winner) {
     if (this.over) return;
     this.over = true; this.winner = winner; this.stateT = 0;

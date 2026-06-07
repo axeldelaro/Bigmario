@@ -13,6 +13,7 @@ export class NetClient {
     this.handlers = {}; this.url = '';
   }
   on(ev, fn) { this.handlers[ev] = fn; return this; }
+  off(ev) { delete this.handlers[ev]; }
   _emit(ev, data) { if (this.handlers[ev]) this.handlers[ev](data); }
 
   connect(url, room) {

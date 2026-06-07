@@ -207,8 +207,8 @@ class Game {
   }
 
   togglePause() {
-    // Permettre la pause en mode 'game' et 'versus' uniquement
-    if (this.mode !== 'game' && this.mode !== 'versus') return;
+    // Permettre la pause dans tous les modes de jeu (sauf le menu lui-même)
+    if (!this.mode || this.mode === 'menu') return;
     // Ne pas mettre en pause pendant la transition de scène (paused est déjà false)
     this.paused = !this.paused; SFX.pause?.();
     if (this.paused) this.showPausePanel();
@@ -636,7 +636,7 @@ class Game {
     p.querySelector('#b-mini').onclick = () => { resumeAudio(); this.showMiniMenu(); };
     p.querySelector('#b-mk').onclick = () => { resumeAudio(); this.startMarioKart(); };
     p.querySelector('#b-edit').onclick = () => { resumeAudio(); this.startEditor(); };
-    p.querySelector('#b-options').onclick = () => this.showOptions();
+    p.querySelector('#b-options').onclick = () => this.showOptionsMenu();
   }
 
   showVersusMenu() {
@@ -1464,7 +1464,7 @@ class Game {
         st.innerHTML = '✅ Prêt : tu peux couper le réseau et jouer.';
       } catch { st.textContent = '⚠ Impossible de précharger ici. Recharge la page une fois en ligne.'; }
     };
-    p.querySelector('#back').onclick = () => this.showOptions();
+    p.querySelector('#back').onclick = () => this.showOptionsMenu();
   }
 
   showSkinMenu() {
@@ -1524,9 +1524,9 @@ class Game {
     p.querySelector('#smooth2d').onclick = (e) => { const v = !Save.get('smooth2d', false); Save.set('smooth2d', v); this.applySmooth2d(); e.target.textContent = v ? '🖼 Lissage 2D: ON' : '🖼 Lissage 2D: OFF (pixel)'; };
     p.querySelector('#touch').onclick = () => this.showTouchSettings();
     const ib = p.querySelector('#install');
-    if (ib) ib.onclick = async () => { const pr = this._installPrompt; if (!pr) return; pr.prompt(); try { await pr.userChoice; } catch {} this._installPrompt = null; this.showOptions(); };
+    if (ib) ib.onclick = async () => { const pr = this._installPrompt; if (!pr) return; pr.prompt(); try { await pr.userChoice; } catch {} this._installPrompt = null; this.showOptionsMenu(); };
     p.querySelector('#fs').onclick = () => { const el = document.documentElement; (el.requestFullscreen || el.webkitRequestFullscreen || (() => {})).call(el); };
-    p.querySelector('#reset').onclick = () => { Save.set('unlocked', 0); Save.set('best', 0); this.showOptions(); };
+    p.querySelector('#reset').onclick = () => { Save.set('unlocked', 0); Save.set('best', 0); this.showOptionsMenu(); };
     p.querySelector('#back').onclick = () => this.showTitle();
   }
 
@@ -1552,7 +1552,7 @@ class Game {
     p.querySelector('#size').onclick = () => { const o = ['s', 'm', 'l']; const i = o.indexOf(Save.get('touchSize', 'm')); Save.set('touchSize', o[(i + 1) % 3]); refresh(); };
     p.querySelector('#op').onclick = () => { let v = Save.get('touchOpacity', 0.85) + 0.15; if (v > 1.01) v = 0.4; Save.set('touchOpacity', Math.round(v * 100) / 100); refresh(); };
     p.querySelector('#hand').onclick = () => { Save.set('touchHand', Save.get('touchHand', 'right') === 'left' ? 'right' : 'left'); refresh(); };
-    p.querySelector('#back').onclick = () => { if (!prevOn) touchLayer.classList.add('hidden'); this.showOptions(); };
+    p.querySelector('#back').onclick = () => { if (!prevOn) touchLayer.classList.add('hidden'); this.showOptionsMenu(); };
   }
 
   showAchievements() {
@@ -1567,7 +1567,7 @@ class Game {
       <div style="max-height:46vh;overflow:auto;margin-top:8px">${rows}</div>
       <div class="menu-list" style="margin-top:12px"><button class="btn ghost" id="back">← Retour</button></div>
     `);
-    p.querySelector('#back').onclick = () => this.showOptions();
+    p.querySelector('#back').onclick = () => this.showOptionsMenu();
   }
 
   showFriend() {
@@ -1616,7 +1616,7 @@ class Game {
       rd.onload = () => { const d = Share.parse(String(rd.result)); if (d) use(d); else st.textContent = '❌ Fichier invalide.'; };
       rd.readAsText(f);
     };
-    p.querySelector('#back').onclick = () => this.showOptions();
+    p.querySelector('#back').onclick = () => this.showOptionsMenu();
   }
 
   showGameOver(score) {

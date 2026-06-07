@@ -343,7 +343,13 @@ export class GameScene {
       const prevFeet = p.prevFeet != null ? p.prevFeet : (p.y + p.h);
       const fromAbove = p.vy > 0 && prevFeet <= e.y + 8;
 
-      if (e.type === 'spiky' || e.type === 'plant') { if (!p.win) p.hurt(this); continue; } // instompables
+      if (e.type === 'spiky') { if (!p.win) p.hurt(this); continue; } // seuls les pics sont instompables
+      // Les plantes peuvent être écrasées par-dessus
+      if (e.type === 'plant') {
+        if (fromAbove && !p.win) { e.kill(p.x < e.x ? 1 : -1); p.vy = bounce(); this.freeze = 0.02; this.addCombo(e.x + 7, e.y); this.burst(e.x + 7, e.y + 7, '#37c24a', 6); }
+        else if (!p.win) p.hurt(this);
+        continue;
+      }
 
       if (e.type === 'shell') {
         const still = e.state === 'shell' && Math.abs(e.vx) < 10;
